@@ -166,7 +166,22 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
       final rect =
           surface.globalToLocal(anchor.localToGlobal(Offset.zero)) &
           anchor.size;
-      final viewport = _usableBounds(surface.size);
+      var viewport = _usableBounds(surface.size);
+      // QA 137: what the list really shows, not the whole screen. A target
+      // at the bottom of a list under a fixed bar (Pinova Premium's period
+      // switch under the trial button) was "on screen" yet covered, so it
+      // was never scrolled into view and the spotlight lit the bar instead.
+      final scrollable = anchorContext == null
+          ? null
+          : Scrollable.maybeOf(anchorContext)?.context.findRenderObject();
+      if (scrollable is RenderBox &&
+          scrollable.attached &&
+          scrollable.hasSize) {
+        final shown =
+            surface.globalToLocal(scrollable.localToGlobal(Offset.zero)) &
+            scrollable.size;
+        if (shown.overlaps(viewport)) viewport = viewport.intersect(shown);
+      }
       if (rect.overlaps(viewport) && !rect.isEmpty) {
         visible = rect.intersect(viewport);
       }

@@ -135,7 +135,7 @@ class GlobalChargingPill extends ConsumerWidget {
       semanticLabel: 'Phiên sạc xe $vehicleName đang diễn ra. $label.',
       label: label,
       detail: targetSoc != null && targetSoc > 0
-          ? '→ ~${targetSoc.round()}%'
+          ? '→ ${targetSoc.round()}%'
           : null,
       stale: stale,
       onTap: () {

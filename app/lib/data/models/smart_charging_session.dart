@@ -291,7 +291,7 @@ class SmartChargingPlanPreview {
       final error = socMae;
       return error == null || learnedSamples < 2
           ? 'Đã học từ $learnedSamples lần sạc của bạn'
-          : 'Học từ $learnedSamples lần sạc · sai số ~±${error.toStringAsFixed(error < 10 ? 1 : 0)}%';
+          : 'Học từ $learnedSamples lần sạc · sai số khoảng ±${error.toStringAsFixed(error < 10 ? 1 : 0)}%';
     }
     return switch (personalizationStage) {
       'personalized' => 'Đã cá nhân hóa cho xe này',

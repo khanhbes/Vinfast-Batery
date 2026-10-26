@@ -137,7 +137,7 @@ class _StartChargeConfirmationSheetState
                     icon: Icons.power_settings_new_rounded,
                     label: _targetMode ? 'Tự ngắt khi đạt' : 'Tự ngắt lúc',
                     value: _targetMode
-                        ? '~${widget.targetSoc}% (dự kiến ${widget.stopTime})'
+                        ? 'khoảng ${widget.targetSoc}% (dự kiến ${widget.stopTime})'
                         : widget.stopTime,
                   ),
                   if (_targetMode) ...[
@@ -370,7 +370,7 @@ class _SocJourney extends StatelessWidget {
   final int to;
   final String label;
 
-  /// An estimate (timed charge): written "~X%".
+  /// An estimate (timed charge): its label says "Ước tính" (QA 137: no "~").
   final bool approximate;
 
   @override
@@ -406,7 +406,7 @@ class _SocJourney extends StatelessWidget {
                 ),
               ),
               LuxeMetalText(
-                '${approximate ? '~' : ''}$to%',
+                '$to%',
                 style: const TextStyle(
                   fontSize: 44,
                   height: 1.05,

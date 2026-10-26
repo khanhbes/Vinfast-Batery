@@ -35,6 +35,7 @@ import '../../smart_charging/night_charging_screen.dart';
 import '../../support/help_center_screen.dart';
 import '../../support/support_repository.dart';
 import '../../premium/premium_gate.dart';
+import '../../../core/utils/number_text.dart';
 
 /// BatteryBot v2 actions executed with the same providers/repositories the
 /// screens use (Task 124). Charging and reminders do not pass through here:
@@ -439,7 +440,7 @@ class AppAssistantActionHost implements AssistantActionHost {
         return AssistantUndo(
           previous == null
               ? 'bỏ giá điện vừa đặt'
-              : 'giá điện về ${previous.round()} đ/kWh',
+              : 'giá điện về ${formatVnd(previous)}/kWh',
           () async {
             await _preferences.saveTariff(previous);
             _tariff = previous;

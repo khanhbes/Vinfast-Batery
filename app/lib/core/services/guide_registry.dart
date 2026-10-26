@@ -255,19 +255,22 @@ class GuideRegistry {
     ),
   ];
 
+  // QA 137: top to bottom, and the plan card's text fits Pro or Ultra (the
+  // page opens on Pro from a Pro feature; it said "Ultra: trọn bộ").
   static List<CoachMarkStep> premiumTourSteps() => [
+    _step(
+      'premium_ultra',
+      'Gói này có gì',
+      'Mỗi dòng là một thứ gói đang chọn mở cho bạn. Chuyển Pro hoặc Ultra ở '
+          'trên để so sánh; Ultra có thêm sạc đêm an toàn, AI cá nhân và giao '
+          'diện Aurora.',
+      keyPremiumUltra,
+    ),
     _step(
       'premium_period',
       'Tháng hay năm',
       'Gói năm rẻ hơn khoảng một phần tư so với trả từng tháng.',
       keyPremiumPeriod,
-    ),
-    _step(
-      'premium_ultra',
-      'Ultra: trọn bộ',
-      'Sạc đêm an toàn, AI cá nhân, giao diện Aurora và mọi thứ của Pro. Dùng thử '
-          'miễn phí 7 ngày.',
-      keyPremiumUltra,
     ),
     _step(
       'premium_promo',

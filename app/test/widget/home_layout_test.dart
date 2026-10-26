@@ -25,7 +25,7 @@ void main() {
                   : pending.future;
             }),
             restoreVehicleIdProvider.overrideWith((ref) async => ''),
-            vehicleProvider.overrideWith((ref, id) async => null),
+            vehicleProvider.overrideWith((ref, id) => Stream.value(null)),
           ],
           child: const MaterialApp(home: HomeScreen()),
         ),
@@ -69,7 +69,7 @@ void main() {
           overrides: [
             allVehiclesProvider.overrideWith((ref) async => []),
             restoreVehicleIdProvider.overrideWith((ref) async => ''),
-            vehicleProvider.overrideWith((ref, id) async => null),
+            vehicleProvider.overrideWith((ref, id) => Stream.value(null)),
           ],
           child: MaterialApp(
             theme: ThemeData(brightness: brightness),
@@ -113,7 +113,7 @@ void main() {
             );
           }),
           restoreVehicleIdProvider.overrideWith((ref) async => ''),
-          vehicleProvider.overrideWith((ref, id) async => null),
+          vehicleProvider.overrideWith((ref, id) => Stream.value(null)),
         ],
         child: MaterialApp(
           builder: (context, child) => MediaQuery(

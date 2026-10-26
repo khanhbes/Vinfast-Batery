@@ -349,7 +349,7 @@ class ChargingProgressCard extends StatelessWidget {
                   child: _buildMetricTile(
                     context: context,
                     label: 'Ước tính',
-                    value: remainingMin > 0 ? '~$remainingMin phút' : 'Sắp đầy',
+                    value: remainingMin > 0 ? 'khoảng $remainingMin phút' : 'Sắp đầy',
                     icon: Icons.timer_outlined,
                     color: Colors.purple,
                   ),

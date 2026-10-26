@@ -48,7 +48,7 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
       expect(find.text('ƯỚC TÍNH KHI TỰ NGẮT'), findsOneWidget);
-      expect(find.text('~87%'), findsOneWidget);
+      expect(find.text('87%'), findsOneWidget);
       expect(find.text('MỤC TIÊU'), findsNothing);
       expect(tester.takeException(), isNull);
     });

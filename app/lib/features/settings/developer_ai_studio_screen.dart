@@ -1795,7 +1795,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           ),
           SizedBox(height: 12),
           Text(
-            'RMSE: ${rmseSec.toStringAsFixed(1)}s (~${(rmseSec / 60).toStringAsFixed(1)} phút sai số bình phương). Kết quả đánh giá không đồng nghĩa model đã được triển khai.',
+            'RMSE: ${rmseSec.toStringAsFixed(1)}s (khoảng ${(rmseSec / 60).toStringAsFixed(1)} phút sai số bình phương). Kết quả đánh giá không đồng nghĩa model đã được triển khai.',
             style: TextStyle(color: _ui.muted, fontSize: 11),
           ),
         ],

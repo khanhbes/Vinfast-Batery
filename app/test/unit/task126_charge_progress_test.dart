@@ -23,9 +23,9 @@ void main() {
 
   test('target charge: %, power, finish time and a countdown', () {
     final content = ChargeProgressContent.from(push(), now)!;
-    expect(content.title, 'Đang sạc ~40% → 80%');
+    expect(content.title, 'Đang sạc khoảng 40% → 80%');
     expect(content.body, contains('440 W'));
-    expect(content.body, contains('xong ~'));
+    expect(content.body, contains('xong khoảng'));
     expect(content.progress, 40);
     expect(content.finishAt, now.add(const Duration(seconds: 8509)));
   });
@@ -59,7 +59,7 @@ void main() {
       ...push(),
       'link': 'lost',
     }, now)!;
-    expect(content.title, 'Đang sạc ~40% → 80%');
+    expect(content.title, 'Đang sạc khoảng 40% → 80%');
     expect(content.body, contains('Tạm mất kết nối với ổ'));
     expect(content.body, contains('tự tắt muộn nhất'));
     expect(content.finishAt, isNull);

@@ -218,8 +218,8 @@ class ChargeProgressContent {
     final finish = remaining == null
         ? null
         : base.add(Duration(seconds: remaining.round()));
-    // The % is an estimate (no BMS): "~" like every other screen (QA 129).
-    final socText = soc == null ? '—' : '~${soc.round()}%';
+    // The % is an estimate (no BMS): "khoảng" (QA 137, was "~").
+    final socText = soc == null ? '—' : 'khoảng ${soc.round()}%';
     final targetMode = data['stopMode'] == 'target' && target != null;
     final title = targetMode
         ? 'Đang sạc $socText → ${target.round()}%'
@@ -240,7 +240,7 @@ class ChargeProgressContent {
         'Xe chưa nhận điện'
       else if (power != null)
         '${power.round()} W',
-      if (finish != null && finish.isAfter(now)) 'xong ~${formatClock(finish)}',
+      if (finish != null && finish.isAfter(now)) 'xong khoảng ${formatClock(finish)}',
       if (ceiling != null && !targetMode) 'tự tắt ${formatClock(ceiling)}',
       'cập nhật ${formatClock(base)}',
     ];

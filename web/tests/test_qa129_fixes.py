@@ -44,7 +44,7 @@ def test_server_ended_session_reaches_the_inbox_once_with_the_reason():
     write_inbox_item(db, "u1", session_id="s1", state="completed", vehicle_id="car",
                      target_percent=80, stop_reason="target_reached", estimated_soc=79.4)
     item = db.store["UserNotifications/u1_sc_s1_completed"]
-    assert item["title"] == "Đã sạc đến ~79%"
+    assert item["title"] == "Đã sạc đến khoảng 79%"
     assert "ổ cắm đã tự ngắt" in item["message"]
     assert item["status"] == "unread" and item["userId"] == "u1"
     assert item["actionTarget"] == "/smart-charge?vehicleId=car&sessionId=s1"

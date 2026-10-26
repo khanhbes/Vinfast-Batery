@@ -69,6 +69,9 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   late TripConditions _conditions;
   late double _soc;
   bool _socKnown = false;
+
+  /// The owner typed a % for this plan; the vehicle's % no longer replaces it.
+  bool _socEdited = false;
   double? _personalKmPerPct;
   int _personalPairs = 0;
   double? _historyPowerW;
@@ -103,6 +106,23 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   }
 
   double? get _distanceKm => _route?.distanceKm ?? _manualKm;
+
+  @override
+  void didUpdateWidget(TripPlannerScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // QA 137: a % saved elsewhere (a reading, a confirmed charge, Pinova
+    // Bot) reaches the plan too, unless the owner set one here.
+    final vehicle = widget.vehicle;
+    if (!_socEdited &&
+        (vehicle.currentBattery != oldWidget.vehicle.currentBattery ||
+            vehicle.hasBatteryData != oldWidget.vehicle.hasBatteryData)) {
+      setState(() {
+        _soc = vehicle.currentBattery.toDouble().clamp(0, 100);
+        _socKnown = vehicle.hasBatteryData;
+      });
+      _recompute();
+    }
+  }
 
   @override
   void initState() {
@@ -336,7 +356,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
             : 'Chuyến này đã được lưu trước đó',
         detail:
             'Thực tế dùng ${used.round()}%'
-            '${predicted == null ? '' : ' · dự đoán ~${predicted.round()}%'}. '
+            '${predicted == null ? '' : ' · dự đoán khoảng ${predicted.round()}%'}. '
             'AI sẽ học từ chuyến này khi bạn bấm Huấn luyện.',
       );
       await TrainingReadiness.check(result.status);
@@ -701,6 +721,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                 setState(() {
                   _soc = value;
                   _socKnown = true;
+                  _socEdited = true;
                 });
                 _recompute();
               },
@@ -1073,7 +1094,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                       ),
                     ),
                     Text(
-                      '~${item.usePct.round()}%',
+                      'hao ${item.usePct.round()}%',
                       style: const TextStyle(
                         color: LuxeColors.platinum,
                         fontWeight: FontWeight.w600,
@@ -1189,12 +1210,12 @@ class _TripResultCard extends StatelessWidget {
                   Text(
                     plan.arrivalSoc < 0
                         ? 'HẾT PIN TRƯỚC KHI TỚI'
-                        : 'KHI TỚI NƠI',
+                        : 'KHI TỚI NƠI (ƯỚC TÍNH)',
                     style: LuxeText.eyebrow,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    plan.arrivalSoc < 0 ? '0%' : '~${arrival.round()}%',
+                    plan.arrivalSoc < 0 ? '0%' : '${arrival.round()}%',
                     style: TextStyle(
                       color: color,
                       fontSize: 28,
@@ -1213,16 +1234,16 @@ class _TripResultCard extends StatelessWidget {
               // Say why this differs from the Overview average (QA 129:
               // 1.36 here vs 1.21 there read as two models).
               'Mô hình đã huấn luyện từ ${plan.modelSamples} chuyến của bạn. '
-                  'Ở điều kiện này (~${plan.avgSpeedKmh.round()} km/h, '
+                  'Ở điều kiện này (khoảng ${plan.avgSpeedKmh.round()} km/h, '
                   '${plan.payloadKg.round()} kg): '
-                  '~${(plan.kmPerPct / (TripEnergyModel.refToMean * plan.factor)).toStringAsFixed(2)} km cho 1%; '
+                  'khoảng ${(plan.kmPerPct / (TripEnergyModel.refToMean * plan.factor)).toStringAsFixed(2)} km cho 1%; '
                   'trung bình các chuyến của bạn: '
                   '${plan.kmPerPct.toStringAsFixed(2)} km cho 1% (số ở Tổng quan).',
             TripKmSource.personal =>
               'Dựa trên $personalPairs lần sạc có ODO của xe bạn '
-                  '(~${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %).',
+                  '(khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %).',
             TripKmSource.catalog =>
-              'Theo định mức dòng xe (~${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %). '
+              'Theo định mức dòng xe (khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %). '
                   'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
           }, style: LuxeText.caption.copyWith(fontSize: 12)),
           if (plan.suggestions.isNotEmpty) ...[
@@ -1274,7 +1295,7 @@ class _SuggestionRow extends StatelessWidget {
         return (
           Icons.bolt_rounded,
           'Sạc lên ${target.round()}% trước khi đi'
-              '${time == null ? '' : ' (~${formatChargeDuration(time)})'}.',
+              '${time == null ? '' : ' (khoảng ${formatChargeDuration(time)})'}.',
           'Sạc đến ${target.round()}%',
           () => onChargeFirst(target),
         );
@@ -1301,7 +1322,7 @@ class _SuggestionRow extends StatelessWidget {
       TripSuggestionKind.shorterRoute => (
         Icons.alt_route_rounded,
         'Tuyến ${suggestion.distanceKm!.toStringAsFixed(1)} km ngắn hơn, '
-            'tiết kiệm ~${suggestion.savedPct!.round()}% pin.',
+            'tiết kiệm khoảng ${suggestion.savedPct!.round()}% pin.',
         'Chọn tuyến này',
         () => onShorterRoute(suggestion.distanceKm!),
       ),

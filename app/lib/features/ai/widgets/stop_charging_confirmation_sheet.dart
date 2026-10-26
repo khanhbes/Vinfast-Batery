@@ -40,7 +40,7 @@ class _StopChargingConfirmationSheet extends StatefulWidget {
     this.targetMode = false,
   });
 
-  /// Estimated (no BMS): always shown with "~" (QA 129).
+  /// Estimated (no BMS): the row says "ước tính" (QA 137: no "~").
   final double currentSoc;
   final double targetSoc;
 
@@ -91,7 +91,7 @@ class _StopChargingConfirmationSheetState
                 LuxeInfoRow(
                   icon: Icons.battery_5_bar_rounded,
                   label: 'Pin hiện tại (ước tính)',
-                  value: '~${widget.currentSoc.round()}%',
+                  value: '${widget.currentSoc.round()}%',
                 ),
                 const Divider(height: 1),
                 // A timed charge has no target (QA 130).

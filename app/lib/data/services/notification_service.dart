@@ -463,7 +463,7 @@ class NotificationService {
     await _plugin.zonedSchedule(
       chargeReminderIdFor(vehicleId),
       'Shelly dự kiến đã tự ngắt',
-      'Mốc ~$targetPercent% đã tới. Mở app để đọc lại relay và xác nhận nguồn đã OFF.',
+      'Mốc khoảng $targetPercent% đã tới. Mở app để đọc lại relay và xác nhận nguồn đã OFF.',
       scheduledDate,
       NotificationDetails(
         iOS: _iosDetails(),

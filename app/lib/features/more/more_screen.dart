@@ -273,6 +273,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       feature: PremiumFeature.learningTrain,
                       tagAlignment: AlignmentDirectional.centerEnd,
                       tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                      reserveTagSpace: true,
                       child: LuxeSettingsRow(
                         key: const ValueKey('more-personal-ai'),
                         icon: Icons.model_training_rounded,
@@ -293,6 +294,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       feature: PremiumFeature.nightCharging,
                       tagAlignment: AlignmentDirectional.centerEnd,
                       tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                      reserveTagSpace: true,
                       child: LuxeSettingsRow(
                         key: GuideRegistry.keySettingsNight,
                         icon: Icons.nights_stay_rounded,
@@ -337,6 +339,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         feature: PremiumFeature.tripEstimate,
                         tagAlignment: AlignmentDirectional.centerEnd,
                         tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                        reserveTagSpace: true,
                         child: LuxeSettingsRow(
                           key: const ValueKey('more-trip-planner'),
                           icon: Icons.alt_route_rounded,

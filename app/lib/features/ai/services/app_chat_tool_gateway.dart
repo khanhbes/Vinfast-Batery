@@ -504,7 +504,7 @@ class AppChatToolGateway implements ChatToolGateway {
       'estimatedTime':
           '${seconds ~/ 60} phút · tự ngắt lúc '
           '${formatClock(DateTime.now().add(Duration(seconds: seconds)))} '
-          'nếu bật ngay${target == null ? '' : ' · mục tiêu ~$target%'}',
+          'nếu bật ngay${target == null ? '' : ' · mục tiêu khoảng $target%'}',
       'safetyNote':
           'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy. Không tự gửi lại lệnh bật khi mất phản hồi.',
       'deviceId': binding.deviceId,

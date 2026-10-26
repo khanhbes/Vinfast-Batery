@@ -534,7 +534,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 'thời gian dự đoán, Shelly tự ngắt.'
           : powerSource == null || powerW == null
           ? 'Ước tính tham khảo · Shelly tự ngắt theo hẹn giờ'
-          : 'Ước tính theo ${powerSource.label} (~${powerW.round()} W) · '
+          : 'Ước tính theo ${powerSource.label} (khoảng ${powerW.round()} W) · '
                 'Shelly tự ngắt theo hẹn giờ';
     } else {
       label = 'DỰ ĐOÁN LẠI';
@@ -656,7 +656,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       warnings: preview.warnings,
                       rangeLabel: _rangeLabel(preview),
                       stopLine: preview.isTargetMode
-                          ? 'Đạt ~${currentTarget.round()}% lúc '
+                          ? 'Đạt khoảng ${currentTarget.round()}% lúc '
                                 '${_time(preview.effectiveStopAt)} · máy chủ tự ngắt'
                           : null,
                     ),
@@ -857,7 +857,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     } else {
       estimateNote = estimate == null || targetSoc <= estimatedSoc.round()
           ? null
-          : 'Đạt $targetSoc% sau ~${formatChargeDuration(estimate.duration)} '
+          : 'Đạt $targetSoc% sau khoảng ${formatChargeDuration(estimate.duration)} '
                 '· khoảng ${formatClock(estimate.finishAt)} '
                 '(${estimate.powerW.round()} W đo thực tế)';
     }
@@ -1158,7 +1158,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       AppPopup.showSuccess(
         'Đang sạc',
         detail: preview.isTargetMode
-            ? 'Tự ngắt khi đạt ~${state.draft.targetSoc.round()}% '
+            ? 'Tự ngắt khi đạt khoảng ${state.draft.targetSoc.round()}% '
                   '(dự kiến ${_time(preview.effectiveStopAt)})'
             : 'Tự động tắt lúc ${_time(preview.effectiveStopAt)}',
       );
@@ -1604,7 +1604,7 @@ class _PendingActualSocCard extends StatelessWidget {
                         Text(
                           estimate == null
                               ? 'Nhập số trên đồng hồ xe để app học.'
-                              : 'Ước tính ~$estimate%. Nhập số trên đồng hồ xe để app học.',
+                              : 'Ước tính $estimate%. Nhập số trên đồng hồ xe để app học.',
                           style: LuxeText.caption,
                         ),
                       ],

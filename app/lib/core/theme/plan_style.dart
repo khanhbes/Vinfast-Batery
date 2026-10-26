@@ -145,12 +145,20 @@ class PlanMotion extends InheritedWidget {
 }
 
 class PlanMotionHost extends StatefulWidget {
-  const PlanMotionHost({super.key, required this.running, required this.child});
+  const PlanMotionHost({
+    super.key,
+    required this.running,
+    required this.child,
+    this.period = defaultPeriod,
+  });
 
   final bool running;
   final Widget child;
 
-  static const period = Duration(seconds: 12);
+  /// One colour loop.
+  final Duration period;
+
+  static const defaultPeriod = Duration(seconds: 12);
 
   @override
   State<PlanMotionHost> createState() => _PlanMotionHostState();
@@ -170,9 +178,8 @@ class _PlanMotionHostState extends State<PlanMotionHost>
     if (elapsed - _last < const Duration(milliseconds: 40)) return;
     _last = elapsed;
     final total = (_offset + elapsed).inMicroseconds;
-    _phase.value =
-        (total % PlanMotionHost.period.inMicroseconds) /
-        PlanMotionHost.period.inMicroseconds;
+    final period = widget.period.inMicroseconds;
+    _phase.value = (total % period) / period;
   }
 
   void _sync() {

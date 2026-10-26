@@ -76,6 +76,75 @@ class ChargeLogRepository {
     }
   }
 
+  /// The vehicle as it changes (QA 137): a % or ODO saved anywhere (a
+  /// dashboard reading, a confirmed charge, Pinova Bot, the server after a
+  /// charge, another phone) reaches every screen at once. Starts with
+  /// [getVehicle] (it keeps the API fallback), then follows the Firestore
+  /// document and emits only when its data really changed. A listener error
+  /// (rules, offline) ends the stream on the last good value.
+  Stream<VehicleModel?> watchVehicle(String vehicleId) async* {
+    final first = await getVehicle(vehicleId);
+    yield first;
+    final uid = _uid;
+    if (first == null || uid == null) return;
+    Map<String, dynamic>? last;
+    try {
+      await for (final doc in _vehiclesRef.doc(vehicleId).snapshots()) {
+        if (!doc.exists) continue;
+        final data = doc.data() as Map<String, dynamic>?;
+        if (data == null || data['ownerUid'] != uid) continue;
+        // `updatedAt` alone moving is not a change anyone can see.
+        final visible = Map<String, dynamic>.of(data)..remove('updatedAt');
+        if (last != null && _sameData(last, visible)) continue;
+        final firstEvent = last == null;
+        last = visible;
+        final vehicle = VehicleModel.fromFirestore(doc);
+        // The first snapshot repeats what [getVehicle] just read.
+        if (firstEvent && _sameVehicle(vehicle, first)) continue;
+        yield vehicle;
+      }
+    } on Object catch (error) {
+      debugPrint(
+        '[ChargeLogRepo] watchVehicle($vehicleId) ended: '
+        '${error.runtimeType}',
+      );
+    }
+  }
+
+  static bool _sameVehicle(VehicleModel a, VehicleModel b) =>
+      a.currentBattery == b.currentBattery &&
+      a.currentOdo == b.currentOdo &&
+      a.hasBatteryData == b.hasBatteryData &&
+      a.stateOfHealth == b.stateOfHealth &&
+      a.nickname == b.nickname &&
+      a.licensePlate == b.licensePlate &&
+      a.isArchived == b.isArchived;
+
+  static bool _sameData(Map<String, dynamic> a, Map<String, dynamic> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key)) return false;
+      final other = b[entry.key];
+      final value = entry.value;
+      if (value is Map && other is Map) {
+        if (!_sameData(
+          Map<String, dynamic>.from(value),
+          Map<String, dynamic>.from(other),
+        )) {
+          return false;
+        }
+      } else if (value is List && other is List) {
+        if (value.length != other.length) return false;
+        for (var i = 0; i < value.length; i++) {
+          if (value[i] != other[i]) return false;
+        }
+      } else if (value != other) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Lấy tất cả xe của user hiện tại.
   ///
   /// KHÔNG seed xe mặc định nữa (PLAN1: client không được auto-write

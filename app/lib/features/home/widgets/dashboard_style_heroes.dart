@@ -260,7 +260,7 @@ class CompactMetricsHero extends StatelessWidget {
     final f = HeroFigures(vehicle, learned);
     final cells = [
       ('Pin hiện tại', f.percent == null ? '—' : '${f.percent}%', true),
-      ('Quãng đường', f.rangeKm == null ? '—' : '~${f.rangeKm} km', false),
+      ('Quãng đường ước tính', f.rangeKm == null ? '—' : '${f.rangeKm} km', false),
       ('Sức khỏe pin', f.soh == null ? '—' : '${f.soh}%', false),
       ('ODO', f.odoKm == null ? '—' : '${groupThousands(f.odoKm!)} km', false),
       (
@@ -435,7 +435,7 @@ class MinimalHero extends StatelessWidget {
         Text(
           f.rangeKm == null
               ? 'Cập nhật % pin để ước tính quãng đường'
-              : 'Còn đi được ~${f.rangeKm} km (ước tính)',
+              : 'Còn đi được khoảng ${f.rangeKm} km',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: f.rangeKm == null ? LuxeColors.muted : LuxeColors.champagne,

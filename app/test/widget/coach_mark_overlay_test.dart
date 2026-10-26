@@ -375,7 +375,10 @@ void main() {
                 child: SizedBox(key: anchor, height: 540),
               ),
               Positioned.fill(
-                child: CoachMarkOverlay(steps: [_step(anchor)], onFinish: () {}),
+                child: CoachMarkOverlay(
+                  steps: [_step(anchor)],
+                  onFinish: () {},
+                ),
               ),
             ],
           ),
@@ -403,4 +406,53 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+    'a target hidden under a fixed bottom bar is scrolled into view',
+    (tester) async {
+      // QA 137: Pinova Premium's Month/Year switch sat under the trial button;
+      // the spotlight lit the button instead of the switch.
+      _size(tester, const Size(360, 780));
+      final anchor = GlobalKey();
+      await tester.pumpWidget(
+        _host(
+          child: Stack(
+            children: [
+              Scaffold(
+                body: ListView(
+                  children: [
+                    // The target starts above the bar and ends under it.
+                  const SizedBox(height: 610),
+                    SizedBox(
+                      key: anchor,
+                      height: 56,
+                      child: const Text('Tháng'),
+                    ),
+                    const SizedBox(height: 600),
+                  ],
+                ),
+                bottomNavigationBar: const SizedBox(height: 140),
+              ),
+              Positioned.fill(
+                child: CoachMarkOverlay(
+                  steps: [_step(anchor)],
+                  onFinish: () {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final target = tester.getRect(find.byKey(anchor));
+      final list = tester.getRect(find.byType(ListView));
+      expect(target.top, greaterThanOrEqualTo(list.top));
+      expect(
+        target.bottom,
+        lessThanOrEqualTo(list.bottom),
+        reason: 'not under the bar',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

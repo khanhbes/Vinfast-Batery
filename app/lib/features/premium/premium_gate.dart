@@ -128,6 +128,7 @@ class PremiumLocked extends ConsumerWidget {
     this.tagAlignment = AlignmentDirectional.topEnd,
     this.tagPadding = const EdgeInsets.all(4),
     this.allowed,
+    this.reserveTagSpace = false,
   });
 
   final PremiumFeature feature;
@@ -135,6 +136,10 @@ class PremiumLocked extends ConsumerWidget {
 
   /// The answer when the screen already holds it (no provider read).
   final bool? allowed;
+
+  /// Rows: keep the tag's width free at the end so it never covers the
+  /// row's text (QA 137: "ULTRA" sat on "…ngắt sớm khi ổ nóng").
+  final bool reserveTagSpace;
   final AlignmentGeometry tagAlignment;
   final EdgeInsetsGeometry tagPadding;
 
@@ -157,7 +162,19 @@ class PremiumLocked extends ConsumerWidget {
           enabled: false,
           excludeSemantics: true,
           child: IgnorePointer(
-            child: Opacity(opacity: fadedOpacity, child: child),
+            child: Opacity(
+              opacity: fadedOpacity,
+              child: reserveTagSpace
+                  ? Padding(
+                      padding: EdgeInsetsDirectional.only(
+                        end: MediaQuery.textScalerOf(
+                          context,
+                        ).scale(tier == PlanTier.ultra ? 74 : 50),
+                      ),
+                      child: child,
+                    )
+                  : child,
+            ),
           ),
         ),
         Positioned.fill(

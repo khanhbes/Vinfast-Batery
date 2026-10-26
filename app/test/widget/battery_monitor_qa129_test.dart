@@ -64,7 +64,7 @@ void main() {
         find.byKey(const ValueKey('monitor-range-estimate')),
         200,
       );
-      expect(find.textContaining('~90 km'), findsWidgets);
+      expect(find.textContaining('khoảng 90 km'), findsWidgets);
       expect(find.textContaining('26.2 Wh cho 1%'), findsOneWidget);
     });
   }

@@ -100,7 +100,7 @@ class BatteryStatusCard extends StatelessWidget {
                 ),
                 _buildDetailRow(
                   'Quãng đường ước tính:',
-                  estRange == null ? '—' : '~${estRange.toStringAsFixed(0)} km',
+                  estRange == null ? '—' : '${estRange.toStringAsFixed(0)} km',
                   uiColors,
                 ),
                 _buildDetailRow(
@@ -353,10 +353,10 @@ class BatteryStatusCard extends StatelessWidget {
                               Expanded(
                                 child: _buildMetricTile(
                                   context: context,
-                                  label: 'Quãng đường',
+                                  label: 'Quãng đường ước tính',
                                   value: estRange == null
                                       ? '—'
-                                      : '~${estRange.toStringAsFixed(0)} km',
+                                      : '${estRange.toStringAsFixed(0)} km',
                                   icon: Icons.navigation_rounded,
                                   iconColor: const Color(0xFF9DB8E8),
                                 ),

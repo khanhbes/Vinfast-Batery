@@ -43,7 +43,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       // (50 − 5) × 1.21 = 54.45 km, ±18 %.
-      expect(find.text('~54 km'), findsOneWidget);
+      expect(find.text('54 km'), findsOneWidget);
       expect(find.text('45–64 km'), findsOneWidget);
       expect(find.textContaining('77 chuyến'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -56,7 +56,7 @@ void main() {
     await tester.pumpWidget(_page(RangePredictionCard(vehicle: vehicle('a'))));
     await tester.pumpAndSettle();
     // (50 − 5) × 1.2 × 0.9 = 48.6 km.
-    expect(find.text('~49 km'), findsOneWidget);
+    expect(find.text('49 km'), findsOneWidget);
     expect(find.text('Ước tính theo thông số dòng xe'), findsOneWidget);
     expect(find.textContaining('Độ tin cậy'), findsNothing);
   });

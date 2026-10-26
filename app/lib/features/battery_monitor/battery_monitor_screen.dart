@@ -140,6 +140,7 @@ class BatteryMonitorScreen extends ConsumerWidget {
                         feature: PremiumFeature.batteryHealth,
                         tagAlignment: AlignmentDirectional.centerEnd,
                         tagPadding: const EdgeInsetsDirectional.only(end: 10),
+                        reserveTagSpace: true,
                         child: LuxeSettingsRow(
                           key: const ValueKey('monitor-battery-health'),
                           icon: Icons.health_and_safety_outlined,
@@ -307,11 +308,11 @@ class _CurrentBatteryCard extends StatelessWidget {
             ),
             LuxeStatTile(
               label: range?.source == RangeSource.learned
-                  ? 'Quãng đường · đã học'
-                  : 'Quãng đường · thông số xe',
+                  ? 'Quãng đường ước tính · đã học'
+                  : 'Quãng đường ước tính · thông số xe',
               icon: Icons.route_rounded,
               accent: LuxeColors.steel,
-              value: range == null ? '—' : '~${range.km.round()}',
+              value: range == null ? '—' : '${range.km.round()}',
               unit: range == null ? null : 'km',
             ),
             LuxeStatTile(
@@ -370,7 +371,7 @@ class _EstimateCard extends StatelessWidget {
       final estimate = charge(target);
       return estimate == null
           ? '—'
-          : '~${formatChargeDuration(estimate.duration)}';
+          : 'khoảng ${formatChargeDuration(estimate.duration)}';
     }
 
     final learnedCharge = whPerPct != null && learnedPower != null;
@@ -405,7 +406,7 @@ class _EstimateCard extends StatelessWidget {
                 'Tầm đi còn lại',
                 range == null
                     ? '—'
-                    : '~${range.km.round()} km (${range.lowKm.round()}–${range.highKm.round()})',
+                    : 'khoảng ${range.km.round()} km (${range.lowKm.round()}–${range.highKm.round()})',
               ),
               _row(
                 const ValueKey('monitor-charge-80'),
@@ -421,9 +422,9 @@ class _EstimateCard extends StatelessWidget {
               Text(
                 learnedCharge
                     ? 'Cùng mô hình với tab Sạc pin: ${whPerPct.toStringAsFixed(1)} Wh cho 1% '
-                          'và ~${learnedPower.round()} W học từ các lần sạc của xe bạn.'
+                          'và khoảng ${learnedPower.round()} W học từ các lần sạc của xe bạn.'
                     : 'Chưa học từ lần sạc nào: dùng ${power.source.label} '
-                          '(~${power.watts.round()} W), sai số rộng hơn.',
+                          '(khoảng ${power.watts.round()} W), sai số rộng hơn.',
                 style: LuxeText.caption,
               ),
             ],

@@ -413,7 +413,7 @@ void main() {
     await tester.scrollUntilVisible(find.text('Lịch sử gần đây'), 300);
     expect(find.text('20%'), findsWidgets);
     // Not confirmed by the owner: the estimate carries a "~" (QA 128).
-    expect(find.text('~25%'), findsOneWidget);
+    expect(find.text('25% ước tính'), findsOneWidget);
     expect(find.text('Hoàn thành'), findsOneWidget);
   });
 }

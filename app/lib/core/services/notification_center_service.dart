@@ -183,7 +183,7 @@ class NotificationCenterService {
     final (title, message) = switch (state) {
       'active' => (
         'Đã bắt đầu sạc thông minh',
-        'Timer tự ngắt đã được cài trên Shelly; SOC ~$targetPercent% là ước tính.',
+        'Timer tự ngắt đã được cài trên Shelly; mức khoảng $targetPercent% là ước tính.',
       ),
       'completed' => (
         'Phiên sạc đã hoàn tất',

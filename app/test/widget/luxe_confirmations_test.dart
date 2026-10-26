@@ -172,7 +172,7 @@ void main() {
       expect(find.text('35 phút'), findsOneWidget);
       // QA 129: the card's time to the target, and the % is an estimate.
       expect(find.text('Còn tới mục tiêu'), findsOneWidget);
-      expect(find.text('~64%'), findsOneWidget);
+      expect(find.text('64%'), findsOneWidget);
       await tester.ensureVisible(find.text('Pin đã đủ'));
       await tester.tap(find.text('Pin đã đủ'));
       await tester.pump();

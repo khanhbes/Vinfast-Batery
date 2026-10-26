@@ -6,6 +6,7 @@ import '../../../core/utils/battery_bot_faq.dart';
 import '../models/function_call_action.dart';
 import 'assistant_api.dart';
 import 'local_chat_engine.dart';
+import '../../../core/utils/number_text.dart';
 
 /// Reversal of a one-tap change ("hoàn tác").
 class AssistantUndo {
@@ -289,7 +290,7 @@ class HybridAssistantEngine implements LocalChatEngine {
     ),
     'set_electricity_price' => (
       'Đặt giá điện',
-      'Giá điện ${args['vnd_per_kwh']} đ/kWh để tính chi phí sạc.',
+      'Giá điện ${formatVnd(args['vnd_per_kwh'] as num)}/kWh để tính chi phí sạc.',
     ),
     'set_app_setting' => _settingCard(args),
     'start_trial' => (

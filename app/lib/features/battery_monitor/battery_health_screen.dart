@@ -182,7 +182,7 @@ class _Body extends StatelessWidget {
         const LuxeNotice(
           message:
               'Xe không gửi dữ liệu cell pin, nên đây là ước tính từ điện năng '
-              'ổ Shelly đo và % bạn đọc trên đồng hồ (hiệu suất sạc ~90 %). '
+              'ổ Shelly đo và % bạn đọc trên đồng hồ (hiệu suất sạc khoảng 90 %). '
               'Pin mới thường 95–100 %; dưới 70 % nên đưa xe đi kiểm tra.',
         ),
       ],
@@ -254,7 +254,7 @@ class _Hero extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Còn ~${groupThousands(v.capacityWh)} Wh / '
+                  'Còn khoảng ${groupThousands(v.capacityWh)} Wh / '
                   '${groupThousands(health.nominalCapacityWh!)} Wh danh định',
                   style: LuxeText.caption,
                 ),

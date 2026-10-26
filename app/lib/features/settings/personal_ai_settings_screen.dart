@@ -416,8 +416,8 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
     if (wh == null) return 'Đang dùng thông số dòng xe (chưa huấn luyện).';
     final mae = status.mae;
     return '${wh.toStringAsFixed(1)} Wh cho 1 %'
-        '${power == null ? '' : ' · sạc ~${power.round()} W'}'
-        '${mae == null ? '' : ' · sai số ~±${mae.toStringAsFixed(1)}%'}';
+        '${power == null ? '' : ' · sạc khoảng ${power.round()} W'}'
+        '${mae == null ? '' : ' · sai số khoảng ±${mae.toStringAsFixed(1)}%'}';
   }
 
   static String _tripLearned(VehicleLearningStatus status) {
@@ -425,11 +425,11 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
     final model = status.trip.raw['model'];
     final source = model is Map ? model['source'] : null;
     if (km == null) return 'Chưa có định mức km/% cho xe này.';
-    final value = '~${km.toStringAsFixed(2)} km cho 1 %';
+    final value = 'khoảng ${km.toStringAsFixed(2)} km cho 1 %';
     return switch (source) {
       'model' =>
         '$value · đã huấn luyện từ ${status.trip.trained} chuyến'
-            '${status.trip.mae == null ? '' : ' · sai số ~±${status.trip.mae!.toStringAsFixed(1)}%/chuyến'}',
+            '${status.trip.mae == null ? '' : ' · sai số khoảng ±${status.trip.mae!.toStringAsFixed(1)}%/chuyến'}',
       'odo' => '$value · học từ ODO sau sạc',
       _ => '$value · theo định mức dòng xe',
     };

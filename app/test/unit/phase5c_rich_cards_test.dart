@@ -84,7 +84,7 @@ void main() {
       expect(find.text('Trạng thái Pin & Xe'), findsOneWidget);
       expect(find.text('VF-FELIZ-S'), findsOneWidget);
       expect(find.text('75%'), findsOneWidget);
-      expect(find.text('~85 km'), findsOneWidget);
+      expect(find.text('85 km'), findsOneWidget);
       expect(find.text('98%'), findsOneWidget);
       expect(find.text('72.0 V'), findsOneWidget);
       expect(find.text('28.5 °C'), findsOneWidget);
@@ -114,7 +114,7 @@ void main() {
       // Canonical telemetry is W; 1850 W must not be mistaken for 1.85 W.
       expect(find.text('1850 W'), findsOneWidget);
       expect(find.text('8.4 A'), findsOneWidget);
-      expect(find.text('~45 phút'), findsOneWidget);
+      expect(find.text('khoảng 45 phút'), findsOneWidget);
       expect(find.textContaining('≤12A'), findsWidgets);
     });
 

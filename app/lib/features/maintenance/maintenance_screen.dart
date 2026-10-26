@@ -44,10 +44,8 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
   Future<void> _loadCurrentOdo() async {
     final vehicleId = ref.read(selectedVehicleIdProvider);
     if (vehicleId.isEmpty) return;
-    final vehicle = await ref.read(vehicleProvider(vehicleId).future);
     if (!mounted) return;
     setState(() {
-      _currentOdo = vehicle?.currentOdo ?? 0;
       _reminders = AccountReminderService.instance.list(vehicleId);
       _remindersFor = vehicleId;
     });
@@ -56,6 +54,12 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
   @override
   Widget build(BuildContext context) {
     final vehicleId = ref.watch(selectedVehicleIdProvider);
+    // QA 137: the ODO follows the vehicle live: a reading saved from the
+    // Overview, a confirmed charge or Pinova Bot shows here at once (it was
+    // read once when the screen opened).
+    _currentOdo = vehicleId.isEmpty
+        ? 0
+        : ref.watch(vehicleProvider(vehicleId)).valueOrNull?.currentOdo ?? 0;
     if (vehicleId.isNotEmpty && _remindersFor != vehicleId) {
       _remindersFor = vehicleId;
       _reminders = AccountReminderService.instance.list(vehicleId);

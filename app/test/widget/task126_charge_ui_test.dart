@@ -132,10 +132,10 @@ void main() {
         status: _status(440),
         now: now,
       );
-      expect(content.title, 'Đang sạc ~58% → 80%');
+      expect(content.title, 'Đang sạc khoảng 58% → 80%');
       expect(content.text, contains('440 W'));
-      expect(content.text, contains('còn ~'));
-      expect(content.text, contains('xong ~'));
+      expect(content.text, contains('còn khoảng'));
+      expect(content.text, contains('xong khoảng'));
       // 22 % x 26 Wh / 440 W = 78 min.
       final left = ServerChargeNotificationContent.remaining(
         session: _session(),
@@ -197,9 +197,9 @@ void main() {
               stopTime: '11:33',
               fromSoc: 20,
               toSoc: 80,
-              personalizationLabel: 'Học từ 2 lần sạc · sai số ~±0.8%',
+              personalizationLabel: 'Học từ 2 lần sạc · sai số khoảng ±0.8%',
               rangeLabel: '3 giờ 1 phút – 4 giờ 5 phút',
-              stopLine: 'Đạt ~80% lúc 11:33 · máy chủ tự ngắt',
+              stopLine: 'Đạt khoảng 80% lúc 11:33 · máy chủ tự ngắt',
             ),
           ),
           scale,

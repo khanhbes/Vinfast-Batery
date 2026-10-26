@@ -1203,10 +1203,10 @@ class _SpecPreviewDialog extends StatelessWidget {
               if (spec.topSpeedKmh != null)
                 _row('Tốc độ tối đa', '${spec.topSpeedKmh!.toInt()} km/h'),
               if (spec.rangeKm != null)
-                _row('Tầm hoạt động', '~${spec.rangeKm!.toInt()} km'),
+                _row('Tầm hoạt động', 'khoảng ${spec.rangeKm!.toInt()} km'),
               _row(
                 'Hiệu suất',
-                '~${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%',
+                'khoảng ${spec.defaultEfficiencyKmPerPercent.toStringAsFixed(2)} km/%',
               ),
               if (spec.releaseYear != null)
                 _row('Năm ra mắt', '${spec.releaseYear}'),

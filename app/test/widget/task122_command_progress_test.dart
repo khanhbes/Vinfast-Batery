@@ -74,7 +74,7 @@ void main() {
           temperatureC: 31,
           timerVerified: true,
           estimateNote:
-              'Đạt 80% sau ~1 giờ 10 phút · khoảng 10:10 (420 W đo thực tế)',
+              'Đạt 80% sau khoảng 1 giờ 10 phút · khoảng 10:10 (420 W đo thực tế)',
           onStop: () {},
         ),
         scale,

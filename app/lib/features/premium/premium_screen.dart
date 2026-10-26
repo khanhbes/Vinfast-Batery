@@ -27,6 +27,10 @@ class PremiumScreen extends ConsumerStatefulWidget {
   /// The feature the owner tried to open (its plan is selected first).
   final PremiumFeature? highlight;
 
+  /// QA 137: on this page Ultra always shows its slow aurora (to everyone,
+  /// on every plan), one loop every 18 s; still under "reduce motion".
+  static const ultraFlow = Duration(seconds: 18);
+
   static Future<void> open(BuildContext context, {PremiumFeature? highlight}) =>
       Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -199,6 +203,19 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
     final plan = ref.watch(entitlementProvider);
     final promo = plan.pendingPromo;
     final ultra = _tier == PlanTier.ultra;
+    return PlanMotionHost(
+      running: !MediaQuery.disableAnimationsOf(context),
+      period: PremiumScreen.ultraFlow,
+      child: _page(context, plan, promo, ultra),
+    );
+  }
+
+  Widget _page(
+    BuildContext context,
+    Entitlement plan,
+    PromoQuote? promo,
+    bool ultra,
+  ) {
     return LuxeScaffold(
       title: 'Pinova Premium',
       bottomNavigationBar: _ActionBar(
@@ -411,35 +428,18 @@ class _TierPill extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  static const _silver = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [PlanColors.silverHi, PlanColors.silver, PlanColors.steel],
+  );
+
   @override
   Widget build(BuildContext context) {
     final ultra = tier == PlanTier.ultra;
     final from = PlanTable.price(tier, PlanPeriod.year) / 12;
-    Widget body(Gradient? fill) => AnimatedContainer(
-      duration: MediaQuery.disableAnimationsOf(context)
-          ? Duration.zero
-          : const Duration(milliseconds: 260),
-      curve: LuxeMotion.enter,
-      constraints: const BoxConstraints(minHeight: 64),
+    final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: selected ? fill : null,
-        color: selected ? null : LuxeColors.glass,
-        border: Border.all(
-          color: selected ? const Color(0x99FFFFFF) : LuxeColors.hairline,
-        ),
-        boxShadow: selected
-            ? [
-                BoxShadow(
-                  color: (ultra ? PlanColors.violet : PlanColors.steel)
-                      .withValues(alpha: 0.35),
-                  blurRadius: 22,
-                  spreadRadius: -6,
-                ),
-              ]
-            : null,
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.center,
@@ -471,7 +471,7 @@ class _TierPill extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'từ ~${formatVnd(from.round())}/tháng',
+            'khoảng ${formatVnd(from.round())}/tháng',
             style: TextStyle(
               color: selected ? const Color(0xCC0B0C14) : LuxeColors.muted,
               fontSize: 12,
@@ -480,6 +480,64 @@ class _TierPill extends StatelessWidget {
         ],
       ),
     );
+    // QA 137: the fill is its own layer that fades in once. Inside an
+    // AnimatedContainer the flowing aurora restarted the implicit animation
+    // 25 times a second and stayed stuck dark on a real phone.
+    Widget pill(Gradient fill) {
+      final surface = Container(
+        constraints: const BoxConstraints(minHeight: 64),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          // Unselected Ultra sits on an aurora ring: keep the inside opaque.
+          color: ultra && !selected ? LuxeColors.surface : LuxeColors.glass,
+          border: ultra && !selected
+              ? null
+              : Border.all(
+                  color: selected
+                      ? const Color(0x99FFFFFF)
+                      : LuxeColors.hairline,
+                ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: (ultra ? PlanColors.violet : PlanColors.steel)
+                        .withValues(alpha: 0.35),
+                    blurRadius: 22,
+                    spreadRadius: -6,
+                  ),
+                ]
+              : null,
+        ),
+        child: Stack(
+          children: [
+            if (selected)
+              Positioned.fill(
+                child: _FadeIn(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(19),
+                      gradient: fill,
+                    ),
+                  ),
+                ),
+              ),
+            content,
+          ],
+        ),
+      );
+      if (!ultra || selected) return surface;
+      // Not chosen yet, Ultra still shows a slow aurora edge (owner's ask:
+      // the top plan moves gently, never static).
+      return Container(
+        padding: const EdgeInsets.all(1.2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(21),
+          gradient: fill,
+        ),
+        child: surface,
+      );
+    }
+
     return Semantics(
       button: true,
       selected: selected,
@@ -490,22 +548,29 @@ class _TierPill extends StatelessWidget {
         onTap: onTap,
         child: ultra
             ? PlanFlow(
-                builder: (context, phase) => body(planFlowGradient(phase)),
+                builder: (context, phase) => pill(planFlowGradient(phase)),
               )
-            : body(
-                const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    PlanColors.silverHi,
-                    PlanColors.silver,
-                    PlanColors.steel,
-                  ],
-                ),
-              ),
+            : pill(_silver),
       ),
     );
   }
+}
+
+/// Fades its child in once when it first appears.
+class _FadeIn extends StatelessWidget {
+  const _FadeIn({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => TweenAnimationBuilder<double>(
+    tween: Tween(begin: 0, end: 1),
+    duration: MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : const Duration(milliseconds: 260),
+    curve: LuxeMotion.enter,
+    builder: (context, t, child) => Opacity(opacity: t, child: child),
+    child: child,
+  );
 }
 
 // ───────────────────────────── Benefits ─────────────────────────────
@@ -704,7 +769,7 @@ class _Price extends StatelessWidget {
     final discounted = promo?.finalPrice(tier, period);
     final shown = discounted ?? base;
     final note = period == PlanPeriod.year
-        ? '~${formatVnd((shown / 12).round())} mỗi tháng · tiết kiệm '
+        ? 'khoảng ${formatVnd((shown / 12).round())} mỗi tháng · tiết kiệm '
               '${PlanTable.yearlySavingPct(tier)}% so với trả từng tháng'
         : 'Trả theo năm chỉ ${formatVnd(PlanTable.price(tier, PlanPeriod.year))}';
     return Column(

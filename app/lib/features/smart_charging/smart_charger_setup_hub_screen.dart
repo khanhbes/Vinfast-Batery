@@ -584,7 +584,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         value == null ? 'Đã xóa giá điện' : 'Đã lưu giá điện',
         detail: value == null
             ? 'Chi phí sẽ không được ước tính.'
-            : '${groupThousands(value)} đ/kWh · áp dụng cho phiên mới',
+            : '${formatVnd(value)}/kWh · áp dụng cho phiên mới',
       );
     } catch (error) {
       AppPopup.showError('Không thể lưu giá điện', detail: _userMessage(error));
@@ -1209,7 +1209,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '${groupThousands(int.tryParse(tariff.text) ?? 2800)} đ/kWh',
+                            '${formatVnd(int.tryParse(tariff.text) ?? 2800)}/kWh',
                             style: CockpitTypography.numbers(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,

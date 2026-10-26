@@ -263,7 +263,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          range == null ? '— km' : '~$range km',
+                          range == null ? '— km' : '$range km',
                           style: const TextStyle(
                             color: LuxeColors.text,
                             fontSize: 20,

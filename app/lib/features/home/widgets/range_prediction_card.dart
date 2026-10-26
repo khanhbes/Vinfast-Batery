@@ -41,7 +41,7 @@ class RangePredictionCard extends StatelessWidget {
                 Text(
                   estimate == null
                       ? 'Chưa đủ dữ liệu'
-                      : '~${estimate.km.round()} km',
+                      : '${estimate.km.round()} km',
                   style: text.headlineLarge?.copyWith(
                     fontWeight: FontWeight.w800,
                   ),

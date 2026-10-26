@@ -1661,7 +1661,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       ChargingSessionState.arming => 'Đang chuẩn bị',
       ChargingSessionState.starting => 'Đang bật sạc',
       ChargingSessionState.active =>
-        'Đang sạc · Mục tiêu ~${_session.targetSoc.round()}%',
+        'Đang sạc · Mục tiêu ${_session.targetSoc.round()}%',
       ChargingSessionState.stopping => 'Đang dừng sạc',
       ChargingSessionState.completed =>
         _session.energyQuality == 'partial'

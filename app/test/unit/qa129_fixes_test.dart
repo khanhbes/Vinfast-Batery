@@ -111,7 +111,8 @@ void main() {
     expect(groupThousands(4804), '4 804');
     expect(groupThousands(999), '999');
     expect(groupThousands(1234567), '1 234 567');
-    expect(formatVnd(12500), '12 500 đ');
+    // QA 137: money only is written the Vietnamese way.
+    expect(formatVnd(12500), '12.500đ');
   });
 
   test('a target charge that reached its target is "Hoàn thành"', () {
@@ -148,7 +149,7 @@ void main() {
       'stopMode': 'target',
       'powerW': '412',
     }, DateTime.utc(2026, 10, 18, 4));
-    expect(content!.title, 'Đang sạc ~63% → 80%');
+    expect(content!.title, 'Đang sạc khoảng 63% → 80%');
   });
 
   group('ledger matches History (QA 129)', () {

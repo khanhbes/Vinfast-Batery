@@ -178,7 +178,8 @@ class _SessionTile extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${confirmed == null ? '~' : ''}${endSoc.toStringAsFixed(0)}%',
+                          '${endSoc.toStringAsFixed(0)}%'
+                          '${confirmed == null ? ' ước tính' : ''}',
                           style: const TextStyle(
                             color: LuxeColors.emerald,
                             fontSize: 15,

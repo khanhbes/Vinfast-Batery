@@ -134,7 +134,7 @@ void main() {
         ProviderScope(
           overrides: [
             selectedVehicleIdProvider.overrideWith((ref) => ''),
-            vehicleProvider.overrideWith((ref, id) async => null),
+            vehicleProvider.overrideWith((ref, id) => Stream.value(null)),
           ],
           child: _app(const TripPlannerWrapper(), scale: scale),
         ),

@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 
 import '../models/smart_charge_cost.dart';
 import '../models/smart_charging_session.dart';
+import '../../core/utils/number_text.dart';
 
 class SmartChargeReportService {
   Future<ChargeReportResult> export({
@@ -120,7 +121,6 @@ class SmartChargeReportService {
     final theme = regular == null
         ? null
         : pw.ThemeData.withFont(base: regular, bold: bold ?? regular);
-    final currency = NumberFormat.decimalPattern('vi_VN');
     document.addPage(
       pw.MultiPage(
         theme: theme,
@@ -155,7 +155,7 @@ class SmartChargeReportService {
                 'Tổng chi phí',
                 summary.totalCostVnd <= 0
                     ? 'Chưa có dữ liệu'
-                    : '${currency.format(summary.totalCostVnd)} đ',
+                    : formatVnd(summary.totalCostVnd),
                 bold,
               ),
               _pdfKpi('Phiên hoàn tất', '${summary.completedSessions}', bold),
@@ -182,11 +182,12 @@ class SmartChargeReportService {
                   session.strategy == ChargingStrategy.manualTimed
                       ? 'Thủ công'
                       : 'AI',
-                  '~${session.startSoc.round()} → ~${(session.actualEndSoc ?? session.estimatedSoc ?? session.targetSoc).round()}%',
+                  '${session.startSoc.round()}% → ${(session.actualEndSoc ?? session.estimatedSoc ?? session.targetSoc).round()}%'
+                  '${session.actualEndSoc == null ? ' (ước tính)' : ''}',
                   _energy(session.energyUsedWh),
                   session.estimatedCostVnd == null
                       ? '—'
-                      : '${currency.format(session.estimatedCostVnd)} đ',
+                      : formatVnd(session.estimatedCostVnd!),
                   session.state.wireValue,
                 ],
             ],
@@ -199,7 +200,7 @@ class SmartChargeReportService {
           ),
           pw.SizedBox(height: 12),
           pw.Text(
-            'SOC và dung lượng pin có dấu ~ là giá trị ước tính, không phải dữ liệu BMS. Chi phí dùng điện năng Shelly đo và giá được chụp tại thời điểm bắt đầu phiên.',
+            'SOC và dung lượng pin ghi "(ước tính)" là giá trị ước tính, không phải dữ liệu BMS. Chi phí dùng điện năng Shelly đo và giá được chụp tại thời điểm bắt đầu phiên.',
             style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
           ),
         ],

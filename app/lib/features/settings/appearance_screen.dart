@@ -71,6 +71,7 @@ class AppearanceScreen extends ConsumerWidget {
             feature: PremiumFeature.ultraLook,
             tagAlignment: AlignmentDirectional.centerEnd,
             tagPadding: const EdgeInsetsDirectional.only(end: 10),
+            reserveTagSpace: true,
             child: LuxeSettingsGroup(
               children: [
                 LuxeSettingsRow(
@@ -236,8 +237,7 @@ class _OptionTile extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: selected,
-    label:
-        '$title. $caption${selected ? '. Đang dùng' : ''}',
+    label: '$title. $caption${selected ? '. Đang dùng' : ''}',
     excludeSemantics: true,
     child: Material(
       type: MaterialType.transparency,

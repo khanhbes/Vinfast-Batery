@@ -106,7 +106,8 @@ def terminal_message(state, *, stop_reason=None, estimated_soc=None) -> str:
 def terminal_title(state, *, stop_reason=None, estimated_soc=None) -> str:
     reason = str(stop_reason or "")
     if reason == "target_reached":
-        return (f"Đã sạc đến ~{round(float(estimated_soc))}%" if estimated_soc is not None
+        # QA 137: "khoảng", never "~" (owner's request for the whole app).
+        return (f"Đã sạc đến khoảng {round(float(estimated_soc))}%" if estimated_soc is not None
                 else "Đã sạc đến mục tiêu")
     titles = {
         "battery_full": "Pin đã đầy",

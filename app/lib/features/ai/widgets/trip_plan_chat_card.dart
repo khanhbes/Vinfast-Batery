@@ -65,16 +65,16 @@ class TripPlanChatCard extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              'Hao ~${_n('usePct').round()}% '
+              'Hao khoảng ${_n('usePct').round()}% '
               '(${_n('useLowPct').round()}–${_n('useHighPct').round()}%) · '
-              '${arrival < 0 ? 'hết pin trước khi tới' : 'tới nơi ~${arrival.round()}%'}',
+              '${arrival < 0 ? 'hết pin trước khi tới' : 'tới nơi khoảng ${arrival.round()}%'}',
               style: const TextStyle(color: LuxeColors.text, fontSize: 14),
             ),
             if (data['carMinutes'] is num) ...[
               const SizedBox(height: 4),
               Text(
                 '${_n('distanceKm').toStringAsFixed(1)} km · '
-                '~${data['carMinutes']} phút (ô tô)',
+                'khoảng ${data['carMinutes']} phút (ô tô)',
                 style: const TextStyle(color: LuxeColors.muted, fontSize: 12.5),
               ),
             ],
@@ -127,9 +127,9 @@ class TripPlanChatCard extends StatelessWidget {
       'charge_on_the_way' =>
         'Cần sạc giữa đường khoảng ${n('stops')?.round()} lần.',
       'charge_at_destination' => 'Sạc ở điểm đến trước khi quay về.',
-      'ride_eco' => 'Chạy chậm lại tiết kiệm ~${n('savedPct')?.round()}% pin.',
+      'ride_eco' => 'Chạy chậm lại tiết kiệm khoảng ${n('savedPct')?.round()}% pin.',
       'shorter_route' =>
-        'Tuyến ${n('distanceKm')} km ngắn hơn, tiết kiệm ~${n('savedPct')?.round()}%.',
+        'Tuyến ${n('distanceKm')} km ngắn hơn, tiết kiệm khoảng ${n('savedPct')?.round()}%.',
       _ => null,
     };
   }

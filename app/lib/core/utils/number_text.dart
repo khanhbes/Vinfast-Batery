@@ -17,5 +17,16 @@ String groupThousands(num value) {
   return negative ? '-$out' : out.toString();
 }
 
-/// Whole đồng with grouped thousands, e.g. "12 500 đ".
-String formatVnd(num value) => '${groupThousands(value)} đ';
+/// Money (QA 137, owner's choice): the Vietnamese way, "249.000đ" — dots
+/// group thousands and "đ" follows the number. Only money: VND has no
+/// decimals here, so the dot cannot be misread, while every other number
+/// keeps [groupThousands] and the decimal point.
+String formatVnd(num value) {
+  final digits = value.abs().round().toString();
+  final out = StringBuffer(value < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write('.');
+    out.write(digits[i]);
+  }
+  return '$outđ';
+}

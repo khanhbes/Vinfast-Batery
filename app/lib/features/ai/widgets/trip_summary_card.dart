@@ -235,7 +235,7 @@ class TripSummaryCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'Thời gian: ~$durationMin phút',
+                        'Thời gian: khoảng $durationMin phút',
                         style: TextStyle(fontSize: 11.5, color: uiColors.muted),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

@@ -97,7 +97,7 @@ class ServerChargeNotificationContent {
   }) {
     final soc = session.estimatedSoc;
     final target = session.targetSoc.round();
-    final socText = soc == null ? '—' : '~${soc.round()}%';
+    final socText = soc == null ? '—' : 'khoảng ${soc.round()}%';
     final title = session.isTargetMode
         ? 'Đang sạc $socText → $target%'
         : 'Đang sạc $socText';
@@ -127,9 +127,9 @@ class ServerChargeNotificationContent {
     final parts = <String>[
       if (power != null) '${power.round()} W',
       if (left != null && left > Duration.zero)
-        'còn ~${formatChargeDuration(left)}',
+        'còn khoảng ${formatChargeDuration(left)}',
       if (left != null && left > Duration.zero)
-        'xong ~${formatClock(now.add(left))}',
+        'xong khoảng ${formatClock(now.add(left))}',
     ];
     return ServerChargeNotificationContent(
       title,

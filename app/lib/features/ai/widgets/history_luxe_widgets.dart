@@ -904,7 +904,8 @@ class _RailPainter extends CustomPainter {
       old.color != color || old.top != top || old.bottom != bottom;
 }
 
-/// "22% → 81%" with the owner's reading, "32% → ~79%" with the estimate,
+/// "22% → 81%" with the owner's reading, "32% → 79% ước tính" with the
+/// estimate (QA 137: no "~"),
 /// else the target (Task 128: the list showed the target as the end %).
 String _socSpanLabel(SmartChargingSession session) {
   final start = '${session.startSoc.round()}%';
@@ -912,7 +913,7 @@ String _socSpanLabel(SmartChargingSession session) {
   if (actual != null) return '$start → ${actual.round()}%';
   final estimate = session.estimatedSoc;
   if (estimate != null && session.state.isTerminal) {
-    return '$start → ~${estimate.round()}%';
+    return '$start → ${estimate.round()}% ước tính';
   }
   return '$start · mục tiêu ${session.targetSoc.round()}%';
 }
@@ -1110,7 +1111,7 @@ class HistoryActiveCard extends StatelessWidget {
                     TextSpan(
                       children: [
                         TextSpan(
-                          text: '~${soc.round()}%',
+                          text: '${soc.round()}%',
                           style: const TextStyle(
                             fontSize: 30,
                             fontWeight: FontWeight.w300,
@@ -1118,7 +1119,7 @@ class HistoryActiveCard extends StatelessWidget {
                           ),
                         ),
                         TextSpan(
-                          text: '   mục tiêu ~${target.round()}%',
+                          text: '   ước tính · mục tiêu ${target.round()}%',
                           style: LuxeText.caption,
                         ),
                       ],
