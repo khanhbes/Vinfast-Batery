@@ -92,8 +92,8 @@ const _ultraBenefits = [
   ),
   _Benefit(
     Icons.all_inclusive_rounded,
-    'Gần như không giới hạn',
-    'Nhiều xe, Pinova Bot 100 tin mỗi ngày, chi phí theo tháng.',
+    'Nhiều xe, nhiều tin hơn',
+    'Tối đa 10 xe, Pinova Bot 100 tin mỗi ngày.',
   ),
 ];
 
@@ -930,6 +930,13 @@ class _FoldState extends State<_Fold> {
 
   bool get _isOpen => widget.open ?? _open;
 
+  Widget get _body => _isOpen
+      ? Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          child: widget.child,
+        )
+      : const SizedBox(width: double.infinity);
+
   @override
   Widget build(BuildContext context) => LuxeGlass(
     radius: 18,
@@ -983,19 +990,18 @@ class _FoldState extends State<_Fold> {
             ),
           ),
         ),
-        AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 260),
-          curve: LuxeMotion.enter,
-          alignment: Alignment.topCenter,
-          child: _isOpen
-              ? Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                  child: widget.child,
-                )
-              : const SizedBox(width: double.infinity),
-        ),
+        // QA 138: under reduce motion open/close in one step. An
+        // AnimatedSize with a zero duration re-dirties itself during layout
+        // (framework assertion).
+        if (MediaQuery.disableAnimationsOf(context))
+          _body
+        else
+          AnimatedSize(
+            duration: const Duration(milliseconds: 260),
+            curve: LuxeMotion.enter,
+            alignment: Alignment.topCenter,
+            child: _body,
+          ),
       ],
     ),
   );
@@ -1085,11 +1091,10 @@ class _CompareTable extends StatelessWidget {
     ('Lộ trình', '—', '✓', '✓'),
     ('% pin chai, bài kiểm tra', '—', '✓', '✓'),
     ('Giao diện tùy chọn, xuất file', '—', '✓', '✓'),
-    ('Số xe', '1', '2', 'Nhiều'),
+    ('Số xe', '1', '2', '10'),
     ('Sạc đêm an toàn', '—', '—', '✓'),
-    ('AI cá nhân', '—', '—', '✓'),
+    ('AI cá nhân (huấn luyện)', '—', '—', '✓'),
     ('Giao diện Aurora', '—', '—', '✓'),
-    ('Chi phí theo tháng, chia sẻ xe', '—', '—', '✓'),
     ('Trợ giúp & khắc phục sự cố', '✓', '✓', '✓'),
   ];
 

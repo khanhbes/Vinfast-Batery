@@ -41,7 +41,8 @@ abstract final class PremiumGate {
       title: 'Thêm xe',
       message:
           'Gói ${plan.tier.label} có tối đa ${plan.maxVehicles} xe. '
-          'Pro có 2 xe, Ultra không giới hạn.',
+          'Pro có ${PlanTable.maxVehicles[PlanTier.pro]} xe, Ultra tối đa '
+          '${PlanTable.maxVehicles[PlanTier.ultra]} xe.',
       highlight: null,
     );
   }

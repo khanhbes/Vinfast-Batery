@@ -267,29 +267,26 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   children: [
                     // Task 127: the owner trains the charge and trip models
                     // here (was hidden behind the advanced-AI beta flag).
-                    // QA 136: outside the plan these rows are faded and
-                    // only their plan tag opens Pinova Premium.
-                    PremiumLocked(
-                      feature: PremiumFeature.learningTrain,
-                      tagAlignment: AlignmentDirectional.centerEnd,
-                      tagPadding: const EdgeInsetsDirectional.only(end: 10),
-                      reserveTagSpace: true,
-                      child: LuxeSettingsRow(
-                        key: const ValueKey('more-personal-ai'),
-                        icon: Icons.model_training_rounded,
-                        title: 'AI cá nhân',
-                        subtitle:
-                            'Dữ liệu đã thu thập, nút Huấn luyện và kết quả mô hình sạc/lộ trình',
-                        onTap: () {
-                          final vehicleId = ref.read(selectedVehicleIdProvider);
-                          if (vehicleId.isEmpty) {
-                            AppPopup.showWarning('Hãy chọn xe trước');
-                            return;
-                          }
-                          _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
-                        },
-                      ),
+                    // QA 138: open on every plan (the owner's data, its
+                    // switch and "delete" live there); only training is
+                    // Ultra, explained on that screen.
+                    LuxeSettingsRow(
+                      key: const ValueKey('more-personal-ai'),
+                      icon: Icons.model_training_rounded,
+                      title: 'AI cá nhân',
+                      subtitle:
+                          'Dữ liệu đã thu thập, quyền học dữ liệu và nút Huấn luyện',
+                      onTap: () {
+                        final vehicleId = ref.read(selectedVehicleIdProvider);
+                        if (vehicleId.isEmpty) {
+                          AppPopup.showWarning('Hãy chọn xe trước');
+                          return;
+                        }
+                        _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
+                      },
                     ),
+                    // QA 136: outside the plan these rows are faded and only
+                    // their plan tag opens Pinova Premium.
                     PremiumLocked(
                       feature: PremiumFeature.nightCharging,
                       tagAlignment: AlignmentDirectional.centerEnd,

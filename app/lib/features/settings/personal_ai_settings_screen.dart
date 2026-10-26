@@ -15,8 +15,11 @@ import '../../data/models/vehicle_learning_status.dart';
 import '../../data/services/server_smart_charger_service.dart';
 import '../../data/services/trip_csv_import.dart';
 import '../ai/services/learning_flow.dart';
+import '../../core/providers/entitlement_provider.dart';
 import '../../data/models/entitlement.dart';
+import '../premium/plan_tag.dart';
 import '../premium/premium_gate.dart';
+import '../premium/premium_screen.dart';
 import 'widgets/training_result_sheet.dart';
 
 /// AI cá nhân (Tasks 126–127): what each model learned, the data collected
@@ -266,17 +269,18 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
   }
 
   @override
-  // QA 136: however this screen is reached (a tile, Pinova Bot, a
-  // notification), outside the plan it shows Pinova Premium instead.
-  Widget build(BuildContext context) => PremiumRequired(
-    feature: PremiumFeature.learningTrain,
-    child: Builder(builder: _screen),
-  );
-
-  Widget _screen(BuildContext context) {
+  // QA 138: open on every plan. The data, the "learn from my data" switch
+  // and "delete my data" are the owner's own (they were behind Ultra since
+  // QA 136); only training the personal model is Ultra.
+  Widget build(BuildContext context) {
     final profile = _profile;
     final status = _status;
     final consent = status?.consentEnabled ?? profile?.consentEnabled ?? true;
+    final trainAllowed = ref.watch(
+      entitlementProvider.select(
+        (plan) => plan.allows(PremiumFeature.learningTrain),
+      ),
+    );
     return LuxeScaffold(
       appBar: const LuxeAppBar(),
       body: RefreshIndicator(
@@ -310,6 +314,24 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                 onRetry: _load,
               )
             else if (status != null) ...[
+              if (!trainAllowed) ...[
+                LuxeNotice(
+                  key: const ValueKey('learning-train-ultra'),
+                  icon: Icons.workspace_premium_outlined,
+                  message:
+                      'Huấn luyện mô hình riêng có trong gói Ultra. Dữ liệu '
+                      'vẫn của bạn: xem, tắt hoặc xóa ở cuối trang.',
+                  action: PlanTag(
+                    tier: PremiumFeature.learningTrain.tier,
+                    semanticLabel: 'Xem gói Ultra để huấn luyện AI cá nhân',
+                    onTap: () => PremiumScreen.open(
+                      context,
+                      highlight: PremiumFeature.learningTrain,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
               LuxeReveal(
                 index: 1,
                 child: _ModelCard(
@@ -329,7 +351,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                       'Học từ % bạn đọc trên đồng hồ sau sạc và lúc app tự nhận '
                       'biết pin đầy (công suất dưới 40 W suốt 5 phút).',
                   busy: _training == 'charge',
-                  enabled: consent && _training == null,
+                  enabled: consent && _training == null && trainAllowed,
                   onTrain: () => _train('charge', 'finetune'),
                   onRetrain: () => _train('charge', 'retrain'),
                 ),
@@ -346,7 +368,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                   learned: _tripLearned(status),
                   sources: _tripSources(status.trip),
                   busy: _training == 'trip',
-                  enabled: consent && _training == null,
+                  enabled: consent && _training == null && trainAllowed,
                   onTrain: () => _train('trip', 'finetune'),
                   onRetrain: () => _train('trip', 'retrain'),
                 ),
