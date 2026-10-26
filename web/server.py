@@ -6908,9 +6908,10 @@ def _register_smart_charge_cloud_first():
 
     def night_alert(uid, *, title, body):
         from shelly.push_notifications import send_user_push
-        send_user_push(uid, title=title, body=body, data={'event': 'night_alert', 'urgent': '1'},
+        # QA 138: not a safety event, so no alarm channel.
+        send_user_push(uid, title=title, body=body, data={'event': 'night_alert'},
                        db=_firestore_db if _firebase_available else None, messaging=_firebase_messaging,
-                       local_tokens=_local_push_tokens, urgent=True)
+                       local_tokens=_local_push_tokens)
 
     service.night_alert = night_alert
     app.extensions['smart_charge_service'] = service
@@ -6956,13 +6957,19 @@ def _register_assistant():
         return params.to_dict() if params else None
 
     from assistant.routing import OsmRouter
+    from assistant.trip_routes import create_trip_route_blueprint
+
+    # One router (spacing + cache) for Pinova Bot and, QA 138, the trip planner.
+    router = OsmRouter()
+    app.register_blueprint(create_trip_route_blueprint(
+        router=router, auth_resolver=_verify_token, entitlements=app.extensions.get('billing')))
 
     engine = AssistantEngine(
         gemini=GeminiClient(), knowledge=knowledge, memory=memory,
         live_reader=live_reader if service else None,
         history_reader=history_reader if repository else None,
         # Task 126: trip estimates (OpenStreetMap) and learned charge times.
-        router=OsmRouter(),
+        router=router,
         charge_estimator=charge_estimator if service else None,
         trip_params_reader=trip_params_reader if service else None,
         entitlements=app.extensions.get('billing'),

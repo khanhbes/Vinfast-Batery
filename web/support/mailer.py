@@ -76,7 +76,8 @@ class SupportMailer:
     def configured(self) -> bool:
         return bool(self.endpoint and self._key and self.sender and self.recipients)
 
-    def send(self, subject: str, text: str) -> bool:
+    def send(self, subject: str, text: str, on_done=None) -> bool:
+        """Queue (background) or send; ``on_done(ok)`` gets the real result."""
         if not self.configured:
             return False
         message = {
@@ -84,10 +85,18 @@ class SupportMailer:
             "recipients": {"to": [{"address": r} for r in self.recipients]},
             "content": {"subject": subject[:200], "plainText": text[:20000]},
         }
+        def run():
+            ok = self._post(message)
+            if on_done is not None:
+                try:
+                    on_done(ok)
+                except Exception:
+                    log.warning("support email callback failed")
+            return ok
         if self.background:
-            threading.Thread(target=self._post, args=(message,), daemon=True).start()
+            threading.Thread(target=run, daemon=True).start()
             return True
-        return self._post(message)
+        return run()
 
     def _post(self, message: dict) -> bool:
         path = f"/emails:send?api-version={API_VERSION}"

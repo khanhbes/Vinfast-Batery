@@ -298,8 +298,12 @@ class VehicleLearningMixin:
                      "kmPerPct": round(params.km_per_pct, 3) if params else None,
                      "report": (profile.training_reports or {}).get("trip") if profile else None,
                      "sources": _count_sources(rides)})
+        entitlements = getattr(self, "entitlements", None)
         return {"vehicleId": vehicle_id,
                 "consentEnabled": profile.consent_enabled if profile else True,
+                # QA 138 (QA-07): the app nudges "train now" only when the
+                # plan can train; the data stays collected either way.
+                "trainAllowed": entitlements is None or entitlements.allows(uid, "learning_train"),
                 "charge": charge, "trip": trip}
 
     def battery_health(self, uid: str, vehicle_id: str) -> dict:

@@ -21,6 +21,11 @@ CATEGORY_LABELS = {
 }
 STATUSES = ("open", "answered", "closed")
 MAX_REPLIES = 40
+# QA 138: newest first for the portal, and a ceiling on user replies a day
+# (each one emails the admin).
+ADMIN_PAGE = 200
+USER_SCAN = 500
+MAX_USER_REPLIES_PER_DAY = 10
 _SECRET_KEY = re.compile(r"(token|secret|password|passwd|auth|key|cookie|credential)", re.IGNORECASE)
 _SECRET_VALUE = re.compile(r"(bearer\s|eyJ[a-zA-Z0-9_-]{10,}|AIza[0-9A-Za-z_-]{20,})", re.IGNORECASE)
 
@@ -77,6 +82,7 @@ class SupportService:
         self.clock = clock or _now
         self.portal_url = portal_url.rstrip("/")
         self._local: dict[str, dict] = {}
+        self._email_results: dict[str, bool] = {}
         self._lock = threading.Lock()
 
     # -- storage ----------------------------------------------------------
@@ -96,17 +102,21 @@ class SupportService:
             self.db.collection(COLLECTION).document(ticket_id).set(data)
 
     def _rows(self, uid: str | None = None, limit: int = 100) -> list[dict]:
+        """Newest first. Without order_by Firestore returns the first N by
+        document id, and ticket ids start with the date: that was the oldest
+        tickets (QA 138, QA-09)."""
         if self.db is None:
             with self._lock:
                 rows = [dict(v) for v in self._local.values() if uid is None or v.get("uid") == uid]
+        elif uid is not None:
+            # Equality only (no composite index); one account has few tickets.
+            query = self.db.collection(COLLECTION).where("uid", "==", uid)
+            rows = [s.to_dict() or {} for s in query.limit(USER_SCAN).stream()]
         else:
-            query = self.db.collection(COLLECTION)
-            if uid is not None:
-                # Single-field equality: no composite index needed.
-                query = query.where("uid", "==", uid)
+            query = self.db.collection(COLLECTION).order_by("updatedAt", direction="DESCENDING")
             rows = [s.to_dict() or {} for s in query.limit(limit).stream()]
         rows.sort(key=lambda r: str(_iso(r.get("updatedAt")) or ""), reverse=True)
-        return rows
+        return rows[:limit]
 
     # -- views ------------------------------------------------------------
     @staticmethod
@@ -153,6 +163,7 @@ class SupportService:
         }
         data["emailSent"] = self._email_admin(data, f"[Pinova hỗ trợ] {subject}", message)
         self._put(ticket_id, data)
+        self._settle_email(ticket_id)
         return self.public(data)
 
     def mine(self, uid: str) -> list[dict]:
@@ -177,6 +188,12 @@ class SupportService:
         if len(data.get("replies") or []) >= MAX_REPLIES:
             raise SupportError("ticketFull", "Yêu cầu này đã dài; hãy tạo yêu cầu mới.", 409)
         now = self.clock()
+        today = str(_iso(now))[:10]
+        sent_today = sum(1 for r in data.get("replies") or []
+                         if r.get("by") == "user" and str(_iso(r.get("at")) or "")[:10] == today)
+        if sent_today >= MAX_USER_REPLIES_PER_DAY:
+            raise SupportError("replyQuota",
+                               "Bạn đã trả lời 10 lần hôm nay. Đội hỗ trợ sẽ đọc và trả lời sớm.", 429)
         data["replies"] = list(data.get("replies") or []) + [{"at": now, "by": "user", "text": text}]
         data.update({"status": "open", "updatedAt": now, "unreadForAdmin": True})
         self._email_admin(data, f"[Pinova hỗ trợ] Trả lời: {data.get('subject')}", text)
@@ -185,7 +202,7 @@ class SupportService:
 
     # -- admin ------------------------------------------------------------
     def admin_list(self, status: str | None = None) -> list[dict]:
-        rows = self._rows(limit=200)
+        rows = self._rows(limit=ADMIN_PAGE)
         if status in STATUSES:
             rows = [r for r in rows if r.get("status") == status]
         return [self.public(r, admin=True) for r in rows]
@@ -244,7 +261,29 @@ class SupportService:
         ] + [f"{k}: {v}" for k, v in list(diagnostics.items())[:40]]
         if self.portal_url:
             lines += ["", f"Trả lời trên portal: {self.portal_url}/support"]
+        # QA 138: None while the background send runs; the real result is
+        # written back (it used to say True as soon as the thread started).
+        ticket_id = data.get("id")
+
+        def done(ok: bool) -> None:
+            self._email_results[ticket_id] = bool(ok)
+            self._settle_email(ticket_id)
         try:
-            return bool(self.mailer.send(subject, "\n".join(lines)))
+            started = self.mailer.send(subject, "\n".join(lines), on_done=done)
         except Exception:
             return False
+        if not started:
+            return False
+        return self._email_results.pop(ticket_id, None)
+
+    def _settle_email(self, ticket_id) -> None:
+        """Write a finished background send into the stored ticket."""
+        result = self._email_results.get(ticket_id)
+        if result is None:
+            return
+        data = self._get(ticket_id)
+        if not data:
+            return  # not stored yet: create() settles right after saving
+        self._email_results.pop(ticket_id, None)
+        data["emailSent"] = result
+        self._put(ticket_id, data)

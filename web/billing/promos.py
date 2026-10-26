@@ -152,7 +152,9 @@ class PromoService:
             with self._lock:
                 rows = [dict(v) for v in self._local.values()]
         else:
-            rows = [s.to_dict() or {} for s in self.db.collection(COLLECTION).limit(limit).stream()]
+            # QA 138: newest codes first (a bare limit took the first by id).
+            query = self.db.collection(COLLECTION).order_by("createdAt", direction="DESCENDING")
+            rows = [s.to_dict() or {} for s in query.limit(limit).stream()]
         rows.sort(key=lambda r: str(_iso(r.get("createdAt")) or ""), reverse=True)
         return [self.public(r) for r in rows]
 

@@ -78,9 +78,10 @@ def create_worker_service():
         service = SmartChargeService(repository, VaultCloudControlProvider(repository),
                                      prediction_disabled, push_notifier=notifier,
                                      progress_notifier=progress)
-        # QA 135: night charging problems ring on every phone.
+        # QA 135/138: a night plan that could not start is told to every
+        # phone as a normal push; only safety cuts ring the alarm channel.
         service.night_alert = partial(send_user_push, db=db, messaging=messaging, firebase_app=app,
-                                      data={"event": "night_alert", "urgent": "1"}, urgent=True)
+                                      data={"event": "night_alert"})
         return service, partial(firebase_admin.delete_app, app)
     except Exception:
         if app is not None:

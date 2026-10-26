@@ -100,12 +100,23 @@ class NightPlanStore:
         else:
             self.db.collection(COLLECTION).document(key).set(plan)
 
-    def armed(self, limit: int = 50) -> list[dict]:
+    def armed(self, page: int = 200, cap: int = 5000) -> list[dict]:
+        """Every armed plan, page by page (QA 138, QA-09: a single limit(50)
+        left the 51st plan and later ones never started nor marked missed)."""
         if self.db is None:
             with self._lock:
                 return [dict(p) for p in self._local.values() if p.get("state") == "armed"]
-        query = self.db.collection(COLLECTION).where("state", "==", "armed").limit(limit)
-        return [s.to_dict() or {} for s in query.stream()]
+        rows, cursor = [], None
+        while len(rows) < cap:
+            query = self.db.collection(COLLECTION).where("state", "==", "armed").limit(page)
+            if cursor is not None:
+                query = query.start_after(cursor)
+            snapshots = list(query.stream())
+            rows.extend(s.to_dict() or {} for s in snapshots)
+            if len(snapshots) < page:
+                break
+            cursor = snapshots[-1]
+        return rows
 
 
 def _utc(value) -> datetime | None:
@@ -132,7 +143,10 @@ class NightChargingMixin:
     """Mixed into SmartChargeService (needs repository, clock, start,
     create_preview, require_feature, binding)."""
 
-    night_alert = None  # callable(uid, title, body): urgent push to every phone
+    # callable(uid, title, body): a normal push to every phone. QA 138: a plan
+    # that could not start is not a safety event, so it never rings the
+    # alarm channel (safety cuts of a night session do, via the stop push).
+    night_alert = None
 
     @property
     def night_plans(self) -> NightPlanStore:
@@ -170,6 +184,13 @@ class NightChargingMixin:
         preview = self._night_preview(uid, vehicle_id, current, target)
         now = self.clock()
         start_at, finish_by = schedule(now, wake, int(preview.predicted_duration_seconds))
+        ends = self._plan_ends_before(uid, start_at)
+        if ends is not None:
+            # QA 138 (QA-06): say it now, not with a failure at 3 a.m.
+            raise SmartChargeError(
+                "planEndsBeforeStart",
+                f"Gói hiện tại hết hạn lúc {ends.astimezone(VN):%H:%M %d/%m}, trước giờ bật sạc đêm "
+                f"({start_at.astimezone(VN):%H:%M}). Hãy gia hạn gói hoặc dùng Sạc hẹn giờ.", 409)
         plan_id = f"{vehicle_id}-{start_at.astimezone(VN).strftime('%Y%m%d%H%M')}"
         plan = {
             "uid": uid, "vehicleId": vehicle_id, "planId": plan_id, "state": "armed",
@@ -237,12 +258,32 @@ class NightChargingMixin:
                 plan.update(lastError=error.code, updatedAt=now)
                 self.night_plans.put(plan)
                 return plan
-            plan.update(state="failed", error=error.code, updatedAt=now)
-            self._night_alert(uid, "Không bật được sạc đêm", error.message)
+            if error.code == "premiumRequired":
+                plan.update(state="cancelled", error=error.code, updatedAt=now)
+                self._night_alert(uid, "Sạc đêm đã hủy",
+                                  "Gói Ultra hoặc bản dùng thử đã hết nên máy chủ không bật sạc đêm. Xe chưa được sạc.")
+            elif error.code == "activeSessionConflict":
+                plan.update(state="skipped", error=error.code, updatedAt=now)
+                self._night_alert(uid, "Sạc đêm không bật",
+                                  "Đang có một phiên sạc khác nên máy chủ không bật thêm sạc đêm.")
+            else:
+                plan.update(state="failed", error=error.code, updatedAt=now)
+                self._night_alert(uid, "Không bật được sạc đêm", error.message)
         self.night_plans.put(plan)
         self.repository.append_audit(uid, "night_plan_" + plan["state"], vehicle_id=vehicle_id,
                                      session_id=plan.get("sessionId"))
         return plan
+
+    def _plan_ends_before(self, uid: str, start_at: datetime) -> datetime | None:
+        """When the plan (trial or paid) ends before the night start."""
+        entitlements = getattr(self, "entitlements", None)
+        if entitlements is None or not getattr(entitlements, "enforced", True):
+            return None
+        try:
+            expires = _utc(entitlements.state(uid).get("expiresAt"))
+        except Exception:
+            return None
+        return expires if expires is not None and expires <= start_at else None
 
     def _night_alert(self, uid: str, title: str, body: str) -> None:
         alert = self.night_alert
