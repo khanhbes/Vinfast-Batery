@@ -39,7 +39,11 @@ abstract final class TrainingReadiness {
 
   /// Notify for models that crossed their threshold; returns them.
   static Future<List<String>> check(VehicleLearningStatus? status) async {
-    if (status == null || !status.consentEnabled || status.vehicleId.isEmpty) {
+    // QA 138 (QA-07): no "train now" nudge for a plan that cannot train.
+    if (status == null ||
+        !status.consentEnabled ||
+        !status.trainAllowed ||
+        status.vehicleId.isEmpty) {
       return const [];
     }
     final ready = await newlyReady(status);

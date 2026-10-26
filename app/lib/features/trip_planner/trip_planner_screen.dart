@@ -788,60 +788,64 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
           height: 260,
           child: Stack(
             children: [
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: center,
-                  initialZoom: 12,
-                  backgroundColor: LuxeColors.surface,
-                  onLongPress: (_, point) {
-                    HapticFeedback.mediumImpact();
-                    _selectPoint(point);
-                  },
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.bes.vinbatery',
-                    tileBuilder: darkModeTileBuilder,
+              // QA 138 (QA-08): the map takes long-presses; name it.
+              Semantics(
+                label: 'Bản đồ lộ trình. Nhấn giữ để chọn điểm.',
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 12,
+                    backgroundColor: LuxeColors.surface,
+                    onLongPress: (_, point) {
+                      HapticFeedback.mediumImpact();
+                      _selectPoint(point);
+                    },
                   ),
-                  if (_route != null)
-                    PolylineLayer(
-                      polylines: [
-                        Polyline(
-                          points: _route!.geometry,
-                          strokeWidth: 10,
-                          color: LuxeColors.platinum.withValues(alpha: 0.18),
-                        ),
-                        Polyline(
-                          points: _route!.geometry,
-                          strokeWidth: 4,
-                          color: LuxeColors.platinumHi,
-                          borderStrokeWidth: 1,
-                          borderColor: const Color(0x66000000),
-                        ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.bes.vinbatery',
+                      tileBuilder: darkModeTileBuilder,
+                    ),
+                    if (_route != null)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: _route!.geometry,
+                            strokeWidth: 10,
+                            color: LuxeColors.platinum.withValues(alpha: 0.18),
+                          ),
+                          Polyline(
+                            points: _route!.geometry,
+                            strokeWidth: 4,
+                            color: LuxeColors.platinumHi,
+                            borderStrokeWidth: 1,
+                            borderColor: const Color(0x66000000),
+                          ),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: [
+                        if (_origin != null)
+                          Marker(
+                            point: _origin!,
+                            width: 40,
+                            height: 40,
+                            child: const _MapPin(origin: true),
+                          ),
+                        if (_destination != null)
+                          Marker(
+                            point: _destination!,
+                            width: 44,
+                            height: 44,
+                            child: const _MapPin(origin: false),
+                          ),
                       ],
                     ),
-                  MarkerLayer(
-                    markers: [
-                      if (_origin != null)
-                        Marker(
-                          point: _origin!,
-                          width: 40,
-                          height: 40,
-                          child: const _MapPin(origin: true),
-                        ),
-                      if (_destination != null)
-                        Marker(
-                          point: _destination!,
-                          width: 44,
-                          height: 44,
-                          child: const _MapPin(origin: false),
-                        ),
-                    ],
-                  ),
-                ],
+                  ],
+                ),
               ),
               if (_routing)
                 const Positioned.fill(

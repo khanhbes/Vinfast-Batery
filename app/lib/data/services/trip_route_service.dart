@@ -1,7 +1,6 @@
-import 'dart:convert';
-
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+
+import '../../core/services/api_service.dart';
 
 class PlaceSuggestion {
   final String name;
@@ -22,40 +21,59 @@ class PlannedRoute {
   });
 }
 
+/// The answer of the Pinova API, for the screen's own fixed messages.
+class TripRouteException implements Exception {
+  const TripRouteException(this.code);
+  final String code;
+
+  @override
+  String toString() => 'TripRouteException($code)';
+}
+
+/// Places and routes for the trip planner. QA 138 (QA-11): through the
+/// Pinova API (`/api/trip/places`, `/api/trip/routes`, Pro), which talks to
+/// the map services with one User-Agent, spacing and a cache, and can move
+/// off the public OSRM demo server without an app update.
 class TripRouteService {
-  static const _headers = {
-    // Nominatim policy: identify the application (QA 129).
-    'User-Agent':
-        'VinFastBattery/1.3 (Android app com.bes.vinbatery; trip planner)',
-    'Accept-Language': 'vi,en;q=0.8',
-  };
+  /// Seams for tests.
+  static Future<Map<String, dynamic>> Function(String endpoint) getJson =
+      (endpoint) => ApiService().get(endpoint);
+  static Future<Map<String, dynamic>> Function(
+    String endpoint,
+    Map<String, dynamic> body,
+  )
+  postJson = (endpoint, body) => ApiService().post(endpoint, body);
+
+  static List<Map<String, dynamic>> _items(Map<String, dynamic> response) {
+    if (response['success'] != true) {
+      throw TripRouteException(response['code']?.toString() ?? 'failed');
+    }
+    final data = response['data'];
+    final items = data is Map ? data['items'] : null;
+    if (items is! List) return const [];
+    return [
+      for (final item in items)
+        if (item is Map) Map<String, dynamic>.from(item),
+    ];
+  }
 
   static Future<List<PlaceSuggestion>> searchPlaces(String query) async {
     final trimmed = query.trim();
     if (trimmed.length < 3) return const [];
-    final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-      'q': trimmed,
-      'format': 'jsonv2',
-      'limit': '6',
-      'countrycodes': 'vn',
-    });
-    final response = await http
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200) {
-      throw Exception('Không thể tìm địa điểm (${response.statusCode})');
-    }
-    final rows = jsonDecode(response.body) as List<dynamic>;
-    return rows.map((raw) {
-      final row = raw as Map<String, dynamic>;
-      return PlaceSuggestion(
-        name: row['display_name']?.toString() ?? trimmed,
-        point: LatLng(
-          double.parse(row['lat'].toString()),
-          double.parse(row['lon'].toString()),
-        ),
-      );
-    }).toList();
+    final rows = _items(
+      await getJson('/api/trip/places?q=${Uri.encodeQueryComponent(trimmed)}'),
+    );
+    return [
+      for (final row in rows)
+        if (row['lat'] is num && row['lon'] is num)
+          PlaceSuggestion(
+            name: row['name']?.toString() ?? trimmed,
+            point: LatLng(
+              (row['lat'] as num).toDouble(),
+              (row['lon'] as num).toDouble(),
+            ),
+          ),
+    ];
   }
 
   static Future<PlannedRoute> route(LatLng start, LatLng end) async =>
@@ -64,42 +82,31 @@ class TripRouteService {
   /// The fastest route first, then up to two alternatives (Task 126: a
   /// shorter one can save battery).
   static Future<List<PlannedRoute>> routes(LatLng start, LatLng end) async {
-    final path =
-        '/route/v1/driving/'
-        '${start.longitude},${start.latitude};${end.longitude},${end.latitude}';
-    final uri = Uri.https('router.project-osrm.org', path, {
-      'overview': 'full',
-      'geometries': 'geojson',
-      'steps': 'false',
-      'alternatives': 'true',
-    });
-    final response = await http
-        .get(uri, headers: _headers)
-        .timeout(const Duration(seconds: 20));
-    if (response.statusCode != 200) {
-      throw Exception('Không thể tính tuyến đường (${response.statusCode})');
-    }
-    final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final rows = body['routes'] as List<dynamic>? ?? const [];
-    if (rows.isEmpty) throw Exception('Không tìm thấy tuyến đường phù hợp');
-    return [
-      for (final raw in rows.take(3))
-        _parse(Map<String, dynamic>.from(raw as Map)),
+    final rows = _items(
+      await postJson('/api/trip/routes', {
+        'from': {'lat': start.latitude, 'lon': start.longitude},
+        'to': {'lat': end.latitude, 'lon': end.longitude},
+      }),
+    );
+    final parsed = [
+      for (final row in rows.take(3))
+        if (row['km'] is num && row['minutes'] is num) _parse(row),
     ];
+    if (parsed.isEmpty) throw const TripRouteException('noRoute');
+    return parsed;
   }
 
   static PlannedRoute _parse(Map<String, dynamic> row) {
-    final coordinates =
-        ((row['geometry'] as Map<String, dynamic>)['coordinates'] as List)
-            .cast<List<dynamic>>();
+    final shape = row['geometry'];
     return PlannedRoute(
-      distanceKm: (row['distance'] as num).toDouble() / 1000,
-      durationMin: (row['duration'] as num).toDouble() / 60,
-      geometry: coordinates
-          .map(
-            (p) => LatLng((p[1] as num).toDouble(), (p[0] as num).toDouble()),
-          )
-          .toList(),
+      distanceKm: (row['km'] as num).toDouble(),
+      durationMin: (row['minutes'] as num).toDouble(),
+      geometry: [
+        if (shape is List)
+          for (final p in shape)
+            if (p is List && p.length >= 2 && p[0] is num && p[1] is num)
+              LatLng((p[0] as num).toDouble(), (p[1] as num).toDouble()),
+      ],
     );
   }
 }

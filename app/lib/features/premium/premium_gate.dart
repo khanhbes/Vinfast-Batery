@@ -155,6 +155,10 @@ class PremiumLocked extends ConsumerWidget {
         );
     if (open) return child;
     final tier = feature.tier;
+    final scaler = MediaQuery.textScalerOf(context);
+    // QA 138 (QA-08): at large text the tag sits above the row; reserving
+    // its scaled width at the end left no room for the row itself.
+    final stacked = reserveTagSpace && scaler.scale(1) > 1.3;
     return Stack(
       key: ValueKey('premium-locked-${feature.id}'),
       children: [
@@ -165,24 +169,28 @@ class PremiumLocked extends ConsumerWidget {
           child: IgnorePointer(
             child: Opacity(
               opacity: fadedOpacity,
-              child: reserveTagSpace
-                  ? Padding(
-                      padding: EdgeInsetsDirectional.only(
-                        end: MediaQuery.textScalerOf(
-                          context,
-                        ).scale(tier == PlanTier.ultra ? 74 : 50),
-                      ),
+              child: !reserveTagSpace
+                  ? child
+                  : Padding(
+                      padding: stacked
+                          ? EdgeInsets.only(top: scaler.scale(30))
+                          : EdgeInsetsDirectional.only(
+                              end: scaler.scale(
+                                tier == PlanTier.ultra ? 74 : 50,
+                              ),
+                            ),
                       child: child,
-                    )
-                  : child,
+                    ),
             ),
           ),
         ),
         Positioned.fill(
           child: Align(
-            alignment: tagAlignment,
+            alignment: stacked ? AlignmentDirectional.topEnd : tagAlignment,
             child: Padding(
-              padding: tagPadding,
+              padding: stacked
+                  ? const EdgeInsetsDirectional.only(top: 4, end: 10)
+                  : tagPadding,
               child: PlanTag(
                 key: ValueKey('premium-locked-tag-${feature.id}'),
                 tier: tier,

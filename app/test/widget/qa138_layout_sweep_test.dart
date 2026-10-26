@@ -53,14 +53,8 @@ const _needsFirebase = {
   'Thiết lập Shelly',
   'AI cá nhân',
 };
-const _openIssues = {
-  // QA-08: fixed heights / tags that do not follow the text size.
-  '320 dp, chữ ×2.0: Cài đặt',
-  '320 dp, chữ ×2.0: Giao diện',
-  '320 dp, chữ ×2.0: Thành tựu',
-  // QA-08: the trip map takes taps without a TalkBack label.
-  'vùng chạm ≥ 48 dp và có nhãn: Lộ trình (Pro)',
-};
+// QA-08 (fixed): Cài đặt, Giao diện, Thành tựu at x2 and the trip map label.
+const _openIssues = <String>{};
 final _car = VehicleModel(
   vehicleId: 'car',
   vehicleName: 'VinFast Feliz',

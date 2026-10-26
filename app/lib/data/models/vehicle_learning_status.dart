@@ -6,12 +6,17 @@ class VehicleLearningStatus {
   const VehicleLearningStatus({
     required this.vehicleId,
     required this.consentEnabled,
+    this.trainAllowed = true,
     required this.charge,
     required this.trip,
   });
 
   final String vehicleId;
   final bool consentEnabled;
+
+  /// The plan can train the personal models (QA 138: the server decides;
+  /// an older server omits it and nothing changes).
+  final bool trainAllowed;
   final ModelTrainingStatus charge;
   final ModelTrainingStatus trip;
 
@@ -39,6 +44,7 @@ class VehicleLearningStatus {
     return VehicleLearningStatus(
       vehicleId: data['vehicleId']?.toString() ?? '',
       consentEnabled: data['consentEnabled'] != false,
+      trainAllowed: data['trainAllowed'] != false,
       charge: ModelTrainingStatus.fromJson(data['charge']),
       trip: ModelTrainingStatus.fromJson(data['trip']),
     );

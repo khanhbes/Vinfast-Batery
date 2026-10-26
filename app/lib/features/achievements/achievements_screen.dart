@@ -120,10 +120,15 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
                       SliverPadding(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 40),
                         sliver: SliverGrid(
+                          // QA 138 (QA-08): tiles grow with the text.
                           gridDelegate:
-                              const SliverGridDelegateWithMaxCrossAxisExtent(
+                              SliverGridDelegateWithMaxCrossAxisExtent(
                                 maxCrossAxisExtent: 130,
-                                mainAxisExtent: 168,
+                                mainAxisExtent:
+                                    168 +
+                                    (MediaQuery.textScalerOf(context).scale(1) -
+                                            1) *
+                                        40,
                                 crossAxisSpacing: 6,
                                 mainAxisSpacing: 6,
                               ),
@@ -438,7 +443,8 @@ class _UpNext extends StatelessWidget {
         child: Text('SẮP MỞ KHÓA', style: LuxeText.eyebrow),
       ),
       SizedBox(
-        height: 118,
+        // QA 138 (QA-08): grows with the text size.
+        height: 118 + (MediaQuery.textScalerOf(context).scale(1) - 1) * 80,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 16),

@@ -529,44 +529,56 @@ class _ProfileCard extends StatelessWidget {
                 bottom: Radius.circular(28),
               ),
               onTap: onSelectVehicle,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 12, 14, 14),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.two_wheeler_rounded,
-                      size: 18,
-                      color: LuxeColors.emerald,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        vehicle.hasVehicle
-                            ? vehicle.displayName
-                            : 'Chọn xe để bắt đầu',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: LuxeColors.text,
-                          fontSize: 14.5,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 14, 14),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.two_wheeler_rounded,
+                        size: 18,
+                        color: LuxeColors.emerald,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          vehicle.hasVehicle
+                              ? vehicle.displayName
+                              : 'Chọn xe để bắt đầu',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: LuxeColors.text,
+                            fontSize: 14.5,
+                          ),
                         ),
                       ),
-                    ),
-                    if (v != null && v.hasBatteryData) ...[
-                      _MiniBattery(percent: v.currentBattery.toDouble()),
-                      const SizedBox(width: 8),
-                      Text(
-                        '${v.currentBattery}%',
-                        style: const TextStyle(
-                          color: LuxeColors.platinumHi,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
+                      _ShrinkAtLargeText(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (v != null && v.hasBatteryData) ...[
+                              _MiniBattery(
+                                percent: v.currentBattery.toDouble(),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${v.currentBattery}%',
+                                style: const TextStyle(
+                                  color: LuxeColors.platinumHi,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            const LuxeTag('Đổi xe'),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 6),
                     ],
-                    const LuxeTag('Đổi xe'),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -878,4 +890,25 @@ class _BrandFooter extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// QA 138 (QA-08): at large text the battery, % and "Đổi xe" shrink with the
+/// vehicle name instead of pushing past the card; at normal size they keep
+/// their size (and the row its 48 dp).
+class _ShrinkAtLargeText extends StatelessWidget {
+  const _ShrinkAtLargeText({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(1) > 1.3
+      ? Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.centerEnd,
+            child: child,
+          ),
+        )
+      : child;
 }
