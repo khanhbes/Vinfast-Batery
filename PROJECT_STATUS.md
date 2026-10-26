@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 137. Task Completion Log — % pin và ODO cập nhật khắp app, giá 249.000đ, bỏ dấu ~, Ultra chuyển động trên trang Premium, kiểm tra tổng thể (26/10/2026) — Code + test xong, APK 1.3.2+205 đã cài Xiaomi; chưa deploy máy chủ
+## 137. Task Completion Log — % pin và ODO cập nhật khắp app, giá 249.000đ, bỏ dấu ~, Ultra chuyển động trên trang Premium, kiểm tra tổng thể (26/10/2026) — Code + test xong, đã deploy API + worker, APK 1.3.2+205 đã cài Xiaomi
 
 **Yêu cầu chủ app (26/10):** (1) mục Ultra trong Pinova Premium có gradient động nhẹ, chậm; (2) giá dễ đọc kiểu 249.000đ, "khoảng 20.750đ mỗi tháng", hạn chế dấu ~ toàn app; (3) mỗi lần build lên máy nâng 1.3.1, 1.3.2…; (4) sau khi xác nhận thì % và ODO cập nhật luôn cả app; kiểm tra tổng thể logic và báo cáo test chi tiết. Chọn (hỏi 26/10): tiền chỉ áp cho số tiền; ~ → "khoảng" trong câu, bỏ ở ô số có nhãn "ước tính"; báo cáo là trang riêng; chủ app tự nhập %/ODO thật, Claude quan sát.
 
@@ -28,7 +28,9 @@
 
 **Kiểm thử:** Flutter **1190/1190** (141 file, `--reporter json`; + `qa137_live_values_test.dart`, + test hướng dẫn dưới thanh đáy, cập nhật 16 test theo cách viết mới), `flutter analyze` 0; backend **739 pass/15 skip** (15 = 2 file Firestore Emulator) + `test_qa129_fixes` cập nhật; portal `tsc` sạch, **32/32**, build sạch. Báo cáo chi tiết: trang riêng "Kiểm tra Pinova 1.3.2" (tóm tắt, lỗi đã sửa, bước thử trên máy, mọi test theo khu vực, có tìm kiếm).
 
-**Còn lại / cần chủ app:** (1) thử nhập %/ODO thật trên máy và xem mọi màn cập nhật (máy ngắt USB); (2) xem lại 1.3.2 trên máy; (3) deploy máy chủ cho tin đẩy "khoảng" và quy tắc Pinova Bot — cần đồng ý; (4) push GitHub (403 tài khoản khanhbes210). APK 1.3.2+205 `30f8016c…80155f` (Xiaomi); 1.3.1+204 `9581a7cf…545dca`.
+**Deploy (chủ app đồng ý 26/10):** gate `task149` — build API/worker exit 0, nguồn 79 file khớp, Linux `--network none` **739 pass/15 skip**, boot cô lập Pass 16 s, worker smoke Pass → API `vinfast-api@sha256:01ac76e6…b74edd` (`qa137-rollout-20261026.json`, Unlocked, peers giữ), revision `vinfast-api--api106-1026023552`, env email/ACS giữ, health/ready 200; worker `vinfast-worker@sha256:99646192…7615ca` → `vinfast-worker-control--0000024` Healthy (tiêu đề tin đẩy kết thúc phiên do worker gửi cũng viết "khoảng").
+
+**Còn lại / cần chủ app:** (1) thử nhập %/ODO thật trên máy và xem mọi màn cập nhật (máy chưa nhận qua USB, chỉ Bluetooth); (2) xem lại 1.3.2 trên máy; (3) push GitHub (403 tài khoản khanhbes210). APK 1.3.2+205 `30f8016c…80155f` (Xiaomi); 1.3.1+204 `9581a7cf…545dca`.
 
 ## 136. Task Completion Log — Lộ trình về Pro, khóa đồng bộ, tag gói, giao diện riêng Pro/Ultra, biểu đồ cột Lịch sử, ODO đúng số, trang Premium mới (25/10/2026) — API đã deploy, APK +203 đã cài OnePlus (chờ thử lại trên máy)
 
