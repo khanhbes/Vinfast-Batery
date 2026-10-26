@@ -221,6 +221,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Bản store (Google Play, App Store): cập nhật chỉ qua store (`androidStoreUrl`/`iosStoreUrl` trong `/api/app/config`), không tải APK, không dịch vụ GPS nền, không quyền micro. Quyền mới phải có tính năng dùng thật.
   - Đổi mục tiêu khi đang sạc: `extend_timer` đọc lại relay ngay trong khe lệnh Cloud trước khi gửi; nếu phiên kết thúc giữa chừng thì tắt ổ có đọc lại (`_settle_failed_raise`). Ổ giả trong test phải tách "đọc" và "gửi" như Cloud thật (`tests/test_qa138_target_raise_race.py`).
   - Trang Premium và Pinova Bot chỉ ghi quyền lợi đã có (Ultra tối đa 10 xe; chi phí theo tháng là của mọi gói).
+  - Sạc đêm: kênh khẩn `pinova_urgent` chỉ cho ngắt vì an toàn; lỗi khác (hết gói, có phiên khác, trễ) là thông báo thường. Lúc hẹn từ chối `planEndsBeforeStart` nếu gói hết trước giờ bật; tới giờ hết gói → `cancelled`, có phiên khác → `skipped`.
+  - Nhắc huấn luyện AI chỉ khi `/api/learning/<vid>/status` trả `trainAllowed` (thiếu cờ = cho phép, để tương thích máy chủ cũ).
+  - Firestore: `limit()` trên danh sách cần thứ tự phải có `order_by` (không có thì trả theo id tài liệu); phiếu hỗ trợ theo `updatedAt`, mã KM theo `createdAt`, kế hoạch đêm đọc theo trang.
+  - Lộ trình: app chỉ gọi `GET /api/trip/places`, `POST /api/trip/routes` (`web/assistant/trip_routes.py`, Pro); máy chủ dùng `OsmRouter` (env `ROUTING_OSRM_URL`, `ROUTING_NOMINATIM_URL`), không gọi OSRM/Nominatim từ app.
+  - `PremiumLocked(reserveTagSpace: true)` xếp nhãn gói lên trên khi chữ > ×1.3; hàng phải ≥ 48 dp ở mọi cỡ chữ (`test/widget/qa138_layout_sweep_test.dart` là test hồi quy).
 
 ---
 
