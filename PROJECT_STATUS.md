@@ -12,6 +12,16 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong, chưa sửa code, chờ chủ app duyệt
+
+**Yêu cầu:** kiểm tra tổng thể logic, UI/UX, nội dung, hiển thị, animation, hiệu năng, tiếp cận, an toàn; chỉ báo cáo, sửa sau khi duyệt. Chi tiết: `docs/qa_evidence/qa138-ra-soat-2026-10-26.md` (chủ app yêu cầu file .md riêng cho ngày này) và bản web "Rà soát Pinova 26/10" (https://claude.ai/artifact/2Du2n6ifaR6idC9ysv3nxd).
+
+**Kiểm thử chạy lại:** Flutter 1190/1190 (141 file), `flutter analyze` 0; backend 739 pass/15 skip (emulator); portal tsc sạch, 32/32, build sạch. **Test mới (chưa commit):** `web/tests/test_qa138_repro.py` 2 hỏng (tái hiện QA-01); `app/test/widget/qa138_layout_sweep_test.dart` 81 test: 59 đạt, 22 hỏng (4 lỗi bố cục thật, 18 vì màn cần Firebase thật).
+
+**18 phát hiện:** 1 nghiêm trọng, 4 cao, 6 trung bình, 7 thấp. Nặng nhất: **QA-01** tăng mục tiêu đúng lúc máy chủ ngắt sạc có thể bật lại ổ không còn phiên theo dõi (`extend_timer` gửi `on:true` sau lần đọc relay, OFF chen giữa; đã tái hiện: phiên completed, ổ ON hẹn giờ 25 133 s); QA-02 Free/Pro không tắt/xóa được dữ liệu AI học (màn AI cá nhân khóa cả màn); QA-03 trang Premium/Pinova Bot quảng cáo sai quyền lợi Ultra; QA-04 không có xóa tài khoản trong app; QA-05 tự cập nhật APK + quyền vị trí nền không dùng (store).
+
+**Chưa thử trên máy** (Xiaomi đang cắm, chờ chủ app đồng ý); việc cần chủ app: duyệt danh sách, chọn kênh phát hành, push GitHub (403), đổi khóa service account Firebase.
+
 ## 137. Task Completion Log — % pin và ODO cập nhật khắp app, giá 249.000đ, bỏ dấu ~, Ultra chuyển động trên trang Premium, kiểm tra tổng thể (26/10/2026) — Code + test xong, đã deploy API + worker, APK 1.3.2+205 đã cài Xiaomi
 
 **Yêu cầu chủ app (26/10):** (1) mục Ultra trong Pinova Premium có gradient động nhẹ, chậm; (2) giá dễ đọc kiểu 249.000đ, "khoảng 20.750đ mỗi tháng", hạn chế dấu ~ toàn app; (3) mỗi lần build lên máy nâng 1.3.1, 1.3.2…; (4) sau khi xác nhận thì % và ODO cập nhật luôn cả app; kiểm tra tổng thể logic và báo cáo test chi tiết. Chọn (hỏi 26/10): tiền chỉ áp cho số tiền; ~ → "khoảng" trong câu, bỏ ở ô số có nhãn "ước tính"; báo cáo là trang riêng; chủ app tự nhập %/ODO thật, Claude quan sát.
