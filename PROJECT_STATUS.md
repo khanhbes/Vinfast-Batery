@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong; đã sửa QA-01…05 (+ QA-10, QA-21, một phần QA-20); chưa deploy, chưa cài APK
+## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong; đã sửa QA-01…05 (+ QA-10, QA-21, một phần QA-20); đã deploy API + worker, APK 1.3.3+206 đã cài Xiaomi
 
 **Yêu cầu:** kiểm tra tổng thể logic, UI/UX, nội dung, hiển thị, animation, hiệu năng, tiếp cận, an toàn; chỉ báo cáo, sửa sau khi duyệt. Chi tiết: `docs/qa_evidence/qa138-ra-soat-2026-10-26.md` (chủ app yêu cầu file .md riêng cho ngày này) và bản web "Rà soát Pinova 26/10" (https://claude.ai/artifact/2Du2n6ifaR6idC9ysv3nxd).
 
@@ -28,7 +28,11 @@
 
 **Kiểm thử sau sửa:** Flutter 1262 đạt + 22 bỏ qua có lý do (143 file; `flutter analyze` 0); backend 749 pass/15 skip; portal tsc sạch, 32/32, build sạch. Test mới: `app/test/widget/qa138_fixes_test.dart` (13), `qa138_layout_sweep_test.dart` (59 đạt, 22 bỏ qua: 18 màn cần Firebase, 4 lỗi QA-08 còn mở), `web/tests/test_qa138_target_raise_race.py` (4; 2 test hỏng trước khi sửa), `web/tests/qa_audit/test_qa138_account_delete.py` (6).
 
-**Thử trên Xiaomi (1.3.2+205, chỉ xem/chạm):** Tổng quan, Sạc pin, Bảo dưỡng đạt (thêm QA-19: số km ở Bảo dưỡng chưa nhóm nghìn). Dừng khi thông báo tin nhắn cá nhân hiện đè; ảnh đó đã xóa. **Còn lại:** deploy API + worker và build/cài 1.3.3+206 (chờ đồng ý), thử nốt trên máy, 13 lỗi Trung bình/Thấp, đặt `androidStoreUrl`/`iosStoreUrl`/`ACCOUNT_DELETION_CONTACT` khi có trang store, push GitHub (403), đổi khóa service account.
+**Thử trên Xiaomi (1.3.2+205, chỉ xem/chạm):** Tổng quan, Sạc pin, Bảo dưỡng đạt (thêm QA-19: số km ở Bảo dưỡng chưa nhóm nghìn). Dừng khi thông báo tin nhắn cá nhân hiện đè; ảnh đó đã xóa. **Deploy (chủ app đồng ý 26/10):** gate `task150` — build API/worker/QA exit 0, nguồn 79 file khớp, Linux `--network none` **749 pass/15 skip**, boot cô lập Pass 20 s, worker smoke Pass → API `vinfast-api@sha256:7fc2f0f8…225c2a` (`qa138-rollout-20261026.json`, Unlocked, peers giữ), revision `vinfast-api--api106-1026073605`, health/ready 200, `/xoa-tai-khoan` 200, `DELETE /api/account` không token 401; worker `vinfast-worker@sha256:289b132a…61fd36` → `vinfast-worker-control--0000025` Healthy. Lưu ý: gọi `14-update-api-image.ps1` trực tiếp trong pwsh (qua `powershell -File` thì mảng `-GateResultPaths` bị tách và script tự chặn).
+
+**APK 1.3.3+206** (profile, `8a0560d8…f23e1`) cài Xiaomi bằng `adb install -r`; quyền của gói trên máy không còn REQUEST_INSTALL_PACKAGES, FGS location/dataSync, RECORD_AUDIO; còn `READ_PHONE_STATE` do `org.tensorflow.lite.gpu.api` (targetSdk < 4) ngầm thêm → đã thêm `tools:node="remove"` sau bản này (vào bản 1.3.4). Xem nhanh (tài khoản đang dùng thử Ultra): hàng AI cá nhân mở + mô tả mới, màn AI cá nhân, Premium (Tối đa 10 xe; bảng 1/2/10; không còn chi phí theo tháng/chia sẻ xe), Hồ sơ → Xóa tài khoản (bảng đúng, nút khóa, bấm Để sau) — đạt. Ảnh có thông tin cá nhân đã xóa.
+
+**Còn lại:** thử nốt trên máy (Thông báo, Thiết lập Shelly, nhập %/ODO thật), 13 lỗi Trung bình/Thấp, đặt `androidStoreUrl`/`iosStoreUrl`/`ACCOUNT_DELETION_CONTACT` khi có trang store, push GitHub (403), đổi khóa service account.
 
 
 ## 137. Task Completion Log — % pin và ODO cập nhật khắp app, giá 249.000đ, bỏ dấu ~, Ultra chuyển động trên trang Premium, kiểm tra tổng thể (26/10/2026) — Code + test xong, đã deploy API + worker, APK 1.3.2+205 đã cài Xiaomi
