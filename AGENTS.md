@@ -192,6 +192,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Không có animation trang trí lặp vô hạn. Vòng lặp chỉ được gắn với trạng thái thật (đang sạc, đang quét, đang tải), phải tôn trọng `TickerMode` và `disableAnimations`, nếu không `pumpAndSettle` sẽ treo.
   - Ngoại lệ duy nhất (QA 136, chủ app chọn): màu Aurora của gói Ultra chảy chậm từ **một** đồng hồ `PlanMotionHost` (`core/theme/plan_style.dart`, ~25 fps, 12 s/vòng) đặt trên Navigator; chỉ chạy khi gói Ultra + `AppAppearance.ultraEffects` + không `disableAnimations`, dừng theo `TickerMode`. Widget chỉ đọc qua `PlanFlow`; test Ultra phải bật `disableAnimations`. QA 137: trang Premium có `PlanMotionHost` riêng (18 s/vòng) để phần Ultra luôn chuyển động chậm với mọi gói (vẫn đứng yên khi Giảm chuyển động).
   - 2D vẽ bằng `CustomPainter`; không thêm package animation (`flutter_animate`, `shimmer`, `google_fonts` đã gỡ).
+  - Giảm chuyển động: không dùng `AnimatedSize(duration: Duration.zero)` (assert "mutated in its own performLayout"); hiển thị thẳng child (QA 138).
 - **Bắt buộc:**
   - Vùng chạm ≥48dp; mọi màn mới phải có test 320dp ở chữ ×1/×2.
   - Không hiển thị dữ liệu giả; không in lỗi thô (`$e`) ra UI.
@@ -214,6 +215,12 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Hướng dẫn:** `core/services/screen_tour.dart` (một lần mỗi tài khoản mỗi lần cài, sau tour Tổng quan; Android `allowBackup=false`). Nút lưu có chờ: `LuxeSubmitButton`.
 - **QA 136 — giao diện theo gói:** `LuxeTheme.data(tier:)` (cache mỗi gói) + `PlanStyle` (ThemeExtension: màu nhấn, kính, nền) → Free giữ LUXE, Pro bạc–thép, Ultra Aurora tím–ngọc–emerald. Màu trạng thái (emerald đã xác minh, rose lỗi, champagne ước tính) không đổi theo gói. Tag gói `PlanTag`/`CurrentPlanTag` (`features/premium/plan_tag.dart`) ở Cài đặt, tiêu đề Tổng quan, Hồ sơ, Pinova Bot.
 - **QA 136 — khóa đồng bộ:** điểm vào tính năng ngoài gói bọc `PremiumLocked` (mờ 38 %, không nhận chạm, chỉ nhãn gói mở Premium); chính màn tính năng bọc `PremiumRequired` (mở bằng bot/thông báo vẫn ra Premium). Lộ trình (`trip_estimate`) là **Pro**. Thêm tính năng trả phí mới phải làm cả hai lớp + bảng `features.py`.
+- **QA 138 (26/10/2026) — rà soát trước phát hành** (`docs/qa_evidence/qa138-ra-soat-2026-10-26.md`):
+  - Màn AI cá nhân mở cho mọi gói: xem dữ liệu, công tắc cho phép học và nút xóa dữ liệu là quyền của chủ xe; chỉ nút Huấn luyện là Ultra. Không khóa quyền riêng tư sau gói.
+  - Xóa tài khoản trong app: Hồ sơ → Xóa tài khoản → `DELETE /api/account` (đăng nhập lại trong 10 phút, cụm `XOA TAI KHOAN`, từ chối khi đang sạc, dùng chung `_purge_account` với admin, xóa cả `nightPlans`/`supportTickets`). Trang công khai `/xoa-tai-khoan`; email liên hệ chỉ hiện khi đặt `ACCOUNT_DELETION_CONTACT`.
+  - Bản store (Google Play, App Store): cập nhật chỉ qua store (`androidStoreUrl`/`iosStoreUrl` trong `/api/app/config`), không tải APK, không dịch vụ GPS nền, không quyền micro. Quyền mới phải có tính năng dùng thật.
+  - Đổi mục tiêu khi đang sạc: `extend_timer` đọc lại relay ngay trong khe lệnh Cloud trước khi gửi; nếu phiên kết thúc giữa chừng thì tắt ổ có đọc lại (`_settle_failed_raise`). Ổ giả trong test phải tách "đọc" và "gửi" như Cloud thật (`tests/test_qa138_target_raise_race.py`).
+  - Trang Premium và Pinova Bot chỉ ghi quyền lợi đã có (Ultra tối đa 10 xe; chi phí theo tháng là của mọi gói).
 
 ---
 

@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong, chưa sửa code, chờ chủ app duyệt
+## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong; đã sửa QA-01…05 (+ QA-10, QA-21, một phần QA-20); chưa deploy, chưa cài APK
 
 **Yêu cầu:** kiểm tra tổng thể logic, UI/UX, nội dung, hiển thị, animation, hiệu năng, tiếp cận, an toàn; chỉ báo cáo, sửa sau khi duyệt. Chi tiết: `docs/qa_evidence/qa138-ra-soat-2026-10-26.md` (chủ app yêu cầu file .md riêng cho ngày này) và bản web "Rà soát Pinova 26/10" (https://claude.ai/artifact/2Du2n6ifaR6idC9ysv3nxd).
 
@@ -21,6 +21,15 @@
 **18 phát hiện:** 1 nghiêm trọng, 4 cao, 6 trung bình, 7 thấp. Nặng nhất: **QA-01** tăng mục tiêu đúng lúc máy chủ ngắt sạc có thể bật lại ổ không còn phiên theo dõi (`extend_timer` gửi `on:true` sau lần đọc relay, OFF chen giữa; đã tái hiện: phiên completed, ổ ON hẹn giờ 25 133 s); QA-02 Free/Pro không tắt/xóa được dữ liệu AI học (màn AI cá nhân khóa cả màn); QA-03 trang Premium/Pinova Bot quảng cáo sai quyền lợi Ultra; QA-04 không có xóa tài khoản trong app; QA-05 tự cập nhật APK + quyền vị trí nền không dùng (store).
 
 **Chưa thử trên máy** (Xiaomi đang cắm, chờ chủ app đồng ý); việc cần chủ app: duyệt danh sách, chọn kênh phát hành, push GitHub (403), đổi khóa service account Firebase.
+
+**Chủ app chọn (26/10):** sửa Nghiêm trọng + Cao trước; phát hành Google Play và App Store; thử trên máy chỉ xem và chạm; "≈" → "khoảng", hiệu ứng chỉ chạy khi có hoạt động thật (đợt sau).
+
+**Đã sửa (code + test, chưa deploy/cài):** QA-01 `extend_timer` đọc lại relay trong cùng khe lệnh Cloud (`_require_relay_on`), `update_target` đọc lại phiên sau khi gia hạn và `_settle_failed_raise` tắt ổ có đọc lại khi phiên đã kết thúc; QA-02 màn AI cá nhân mở mọi gói, chỉ nút Huấn luyện là Ultra, hàng Cài đặt hết khóa; QA-03 Premium/Pinova Bot bỏ "chi phí theo tháng, chia sẻ xe", Ultra tối đa 10 xe, `open_premium` bỏ 3 tính năng chưa có; QA-04 `DELETE /api/account` (đăng nhập ≤ 10 phút, `XOA TAI KHOAN`, chặn khi đang sạc, `_purge_account` dùng chung, thêm `nightPlans`/`supportTickets`), trang `/xoa-tai-khoan`, app Hồ sơ → Xóa tài khoản (`DeleteAccountSheet`, `AuthService.reauthenticate`); QA-05 cập nhật qua Google Play/App Store (`AppUpdateService.storeUrlFor`), gỡ tải APK, `REQUEST_INSTALL_PACKAGES`, dịch vụ GPS nền (`background_service_config.dart`, gói `flutter_background_service*`, `open_filex`), quyền FGS location/dataSync, `RECORD_AUDIO` (tools:node=remove), iOS chế độ nền location + quyền Always, xóa kênh `vinfast_bg_channel`; QA-10 chuỗi quyền iOS → Pinova; QA-21 hộp thoại cập nhật Việt hóa, không in lỗi thô; QA-20 trang Premium không dùng `AnimatedSize` 0 ms khi Giảm chuyển động (3 chỗ khác để đợt sau). AGENTS.md mục 3.6.1 và 3.8 ghi quy ước mới.
+
+**Kiểm thử sau sửa:** Flutter 1262 đạt + 22 bỏ qua có lý do (143 file; `flutter analyze` 0); backend 749 pass/15 skip; portal tsc sạch, 32/32, build sạch. Test mới: `app/test/widget/qa138_fixes_test.dart` (13), `qa138_layout_sweep_test.dart` (59 đạt, 22 bỏ qua: 18 màn cần Firebase, 4 lỗi QA-08 còn mở), `web/tests/test_qa138_target_raise_race.py` (4; 2 test hỏng trước khi sửa), `web/tests/qa_audit/test_qa138_account_delete.py` (6).
+
+**Thử trên Xiaomi (1.3.2+205, chỉ xem/chạm):** Tổng quan, Sạc pin, Bảo dưỡng đạt (thêm QA-19: số km ở Bảo dưỡng chưa nhóm nghìn). Dừng khi thông báo tin nhắn cá nhân hiện đè; ảnh đó đã xóa. **Còn lại:** deploy API + worker và build/cài 1.3.3+206 (chờ đồng ý), thử nốt trên máy, 13 lỗi Trung bình/Thấp, đặt `androidStoreUrl`/`iosStoreUrl`/`ACCOUNT_DELETION_CONTACT` khi có trang store, push GitHub (403), đổi khóa service account.
+
 
 ## 137. Task Completion Log — % pin và ODO cập nhật khắp app, giá 249.000đ, bỏ dấu ~, Ultra chuyển động trên trang Premium, kiểm tra tổng thể (26/10/2026) — Code + test xong, đã deploy API + worker, APK 1.3.2+205 đã cài Xiaomi
 
