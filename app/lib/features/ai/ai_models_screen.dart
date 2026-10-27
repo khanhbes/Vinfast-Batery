@@ -554,7 +554,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                 total == 0 ? '…' : '$loadedCount/$total',
                 style: const TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 18,
+                  fontSize: 19,
                   fontWeight: FontWeight.w300,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
@@ -660,7 +660,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                         Text(
                           model.shortName.toUpperCase(),
                           style: LuxeText.label.copyWith(
-                            fontSize: 10.5,
+                            fontSize: 11,
                             letterSpacing: 1.2,
                           ),
                         ),
@@ -705,7 +705,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                         AppErrorFormatter.format(model.lastError),
                         style: const TextStyle(
                           color: LuxeColors.danger,
-                          fontSize: 12,
+                          fontSize: 12.5,
                         ),
                       ),
                     ),

@@ -216,7 +216,7 @@ class _PersonalAiTrainingDataScreenState
                               style: const TextStyle(
                                 color: LuxeColors.muted,
                                 fontFamily: 'JetBrainsMono',
-                                fontSize: 11,
+                                fontSize: 11.5,
                               ),
                             ),
                           ),
@@ -238,7 +238,7 @@ class _PersonalAiTrainingDataScreenState
                               'developer để chỉnh dữ liệu fine-tune.',
                     style: const TextStyle(
                       color: LuxeColors.muted,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       height: 1.45,
                     ),
                   ),
@@ -271,7 +271,7 @@ class _PersonalAiTrainingDataScreenState
                       label: const Text(
                         'Mở Developer AI Studio',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -309,7 +309,7 @@ class _PersonalAiTrainingDataScreenState
                           _dataSourceNote!,
                           style: const TextStyle(
                             color: LuxeColors.emerald,
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -397,7 +397,7 @@ class _PersonalAiTrainingDataScreenState
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontFamily: 'JetBrainsMono',
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -408,7 +408,7 @@ class _PersonalAiTrainingDataScreenState
             '${energyWh > 0 ? ' · ${energyWh.round()} Wh' : ''}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: LuxeColors.muted, fontSize: 11),
+            style: const TextStyle(color: LuxeColors.muted, fontSize: 11.5),
           ),
           trailing: const Icon(Icons.chevron_right_rounded),
           onTap: () => _showSample(sample),
@@ -439,7 +439,7 @@ class _PersonalAiTrainingDataScreenState
                       child: Text(
                         'Dữ liệu mẫu gốc',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: 19,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
@@ -472,7 +472,7 @@ class _PersonalAiTrainingDataScreenState
                     text,
                     style: const TextStyle(
                       fontFamily: 'JetBrainsMono',
-                      fontSize: 11,
+                      fontSize: 11.5,
                       height: 1.45,
                     ),
                   ),

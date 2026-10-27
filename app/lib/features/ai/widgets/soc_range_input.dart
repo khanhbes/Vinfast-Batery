@@ -139,7 +139,7 @@ class _Readout extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(4, 0, 14, 4),
             child: Text(
               '%',
-              style: TextStyle(color: LuxeColors.platinum, fontSize: 16),
+              style: TextStyle(color: LuxeColors.platinum, fontSize: 15.5),
             ),
           ),
           const Padding(
@@ -160,7 +160,7 @@ class _Readout extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(4, 0, 0, 4),
             child: Text(
               '%',
-              style: TextStyle(color: LuxeColors.emerald, fontSize: 16),
+              style: TextStyle(color: LuxeColors.emerald, fontSize: 15.5),
             ),
           ),
         ],
@@ -217,13 +217,13 @@ class _Readout extends StatelessWidget {
                 'Dự kiến $eta',
                 style: const TextStyle(
                   color: LuxeColors.champagne,
-                  fontSize: 13.5,
+                  fontSize: 13,
                 ),
               ),
             if (style == ChargeStyle.detail)
               Text(
                 'Cần nạp ${(goal - now).clamp(0, 100)}%',
-                style: const TextStyle(color: LuxeColors.muted, fontSize: 13.5),
+                style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
               ),
             if (onEditCurrent != null)
               TextButton.icon(

@@ -131,7 +131,7 @@ class SmartChargeReportService {
           children: [
             pw.Text(
               'SMART CHARGE',
-              style: pw.TextStyle(font: bold, fontSize: 10),
+              style: pw.TextStyle(font: bold, fontSize: 11),
             ),
             pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())),
           ],
@@ -183,7 +183,7 @@ class SmartChargeReportService {
                       ? 'Thủ công'
                       : 'AI',
                   '${session.startSoc.round()}% → ${(session.actualEndSoc ?? session.estimatedSoc ?? session.targetSoc).round()}%'
-                  '${session.actualEndSoc == null ? ' (ước tính)' : ''}',
+                      '${session.actualEndSoc == null ? ' (ước tính)' : ''}',
                   _energy(session.energyUsedWh),
                   session.estimatedCostVnd == null
                       ? '—'

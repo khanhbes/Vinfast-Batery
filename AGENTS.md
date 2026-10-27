@@ -207,7 +207,8 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Sheet qua `showLuxeSheet` (nền phía sau `luxeSheetBarrier`). Sheet tự vẽ khung dùng `LuxeColors.sheet`, bo 28. Mục gập dùng `LuxeFold`.
   - Icon chỉ Material Rounded. Lịch sử luôn kWh 2 số lẻ, thời lượng viết đủ ("12 giờ 18 phút"). Không "≈", không "...", % liền số.
   - Tổng quan: thẻ "Dung lượng pin · ước tính" lấy `/api/learning/<vid>/health` cho Pro/Ultra, Free thấy khóa PRO; ô thứ ba của dải số liệu hiện dung lượng hoặc "SoH bạn nhập".
-  - Luật nguồn kiểm tra tự động trong `test/widget/qa139_ui_fixes_test.dart`: không icon outlined, không CockpitColors/AppColors ngoài theme, màu hex ≤ 300, không vòng lặp ngoài danh sách hoạt động thật, không `AnimatedSize` thời lượng 0.
+  - Cỡ chữ: chỉ dùng các bậc trong `LuxeText.scale` (11–26 cho chữ, 28–60 cho số lớn); dưới 10 chỉ cho nhãn trong painter. `AppUiColors` chỉ còn cho màu theo theme (màu nhấn, nền); màu cố định dùng `LuxeColors`.
+  - Luật nguồn kiểm tra tự động trong `test/widget/qa139_ui_fixes_test.dart`: không icon outlined, không CockpitColors/AppColors ngoài theme, màu hex ≤ 300, cỡ chữ trên thang, không vòng lặp ngoài danh sách hoạt động thật, không `AnimatedSize` thời lượng 0.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

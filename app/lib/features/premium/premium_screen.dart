@@ -453,7 +453,7 @@ class _TierPill extends StatelessWidget {
                 tier.label,
                 style: TextStyle(
                   color: selected ? PlanColors.ink : LuxeColors.text,
-                  fontSize: 18,
+                  fontSize: 19,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -462,7 +462,7 @@ class _TierPill extends StatelessWidget {
                   'ĐỀ XUẤT',
                   style: TextStyle(
                     color: selected ? PlanColors.ink : PlanColors.lavender,
-                    fontSize: 10.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
                   ),
@@ -475,7 +475,7 @@ class _TierPill extends StatelessWidget {
             style: TextStyle(
               // QA 139: solid ink (80 % ink was 3.8:1 on the violet stop).
               color: selected ? PlanColors.ink : LuxeColors.muted,
-              fontSize: 12,
+              fontSize: 12.5,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
@@ -617,7 +617,7 @@ class _BenefitsCard extends StatelessWidget {
                     'Pinova ${tier.label}',
                     style: const TextStyle(
                       color: LuxeColors.text,
-                      fontSize: 20,
+                      fontSize: 19,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -971,7 +971,7 @@ class _FoldState extends State<_Fold> {
                         widget.title,
                         style: const TextStyle(
                           color: LuxeColors.text,
-                          fontSize: 14.5,
+                          fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                       ),

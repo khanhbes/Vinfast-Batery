@@ -285,7 +285,7 @@ class _LuxeConnectionNoticeState extends State<LuxeConnectionNotice> {
           if (lastGood != null)
             Text(
               'Lần đọc tốt gần nhất ${_clock(lastGood)}',
-              style: const TextStyle(color: LuxeColors.dim, fontSize: 12),
+              style: const TextStyle(color: LuxeColors.dim, fontSize: 12.5),
             ),
         ],
       ),

@@ -421,13 +421,13 @@ class _VehicleCard extends StatelessWidget {
                             children: [
                               Text(
                                 'SoH · ODO',
-                                style: LuxeText.label.copyWith(fontSize: 11),
+                                style: LuxeText.label.copyWith(fontSize: 11.5),
                               ),
                               Text(
                                 odo == null ? '— km' : '${odo!.toInt()} km',
                                 style: const TextStyle(
                                   color: LuxeColors.text,
-                                  fontSize: 14.5,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w600,
                                   fontFeatures: [FontFeature.tabularFigures()],
                                 ),
@@ -914,7 +914,7 @@ class _SpecCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: LuxeText.eyebrow.copyWith(
-                            fontSize: 10,
+                            fontSize: 11,
                             letterSpacing: 1.2,
                           ),
                         ),
@@ -1160,14 +1160,14 @@ class _SpecPreviewDialog extends StatelessWidget {
               children: [
                 Text(
                   spec.modelName,
-                  style: LuxeText.item.copyWith(fontSize: 16),
+                  style: LuxeText.item.copyWith(fontSize: 15.5),
                 ),
                 if (spec.tagline != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       spec.tagline!,
-                      style: LuxeText.caption.copyWith(fontSize: 12),
+                      style: LuxeText.caption.copyWith(fontSize: 12.5),
                     ),
                   ),
               ],

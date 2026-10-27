@@ -386,7 +386,7 @@ class _Step extends StatelessWidget {
                   '$number',
                   style: const TextStyle(
                     color: LuxeColors.emerald,
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

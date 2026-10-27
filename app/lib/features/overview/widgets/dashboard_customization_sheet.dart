@@ -162,7 +162,7 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                                 Text(
                                   title,
                                   style: LuxeText.item.copyWith(
-                                    fontSize: 14.5,
+                                    fontSize: 14,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -172,7 +172,7 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                                     subtitle,
                                     softWrap: true,
                                     style: LuxeText.caption.copyWith(
-                                      fontSize: 12,
+                                      fontSize: 12.5,
                                     ),
                                   ),
                                 ],

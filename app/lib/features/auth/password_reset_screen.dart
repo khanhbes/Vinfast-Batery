@@ -223,7 +223,7 @@ class _SentNotice extends StatelessWidget {
               'Đã ghi nhận yêu cầu. Hãy kiểm tra hộp thư đến và thư rác.',
               style: TextStyle(
                 color: LuxeColors.text,
-                fontSize: 13.5,
+                fontSize: 13,
                 height: 1.45,
               ),
             ),

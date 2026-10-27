@@ -154,7 +154,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                                 child: Text(
                                   bubbleText,
                                   style: const TextStyle(
-                                    fontSize: 13.5,
+                                    fontSize: 13,
                                     color: LuxeColors.text,
                                     height: 1.4,
                                   ),

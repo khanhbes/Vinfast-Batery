@@ -466,7 +466,7 @@ class _ProfileCard extends StatelessWidget {
                             rank.name.toUpperCase(),
                             style: LuxeText.eyebrow.copyWith(
                               color: rank.rarity.accent,
-                              fontSize: 10.5,
+                              fontSize: 11,
                             ),
                           ),
                           const SizedBox(height: 5),
@@ -485,7 +485,7 @@ class _ProfileCard extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     color: LuxeColors.text,
-                                    fontSize: 21,
+                                    fontSize: 22,
                                     height: 1.2,
                                     fontWeight: FontWeight.w500,
                                   ),
@@ -550,7 +550,7 @@ class _ProfileCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: LuxeColors.text,
-                            fontSize: 14.5,
+                            fontSize: 14,
                           ),
                         ),
                       ),
@@ -886,7 +886,7 @@ class _BrandFooter extends StatelessWidget {
       const Text(
         'Hệ sinh thái quản lý & tối ưu năng lượng xe điện',
         textAlign: TextAlign.center,
-        style: TextStyle(color: LuxeColors.dim, fontSize: 11),
+        style: TextStyle(color: LuxeColors.dim, fontSize: 11.5),
       ),
     ],
   );

@@ -139,7 +139,7 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
                     'Mở khóa ngày ${DateFormat('dd/MM/yyyy').format(p.unlockedAt!.toLocal())}',
                     style: const TextStyle(
                       color: LuxeColors.emerald,
-                      fontSize: 13.5,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -190,7 +190,7 @@ class _Pill extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           color: color,
-          fontSize: 12,
+          fontSize: 12.5,
           fontWeight: FontWeight.w600,
         ),
       ),

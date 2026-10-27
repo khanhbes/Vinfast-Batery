@@ -1333,7 +1333,7 @@ class _LuxeChargeHeaderState extends State<_LuxeChargeHeader>
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: LuxeColors.muted,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -1505,7 +1505,7 @@ class _TargetPresets extends StatelessWidget {
                       '${p.value.round()}%',
                       style: TextStyle(
                         color: selected ? LuxeColors.emerald : LuxeColors.text,
-                        fontSize: 18,
+                        fontSize: 19,
                         fontWeight: FontWeight.w300,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
@@ -1530,7 +1530,7 @@ class _TargetPresets extends StatelessWidget {
                         'Khuyên dùng',
                         style: TextStyle(
                           color: LuxeColors.platinum,
-                          fontSize: 10.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.4,
                         ),

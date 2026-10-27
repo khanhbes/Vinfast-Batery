@@ -211,9 +211,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               Text(
                 'Mật khẩu Shelly',
                 style: TextStyle(
-                  color: AppUiColors.of(context).text,
+                  color: LuxeColors.text,
                   fontWeight: FontWeight.w700,
-                  fontSize: 18,
+                  fontSize: 19,
                 ),
               ),
             ],
@@ -224,10 +224,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             children: [
               Text(
                 'Thiết bị "${_friendlyName(device)}" đã được bảo vệ bằng mật khẩu cục bộ.',
-                style: TextStyle(
-                  color: AppUiColors.of(context).muted,
-                  fontSize: 13,
-                ),
+                style: TextStyle(color: LuxeColors.muted, fontSize: 13),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -237,7 +234,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                 enableSuggestions: false,
                 autocorrect: false,
                 textInputAction: TextInputAction.done,
-                style: TextStyle(color: AppUiColors.of(context).text),
+                style: TextStyle(color: LuxeColors.text),
                 decoration: InputDecoration(
                   labelText: 'Mật khẩu thiết bị',
                   hintText: 'Nhập mật khẩu Web UI của Shelly',
@@ -246,7 +243,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                       obscure
                           ? Icons.visibility_rounded
                           : Icons.visibility_off_rounded,
-                      color: AppUiColors.of(context).muted,
+                      color: LuxeColors.muted,
                     ),
                     onPressed: () {
                       setModalState(() => obscure = !obscure);
@@ -263,10 +260,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: Text(
-                'Hủy',
-                style: TextStyle(color: AppUiColors.of(context).muted),
-              ),
+              child: Text('Hủy', style: TextStyle(color: LuxeColors.muted)),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(controller.text),
@@ -302,8 +296,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             Text(
               'Kiểm tra an toàn phần cứng',
               style: TextStyle(
-                color: AppUiColors.of(context).text,
-                fontSize: 18,
+                color: LuxeColors.text,
+                fontSize: 19,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -315,10 +309,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           children: [
             Text(
               'Để đảm bảo an toàn điện áp cho xe và gia đình, hệ thống sẽ thực hiện:',
-              style: TextStyle(
-                color: AppUiColors.of(context).text,
-                fontSize: 14,
-              ),
+              style: TextStyle(color: LuxeColors.text, fontSize: 14),
             ),
             const SizedBox(height: 12),
             _safetyBullet(
@@ -341,17 +332,17 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppUiColors.of(context).amber.withValues(alpha: 0.12),
+                color: LuxeColors.champagne.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(
-                  color: AppUiColors.of(context).amber.withValues(alpha: 0.3),
+                  color: LuxeColors.champagne.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
                 children: [
                   Icon(
                     Icons.warning_amber_rounded,
-                    color: AppUiColors.of(context).amber,
+                    color: LuxeColors.champagne,
                     size: 22,
                   ),
                   const SizedBox(width: 8),
@@ -359,8 +350,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                     child: Text(
                       'Vui lòng rút phích cắm sạc xe khỏi ổ cắm trước khi chạy kiểm tra.',
                       style: TextStyle(
-                        color: AppUiColors.of(context).text,
-                        fontSize: 12,
+                        color: LuxeColors.text,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -373,10 +364,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              'Để sau',
-              style: TextStyle(color: AppUiColors.of(context).muted),
-            ),
+            child: Text('Để sau', style: TextStyle(color: LuxeColors.muted)),
           ),
           FilledButton.icon(
             onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -399,7 +387,10 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         Icon(Icons.check_circle_rounded, size: 16, color: ui.primary),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(text, style: TextStyle(color: ui.muted, fontSize: 13)),
+          child: Text(
+            text,
+            style: TextStyle(color: LuxeColors.muted, fontSize: 13),
+          ),
         ),
       ],
     ),
@@ -422,9 +413,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             child: const Text('Hủy'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppUiColors.of(context).danger,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: LuxeColors.danger),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Ngắt kết nối'),
           ),
@@ -522,13 +511,13 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                           _titleFor(state),
                           textAlign: TextAlign.center,
                           softWrap: true,
-                          style: LuxeText.title.copyWith(fontSize: 20),
+                          style: LuxeText.title.copyWith(fontSize: 19),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           _subtitleFor(state),
                           textAlign: TextAlign.center,
-                          style: LuxeText.body.copyWith(fontSize: 13.5),
+                          style: LuxeText.body.copyWith(fontSize: 13),
                         ),
                       ],
                     ),
@@ -539,7 +528,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                     Text(
                       _snapshot.controlBlockedMessage!,
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: ui.muted, fontSize: 13),
+                      style: TextStyle(color: LuxeColors.muted, fontSize: 13),
                     ),
                     const SizedBox(height: 14),
                   ],
@@ -600,7 +589,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           Center(
             child: Text(
               'Đang quét các thiết bị Shelly trong cùng mạng Wi-Fi…',
-              style: TextStyle(color: ui.muted, fontSize: 13),
+              style: TextStyle(color: LuxeColors.muted, fontSize: 13),
             ),
           ),
         ];
@@ -652,7 +641,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   child: Text(
                     'Kết nối từ xa qua Shelly Cloud',
                     style: TextStyle(
-                      color: ui.text,
+                      color: LuxeColors.text,
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                     ),
@@ -663,7 +652,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             const SizedBox(height: 10),
             Text(
               'Nếu điện thoại và Shelly không ở cùng mạng Wi-Fi, bạn có thể kết nối từ xa bằng tài khoản Shelly Cloud.',
-              style: TextStyle(color: ui.muted, fontSize: 13, height: 1.4),
+              style: TextStyle(
+                color: LuxeColors.muted,
+                fontSize: 13,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 14),
             Container(
@@ -679,8 +672,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   Text(
                     'Cách lấy mã xác thực Cloud:',
                     style: TextStyle(
-                      color: ui.text,
-                      fontSize: 12,
+                      color: LuxeColors.text,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -701,17 +694,17 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             TextField(
               controller: _cloudKeyController,
               obscureText: _cloudKeyObscure,
-              style: TextStyle(color: ui.text),
+              style: TextStyle(color: LuxeColors.text),
               decoration: InputDecoration(
                 labelText: 'Mã xác thực Shelly Cloud',
                 hintText: 'Dán mã tại đây…',
-                prefixIcon: Icon(Icons.key_rounded, color: ui.muted),
+                prefixIcon: Icon(Icons.key_rounded, color: LuxeColors.muted),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _cloudKeyObscure
                         ? Icons.visibility_rounded
                         : Icons.visibility_off_rounded,
-                    color: ui.muted,
+                    color: LuxeColors.muted,
                   ),
                   onPressed: () =>
                       setState(() => _cloudKeyObscure = !_cloudKeyObscure),
@@ -722,7 +715,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               const SizedBox(height: 10),
               Text(
                 _cloudError!,
-                style: TextStyle(color: ui.danger, fontSize: 12),
+                style: TextStyle(color: LuxeColors.danger, fontSize: 12.5),
               ),
             ],
             const SizedBox(height: 16),
@@ -765,7 +758,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         Text(
           'Thiết bị tìm thấy trong tài khoản Cloud:',
           style: TextStyle(
-            color: ui.text,
+            color: LuxeColors.text,
             fontWeight: FontWeight.w600,
             fontSize: 14,
           ),
@@ -797,14 +790,17 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                             Text(
                               dev.name.isNotEmpty ? dev.name : 'Shelly',
                               style: TextStyle(
-                                color: ui.text,
+                                color: LuxeColors.text,
                                 fontWeight: FontWeight.w700,
                                 fontSize: 14,
                               ),
                             ),
                             Text(
                               dev.type,
-                              style: TextStyle(color: ui.muted, fontSize: 12),
+                              style: TextStyle(
+                                color: LuxeColors.muted,
+                                fontSize: 12.5,
+                              ),
                             ),
                           ],
                         ),
@@ -831,12 +827,12 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         ),
         child: Row(
           children: [
-            Icon(Icons.help_outline_rounded, color: ui.muted, size: 20),
+            Icon(Icons.help_outline_rounded, color: LuxeColors.muted, size: 20),
             const SizedBox(width: 10),
             Expanded(
               child: Text(
                 'Không có tài khoản Cloud hoặc gặp sự cố?',
-                style: TextStyle(color: ui.muted, fontSize: 12),
+                style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
               ),
             ),
             TextButton(
@@ -883,14 +879,17 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                       Text(
                         'Nhập mã kết nối từ Admin',
                         style: TextStyle(
-                          color: ui.text,
-                          fontSize: 16,
+                          color: LuxeColors.text,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       Text(
                         'Cung cấp bởi Quản trị viên hệ thống',
-                        style: TextStyle(color: ui.muted, fontSize: 12),
+                        style: TextStyle(
+                          color: LuxeColors.muted,
+                          fontSize: 12.5,
+                        ),
                       ),
                     ],
                   ),
@@ -900,7 +899,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             const SizedBox(height: 14),
             Text(
               'Nếu bạn không thể kết nối qua Wi-Fi hay Cloud, Quản trị viên có thể tạo một mã kết nối gồm 6 ký tự trên Admin Portal để cấp cho bạn.',
-              style: TextStyle(color: ui.muted, fontSize: 13, height: 1.4),
+              style: TextStyle(
+                color: LuxeColors.muted,
+                fontSize: 13,
+                height: 1.4,
+              ),
             ),
             const SizedBox(height: 18),
             Center(child: _EngravedCodeField(controller: _codeController)),
@@ -913,13 +916,13 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: ui.danger.withValues(alpha: 0.1),
+                  color: LuxeColors.danger.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
                   _codeError!,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: ui.danger, fontSize: 12.5),
+                  style: TextStyle(color: LuxeColors.danger, fontSize: 12.5),
                 ),
               ),
             ],
@@ -970,7 +973,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   child: Text(
                     'Trước khi nhập mã',
                     style: TextStyle(
-                      color: ui.text,
+                      color: LuxeColors.text,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1028,7 +1031,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   child: Text(
                     'Kiểm tra bộ sạc và điện năng',
                     style: TextStyle(
-                      color: ui.text,
+                      color: LuxeColors.text,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1039,7 +1042,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             const SizedBox(height: 6),
             Text(
               'Kết nối ổ cắm Shelly để xem công suất, điện áp và dòng điện khi sạc.',
-              style: TextStyle(color: ui.muted, fontSize: 12.5, height: 1.3),
+              style: TextStyle(
+                color: LuxeColors.muted,
+                fontSize: 12.5,
+                height: 1.3,
+              ),
             ),
             const SizedBox(height: 10),
             _featurePill(Icons.shield_rounded, 'Kiểm tra cấu hình an toàn', ui),
@@ -1128,7 +1135,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         'ĐÃ KẾT NỐI',
                         style: TextStyle(
                           color: ui.primary,
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 0.6,
                         ),
@@ -1141,7 +1148,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   _snapshot.serverBinding != null
                       ? 'Qua máy chủ'
                       : 'Cùng Wi-Fi',
-                  style: TextStyle(color: ui.muted, fontSize: 12),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
                 ),
               ],
             ),
@@ -1149,8 +1156,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             Text(
               _snapshot.deviceName ?? 'Shelly Plug S',
               style: TextStyle(
-                color: ui.text,
-                fontSize: 18,
+                color: LuxeColors.text,
+                fontSize: 19,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1159,7 +1166,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               _snapshot.serverBinding != null
                   ? 'Đã liên kết và đọc được trạng thái thiết bị. Quyền bật sạc do máy chủ kiểm tra.'
                   : 'Đã vượt qua kiểm tra an toàn và đọc được trạng thái thiết bị.',
-              style: TextStyle(color: ui.muted, fontSize: 13),
+              style: TextStyle(color: LuxeColors.muted, fontSize: 13),
             ),
             if (status != null) ...[
               const SizedBox(height: 16),
@@ -1227,14 +1234,14 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             value,
             style: const TextStyle(
               color: LuxeColors.text,
-              fontSize: 18,
+              fontSize: 19,
               fontWeight: FontWeight.w300,
               fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
         ),
         const SizedBox(height: 2),
-        Text(label, style: LuxeText.label.copyWith(fontSize: 11)),
+        Text(label, style: LuxeText.label.copyWith(fontSize: 11.5)),
       ],
     ),
   );
@@ -1263,7 +1270,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                 Text(
                   'Cần xác thực an toàn phần cứng',
                   style: TextStyle(
-                    color: ui.text,
+                    color: LuxeColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1273,7 +1280,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             const SizedBox(height: 8),
             Text(
               'Để tránh tai nạn chập cháy và đảm bảo an toàn pin xe, ứng dụng sẽ chạy một bài kiểm tra relay 5 giây không tải trước khi kích hoạt điều khiển.',
-              style: TextStyle(color: ui.muted, fontSize: 13, height: 1.35),
+              style: TextStyle(
+                color: LuxeColors.muted,
+                fontSize: 13,
+                height: 1.35,
+              ),
             ),
           ],
         ),
@@ -1329,7 +1340,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Text(
         'Chọn thiết bị bạn đang dùng để sạc:',
         style: TextStyle(
-          color: ui.text,
+          color: LuxeColors.text,
           fontWeight: FontWeight.w600,
           fontSize: 14,
         ),
@@ -1395,7 +1406,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                     Text(
                       'IP: ${dev.address} • ${dev.model.isNotEmpty ? dev.model : 'Gen 3'}',
                       style: LuxeText.caption.copyWith(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
@@ -1421,17 +1432,19 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         decoration: BoxDecoration(
           gradient: _glass,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: ui.amber.withValues(alpha: 0.4)),
+          border: Border.all(
+            color: LuxeColors.champagne.withValues(alpha: 0.4),
+          ),
         ),
         child: Column(
           children: [
-            Icon(Icons.lock_rounded, size: 36, color: ui.amber),
+            Icon(Icons.lock_rounded, size: 36, color: LuxeColors.champagne),
             const SizedBox(height: 8),
             Text(
               'Yêu cầu mật khẩu thiết bị',
               style: TextStyle(
-                color: ui.text,
-                fontSize: 16,
+                color: LuxeColors.text,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1440,7 +1453,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               _snapshot.errorMessage ??
                   'Thiết bị Shelly có bật mật khẩu bảo vệ Web UI.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: ui.muted, fontSize: 13),
+              style: TextStyle(color: LuxeColors.muted, fontSize: 13),
             ),
           ],
         ),
@@ -1467,20 +1480,24 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         decoration: BoxDecoration(
           color: LuxeColors.danger.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: ui.danger.withValues(alpha: 0.3)),
+          border: Border.all(color: LuxeColors.danger.withValues(alpha: 0.3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Icon(Icons.error_outline_rounded, color: ui.danger, size: 22),
+                Icon(
+                  Icons.error_outline_rounded,
+                  color: LuxeColors.danger,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     _snapshot.errorMessage ?? 'Không tìm thấy thiết bị Shelly',
                     style: TextStyle(
-                      color: ui.text,
+                      color: LuxeColors.text,
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
@@ -1492,7 +1509,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             Text(
               'Hãy kiểm tra các bước sau:',
               style: TextStyle(
-                color: ui.text,
+                color: LuxeColors.text,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -1550,7 +1567,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                     'Không tìm thấy thiết bị trên Wi-Fi?',
                     softWrap: true,
                     style: TextStyle(
-                      color: ui.text,
+                      color: LuxeColors.text,
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                     ),
@@ -1561,7 +1578,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             const SizedBox(height: 6),
             Text(
               'Bạn có thể kết nối từ xa qua Shelly Cloud hoặc yêu cầu mã kết nối từ Admin.',
-              style: TextStyle(color: ui.muted, fontSize: 12.5),
+              style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
             ),
             const SizedBox(height: 14),
             Row(
@@ -1640,17 +1657,23 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         decoration: BoxDecoration(
           color: LuxeColors.champagne.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: ui.amber.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: LuxeColors.champagne.withValues(alpha: 0.3),
+          ),
         ),
         child: Column(
           children: [
-            Icon(Icons.warning_amber_rounded, size: 36, color: ui.amber),
+            Icon(
+              Icons.warning_amber_rounded,
+              size: 36,
+              color: LuxeColors.champagne,
+            ),
             const SizedBox(height: 10),
             Text(
               'Thiết bị không tương thích',
               style: TextStyle(
-                color: ui.text,
-                fontSize: 16,
+                color: LuxeColors.text,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1660,7 +1683,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   'Thiết bị tìm thấy không hỗ trợ đo điện năng (Power Metering). '
                       'Hệ thống yêu cầu các trường công suất, điện áp và điện năng để theo dõi sạc.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: ui.muted, fontSize: 13, height: 1.35),
+              style: TextStyle(
+                color: LuxeColors.muted,
+                fontSize: 13,
+                height: 1.35,
+              ),
             ),
           ],
         ),
@@ -1757,10 +1784,10 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         ShellyConnectionFlowState.verificationRequired => ui.primary,
         ShellyConnectionFlowState.deviceFound => ui.primary,
         ShellyConnectionFlowState.multipleDevices => ui.primary,
-        ShellyConnectionFlowState.connectionFailed => ui.danger,
-        ShellyConnectionFlowState.offline => ui.danger,
-        ShellyConnectionFlowState.incompatible => ui.amber,
-        ShellyConnectionFlowState.passwordRequired => ui.amber,
+        ShellyConnectionFlowState.connectionFailed => LuxeColors.danger,
+        ShellyConnectionFlowState.offline => LuxeColors.danger,
+        ShellyConnectionFlowState.incompatible => LuxeColors.champagne,
+        ShellyConnectionFlowState.passwordRequired => LuxeColors.champagne,
         _ => ui.primary,
       };
 

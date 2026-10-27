@@ -964,7 +964,7 @@ class LuxeSegmented<T> extends StatelessWidget {
                                 color: value == selected
                                     ? LuxeColors.text
                                     : LuxeColors.muted,
-                                fontSize: 13.5,
+                                fontSize: 13,
                                 fontWeight: value == selected
                                     ? FontWeight.w600
                                     : FontWeight.w500,
@@ -1021,7 +1021,7 @@ class LuxeNotice extends StatelessWidget {
             message,
             style: const TextStyle(
               color: LuxeColors.text,
-              fontSize: 13.5,
+              fontSize: 13,
               height: 1.45,
             ),
           ),

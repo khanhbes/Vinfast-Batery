@@ -564,13 +564,13 @@ class _ModelCard extends StatelessWidget {
                             '${status.pending}',
                             style: const TextStyle(
                               color: LuxeColors.text,
-                              fontSize: 20,
+                              fontSize: 19,
                               fontWeight: FontWeight.w300,
                             ),
                           ),
                           Text(
                             '/ ${status.required} mới',
-                            style: LuxeText.label.copyWith(fontSize: 10.5),
+                            style: LuxeText.label.copyWith(fontSize: 11),
                           ),
                         ],
                       ),
@@ -626,12 +626,12 @@ class _ModelCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Text(sources, style: LuxeText.caption.copyWith(fontSize: 12)),
+          Text(sources, style: LuxeText.caption.copyWith(fontSize: 12.5)),
           if (report != null) ...[
             const SizedBox(height: 8),
             Text(
               'Lần gần nhất: ${TrainingResultSheet.verdict(report)}',
-              style: LuxeText.caption.copyWith(fontSize: 12),
+              style: LuxeText.caption.copyWith(fontSize: 12.5),
             ),
             if (report.evaluation != null)
               Align(
@@ -661,7 +661,7 @@ class _ModelCard extends StatelessWidget {
                 childrenPadding: const EdgeInsets.only(bottom: 6),
                 title: Text(
                   'Dữ liệu sạc: ${dataRows.length} đã học · ${pendingRows.length} đang chờ',
-                  style: LuxeText.item.copyWith(fontSize: 13.5),
+                  style: LuxeText.item.copyWith(fontSize: 13),
                 ),
                 children: [
                   for (final row in pendingRows)

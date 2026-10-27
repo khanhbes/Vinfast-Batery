@@ -174,7 +174,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                                         color: enabled
                                             ? LuxeColors.platinum
                                             : LuxeColors.dim,
-                                        fontSize: 14.5,
+                                        fontSize: 14,
                                         fontWeight: FontWeight.w500,
                                         letterSpacing: 0.3,
                                       ),

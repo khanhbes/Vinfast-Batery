@@ -233,7 +233,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                       'Hẹn giờ được nạp thẳng vào ổ cắm Shelly, an toàn độc lập với điện thoại.',
                       style: TextStyle(
                         color: LuxeColors.muted,
-                        fontSize: 12,
+                        fontSize: 12.5,
                         height: 1.4,
                       ),
                     ),

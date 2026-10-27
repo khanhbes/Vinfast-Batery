@@ -526,9 +526,9 @@ class _InteractiveAssistantSheetState
                             Text(
                               'Lịch sử trò chuyện',
                               style: TextStyle(
-                                fontSize: 16,
+                                fontSize: 15.5,
                                 fontWeight: FontWeight.bold,
-                                color: uiColors.text,
+                                color: LuxeColors.text,
                               ),
                             ),
                           ],
@@ -546,7 +546,7 @@ class _InteractiveAssistantSheetState
                     const Divider(),
                     Text(
                       'Lịch sử lưu trên máy này.',
-                      style: TextStyle(color: uiColors.muted),
+                      style: TextStyle(color: LuxeColors.muted),
                     ),
                     if (sessions.isEmpty)
                       Padding(
@@ -555,7 +555,7 @@ class _InteractiveAssistantSheetState
                           child: Text(
                             'Chưa có lịch sử hội thoại nào.',
                             style: TextStyle(
-                              color: uiColors.muted,
+                              color: LuxeColors.muted,
                               fontSize: 13,
                             ),
                           ),
@@ -589,7 +589,7 @@ class _InteractiveAssistantSheetState
                                       : Icons.chat_bubble_outline_rounded,
                                   color: isCurrent
                                       ? uiColors.primary
-                                      : uiColors.muted,
+                                      : LuxeColors.muted,
                                   size: 18,
                                 ),
                               ),
@@ -600,14 +600,14 @@ class _InteractiveAssistantSheetState
                                   fontWeight: isCurrent
                                       ? FontWeight.bold
                                       : FontWeight.w500,
-                                  color: uiColors.text,
+                                  color: LuxeColors.text,
                                 ),
                               ),
                               subtitle: Text(
                                 '$dateStr • ${sess.messageCount} tin nhắn',
                                 style: TextStyle(
-                                  fontSize: 11,
-                                  color: uiColors.muted,
+                                  fontSize: 11.5,
+                                  color: LuxeColors.muted,
                                 ),
                               ),
                               trailing: IconButton(
@@ -615,7 +615,7 @@ class _InteractiveAssistantSheetState
                                 icon: Icon(
                                   Icons.delete_outline_rounded,
                                   size: 18,
-                                  color: uiColors.muted,
+                                  color: LuxeColors.muted,
                                 ),
                                 onPressed: () async {
                                   try {
@@ -1001,7 +1001,7 @@ class _InteractiveAssistantSheetState
                 Text(
                   s.title,
                   style: const TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: LuxeColors.text,
                   ),
@@ -1227,7 +1227,7 @@ class _InteractiveAssistantSheetState
                                                   'assistant_vehicle_label',
                                                 ),
                                                 style: const TextStyle(
-                                                  fontSize: 13.5,
+                                                  fontSize: 13,
                                                   fontWeight: FontWeight.w500,
                                                   color: LuxeColors.text,
                                                 ),

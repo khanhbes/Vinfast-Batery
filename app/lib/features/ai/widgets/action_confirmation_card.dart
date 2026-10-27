@@ -116,7 +116,7 @@ class ActionConfirmationCard extends StatelessWidget {
                       child: Text(
                         _statusLabel,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.4,
                           color: accent,
@@ -364,7 +364,7 @@ class _ResultStrip extends StatelessWidget {
           child: Text(
             message,
             style: TextStyle(
-              fontSize: 13.5,
+              fontSize: 13,
               fontWeight: FontWeight.w600,
               color: color,
             ),

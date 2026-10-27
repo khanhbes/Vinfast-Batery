@@ -286,7 +286,7 @@ class _OptionTile extends StatelessWidget {
                       title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: LuxeText.item.copyWith(fontSize: 14.5),
+                      style: LuxeText.item.copyWith(fontSize: 14),
                     ),
                   ),
                   if (selected)
@@ -302,7 +302,7 @@ class _OptionTile extends StatelessWidget {
                 caption,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: LuxeText.caption.copyWith(fontSize: 12),
+                style: LuxeText.caption.copyWith(fontSize: 12.5),
               ),
             ],
           ),
@@ -391,7 +391,7 @@ class _ChargePreview extends StatelessWidget {
         children: [
           Text(
             '63% → 80%',
-            style: TextStyle(color: LuxeColors.text, fontSize: 16),
+            style: TextStyle(color: LuxeColors.text, fontSize: 15.5),
           ),
           SizedBox(height: 8),
           _Bar(fill: 0.63, target: 0.8),
@@ -421,7 +421,7 @@ class _ChargePreview extends StatelessWidget {
               ),
               child: Text(
                 t,
-                style: const TextStyle(color: LuxeColors.text, fontSize: 11),
+                style: const TextStyle(color: LuxeColors.text, fontSize: 11.5),
               ),
             ),
         ],

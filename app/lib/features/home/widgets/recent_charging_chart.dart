@@ -189,7 +189,7 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
                         color: i == _selected || i == 6
                             ? LuxeColors.text
                             : LuxeColors.dim,
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: i == 6 ? FontWeight.w600 : FontWeight.w400,
                       ),
                     ),

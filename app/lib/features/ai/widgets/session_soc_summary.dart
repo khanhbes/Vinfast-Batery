@@ -76,7 +76,7 @@ class SessionSocSummary extends StatelessWidget {
                                 ? 'Ước tính kết thúc'
                                 : 'Đang tiếp tục nạp'),
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: actualValid
                             ? LuxeColors.emerald
                             : LuxeColors.muted,
@@ -101,7 +101,7 @@ class SessionSocSummary extends StatelessWidget {
                   child: Text(
                     '+${gain.round()}% pin',
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w600,
                       color: LuxeColors.emerald,
                     ),
@@ -161,7 +161,7 @@ class SessionSocSummary extends StatelessWidget {
                             endLabel,
                             style: const TextStyle(
                               color: LuxeColors.emerald,
-                              fontSize: 12,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.4,
                             ),

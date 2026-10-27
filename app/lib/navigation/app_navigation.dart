@@ -365,7 +365,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
                 softWrap: false,
                 style: const TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 21,
+                  fontSize: 22,
                   fontWeight: FontWeight.w600,
                   letterSpacing: -0.4,
                 ),

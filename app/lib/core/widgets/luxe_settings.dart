@@ -220,7 +220,7 @@ class LuxeTag extends StatelessWidget {
         text,
         style: TextStyle(
           color: c,
-          fontSize: 11,
+          fontSize: 11.5,
           fontWeight: FontWeight.w600,
           letterSpacing: 0.2,
         ),
@@ -360,7 +360,7 @@ Future<bool?> showLuxeConfirm(
         borderRadius: BorderRadius.circular(24),
         side: const BorderSide(color: LuxeColors.hairline),
       ),
-      title: Text(title, style: LuxeText.item.copyWith(fontSize: 18)),
+      title: Text(title, style: LuxeText.item.copyWith(fontSize: 19)),
       content: Text(message, style: LuxeText.body),
       actions: [
         TextButton(

@@ -225,8 +225,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       child: Text(
                         'Chỉnh sửa mẫu: $sessionId',
                         style: TextStyle(
-                          color: _ui.text,
-                          fontSize: 16,
+                          color: LuxeColors.text,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w700,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -237,7 +237,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 SizedBox(height: 6),
                 Text(
                   'Thay đổi sẽ được tự động lưu trực tiếp vào file charging_time_dataset.json',
-                  style: TextStyle(color: _ui.muted, fontSize: 12),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
                 ),
                 SizedBox(height: 18),
                 Row(
@@ -309,21 +309,24 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                             Text(
                               'Loại trừ khỏi Train',
                               style: TextStyle(
-                                color: _ui.text,
+                                color: LuxeColors.text,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(
                               'Bỏ qua mẫu này khi chạy fine-tune',
-                              style: TextStyle(color: _ui.muted, fontSize: 12),
+                              style: TextStyle(
+                                color: LuxeColors.muted,
+                                fontSize: 12.5,
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Switch.adaptive(
                         value: excluded,
-                        activeThumbColor: _ui.warning,
+                        activeThumbColor: LuxeColors.champagne,
                         activeTrackColor: _ui.warningSurface,
                         inactiveTrackColor: _ui.elevated,
                         onChanged: (val) => setSheetState(() => excluded = val),
@@ -405,7 +408,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(
           'Thêm mẫu sạc thử nghiệm',
-          style: TextStyle(color: _ui.text, fontSize: 16),
+          style: TextStyle(color: LuxeColors.text, fontSize: 15.5),
         ),
         content: SingleChildScrollView(
           child: Column(
@@ -452,7 +455,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Hủy', style: TextStyle(color: _ui.muted)),
+            child: Text('Hủy', style: TextStyle(color: LuxeColors.muted)),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: _ui.primary),
@@ -541,8 +544,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
         Text(
           label,
           style: TextStyle(
-            color: _ui.muted,
-            fontSize: 12,
+            color: LuxeColors.muted,
+            fontSize: 12.5,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -551,7 +554,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           controller: controller,
           keyboardType: keyboardType,
           style: TextStyle(
-            color: _ui.text,
+            color: LuxeColors.text,
             fontSize: 14,
             fontFamily: 'monospace',
           ),
@@ -604,7 +607,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 18,
+                fontSize: 19,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -612,7 +615,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               'Dữ liệu & huấn luyện model',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: _ui.primary, fontSize: 12),
+              style: TextStyle(color: _ui.primary, fontSize: 12.5),
             ),
           ],
         ),
@@ -640,7 +643,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               ),
               dividerColor: Colors.transparent,
               labelColor: LuxeColors.emeraldDeep,
-              unselectedLabelColor: _ui.muted,
+              unselectedLabelColor: LuxeColors.muted,
               labelStyle: CockpitTypography.label(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
@@ -690,21 +693,21 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   Container(
                     width: double.infinity,
                     padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color: _ui.warning.withValues(alpha: 0.15),
+                    color: LuxeColors.champagne.withValues(alpha: 0.15),
                     child: Row(
                       children: [
                         Icon(
                           Icons.info_outline_rounded,
                           size: 16,
-                          color: _ui.warning,
+                          color: LuxeColors.champagne,
                         ),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             _errorMessage!,
                             style: TextStyle(
-                              color: _ui.warning,
-                              fontSize: 11,
+                              color: LuxeColors.champagne,
+                              fontSize: 11.5,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -737,10 +740,10 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             height: 9,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _isServerOnline ? _ui.primary : _ui.warning,
+              color: _isServerOnline ? _ui.primary : LuxeColors.champagne,
               boxShadow: [
                 BoxShadow(
-                  color: (_isServerOnline ? _ui.primary : _ui.warning)
+                  color: (_isServerOnline ? _ui.primary : LuxeColors.champagne)
                       .withValues(alpha: 0.6),
                   blurRadius: 6,
                 ),
@@ -758,8 +761,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       ? 'MÁY CHỦ TRỰC TUYẾN (${_serverLatencyMs ?? 0}ms)'
                       : 'MÁY CHỦ NGOẠI TUYẾN (BỘ ĐỆM CỤC BỘ)',
                   style: TextStyle(
-                    color: _isServerOnline ? _ui.primary : _ui.warning,
-                    fontSize: 10,
+                    color: _isServerOnline ? _ui.primary : LuxeColors.champagne,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
                   ),
@@ -769,8 +772,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: _ui.muted,
-                    fontSize: 11,
+                    color: LuxeColors.muted,
+                    fontSize: 11.5,
                     fontFamily: 'monospace',
                   ),
                 ),
@@ -780,7 +783,11 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           SizedBox(width: 6),
           IconButton(
             onPressed: _loadDataset,
-            icon: Icon(Icons.refresh_rounded, size: 18, color: _ui.muted),
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 18,
+              color: LuxeColors.muted,
+            ),
             tooltip: 'Tải lại',
             constraints: BoxConstraints(minWidth: 32, minHeight: 32),
             padding: EdgeInsets.zero,
@@ -801,7 +808,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             icon: Icon(Icons.tune_rounded, size: 13),
             label: Text(
               'Đổi IP',
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -832,8 +839,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 Text(
                   'Cấu hình Server IP',
                   style: TextStyle(
-                    color: _ui.text,
-                    fontSize: 16,
+                    color: LuxeColors.text,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -846,7 +853,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 children: [
                   Text(
                     'Chọn preset hoặc nhập IP của laptop/server (cùng mạng WiFi hoặc Tailscale):',
-                    style: TextStyle(color: _ui.muted, fontSize: 12),
+                    style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
                   ),
                   SizedBox(height: 12),
                   Wrap(
@@ -877,15 +884,18 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   TextField(
                     controller: controller,
                     style: TextStyle(
-                      color: _ui.text,
+                      color: LuxeColors.text,
                       fontSize: 13,
                       fontFamily: 'monospace',
                     ),
                     decoration: InputDecoration(
                       labelText: 'Server URL',
-                      labelStyle: TextStyle(color: _ui.primary, fontSize: 12),
+                      labelStyle: TextStyle(color: _ui.primary, fontSize: 12.5),
                       hintText: 'https://… hoặc http://…',
-                      hintStyle: TextStyle(color: _ui.muted, fontSize: 12),
+                      hintStyle: TextStyle(
+                        color: LuxeColors.muted,
+                        fontSize: 12.5,
+                      ),
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(
                         horizontal: 12,
@@ -913,12 +923,12 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       decoration: BoxDecoration(
                         color: pingSuccess
                             ? _ui.primary.withValues(alpha: 0.15)
-                            : _ui.danger.withValues(alpha: 0.15),
+                            : LuxeColors.danger.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: pingSuccess
                               ? _ui.primary.withValues(alpha: 0.4)
-                              : _ui.danger.withValues(alpha: 0.4),
+                              : LuxeColors.danger.withValues(alpha: 0.4),
                         ),
                       ),
                       child: Row(
@@ -928,15 +938,19 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                                 ? Icons.check_circle_rounded
                                 : Icons.error_outline_rounded,
                             size: 16,
-                            color: pingSuccess ? _ui.primary : _ui.danger,
+                            color: pingSuccess
+                                ? _ui.primary
+                                : LuxeColors.danger,
                           ),
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               pingResult!,
                               style: TextStyle(
-                                color: pingSuccess ? _ui.primary : _ui.danger,
-                                fontSize: 12,
+                                color: pingSuccess
+                                    ? _ui.primary
+                                    : LuxeColors.danger,
+                                fontSize: 12.5,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -994,7 +1008,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: Text('Đóng', style: TextStyle(color: _ui.muted)),
+                child: Text('Đóng', style: TextStyle(color: LuxeColors.muted)),
               ),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: _ui.primary),
@@ -1049,8 +1063,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? _ui.primary : _ui.muted,
-            fontSize: 11,
+            color: isSelected ? _ui.primary : LuxeColors.muted,
+            fontSize: 11.5,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1083,7 +1097,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 'Tổng mẫu',
                 '$total',
                 Icons.storage_rounded,
-                _ui.text,
+                LuxeColors.text,
               ),
               _metricPill(
                 'Đã xác nhận',
@@ -1109,7 +1123,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 child: Text(
                   'Danh sách mẫu trong file',
                   style: TextStyle(
-                    color: _ui.text,
+                    color: LuxeColors.text,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1127,7 +1141,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   ),
                   IconButton(
                     tooltip: 'Làm mới',
-                    icon: Icon(Icons.refresh_rounded, color: _ui.muted),
+                    icon: Icon(Icons.refresh_rounded, color: LuxeColors.muted),
                     onPressed: _loadDataset,
                   ),
                 ],
@@ -1147,7 +1161,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               child: Center(
                 child: Text(
                   'Chưa có mẫu nào trong file dataset.',
-                  style: TextStyle(color: _ui.muted),
+                  style: TextStyle(color: LuxeColors.muted),
                 ),
               ),
             )
@@ -1176,7 +1190,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               Expanded(
                 child: Text(
                   title,
-                  style: TextStyle(color: _ui.muted, fontSize: 11),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 11.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1187,7 +1201,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             val,
             style: TextStyle(
               color: color,
-              fontSize: 18,
+              fontSize: 19,
               fontWeight: FontWeight.w900,
               fontFamily: 'monospace',
             ),
@@ -1221,7 +1235,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: excluded
-              ? _ui.warning.withValues(alpha: 0.4)
+              ? LuxeColors.champagne.withValues(alpha: 0.4)
               : confirmed
               ? _ui.primary.withValues(alpha: 0.3)
               : _ui.border,
@@ -1248,7 +1262,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     vehicleId,
                     style: TextStyle(
                       color: _ui.primary,
-                      fontSize: 11,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -1257,8 +1271,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 Text(
                   sessionId,
                   style: TextStyle(
-                    color: _ui.muted,
-                    fontSize: 12,
+                    color: LuxeColors.muted,
+                    fontSize: 12.5,
                     fontFamily: 'monospace',
                     fontWeight: FontWeight.w600,
                   ),
@@ -1274,7 +1288,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       'Thực tế',
                       style: TextStyle(
                         color: _ui.primary,
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1284,20 +1298,20 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     margin: EdgeInsets.only(left: 4),
                     padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: _ui.warning.withValues(alpha: 0.15),
+                      color: LuxeColors.champagne.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
                       'Loại trừ',
                       style: TextStyle(
-                        color: _ui.warning,
-                        fontSize: 10,
+                        color: LuxeColors.champagne,
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 SizedBox(width: 6),
-                Icon(Icons.edit_rounded, size: 16, color: _ui.muted),
+                Icon(Icons.edit_rounded, size: 16, color: LuxeColors.muted),
               ],
             ),
             SizedBox(height: 10),
@@ -1308,7 +1322,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 Text(
                   '${startSoc.toStringAsFixed(0)}% ➔ ${endSoc.toStringAsFixed(0)}% (+${delta.toStringAsFixed(0)}%)',
                   style: TextStyle(
-                    color: _ui.text,
+                    color: LuxeColors.text,
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
                     fontFamily: 'monospace',
@@ -1332,13 +1346,13 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               children: [
                 Text(
                   'Nạp: ${energyWh.toStringAsFixed(0)} Wh · Nhiệt độ: ${temp.toStringAsFixed(1)}°C',
-                  style: TextStyle(color: _ui.muted, fontSize: 11),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 11.5),
                 ),
                 Text(
                   'Nhấn để sửa ➜',
                   style: TextStyle(
                     color: _ui.primary.withValues(alpha: 0.8),
-                    fontSize: 11,
+                    fontSize: 11.5,
                   ),
                 ),
               ],
@@ -1348,8 +1362,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               Text(
                 '📝 $note',
                 style: TextStyle(
-                  color: _ui.muted,
-                  fontSize: 11,
+                  color: LuxeColors.muted,
+                  fontSize: 11.5,
                   fontStyle: FontStyle.italic,
                 ),
                 maxLines: 1,
@@ -1396,7 +1410,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                         child: Text(
                           'Kết nối máy chủ AI',
                           style: TextStyle(
-                            color: _ui.text,
+                            color: LuxeColors.text,
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1409,18 +1423,22 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     decoration: BoxDecoration(
                       color: _isServerOnline
                           ? _ui.primary.withValues(alpha: 0.15)
-                          : _ui.warning.withValues(alpha: 0.15),
+                          : LuxeColors.champagne.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                        color: _isServerOnline ? _ui.primary : _ui.warning,
+                        color: _isServerOnline
+                            ? _ui.primary
+                            : LuxeColors.champagne,
                         width: 0.8,
                       ),
                     ),
                     child: Text(
                       _isServerOnline ? 'CONNECTED' : 'STANDBY / OFFLINE',
                       style: TextStyle(
-                        color: _isServerOnline ? _ui.primary : _ui.warning,
-                        fontSize: 10,
+                        color: _isServerOnline
+                            ? _ui.primary
+                            : LuxeColors.champagne,
+                        fontSize: 11,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1496,7 +1514,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     child: Text(
                       'Feature Matrix Architecture',
                       style: TextStyle(
-                        color: _ui.text,
+                        color: LuxeColors.text,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1507,7 +1525,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               SizedBox(height: 10),
               Text(
                 'Vector đặc trưng đầu vào X (6 features):',
-                style: TextStyle(color: _ui.muted, fontSize: 12),
+                style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
               ),
               SizedBox(height: 6),
               Container(
@@ -1523,7 +1541,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   '➔ Ground Truth Y: [duration_seconds]',
                   style: TextStyle(
                     color: _ui.primary,
-                    fontSize: 11,
+                    fontSize: 11.5,
                     fontFamily: 'monospace',
                     height: 1.4,
                   ),
@@ -1553,7 +1571,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     child: Text(
                       'Cấu hình Siêu Tham Số (Hyperparameters)',
                       style: TextStyle(
-                        color: _ui.text,
+                        color: LuxeColors.text,
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1667,11 +1685,14 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           spacing: 12,
           runSpacing: 4,
           children: [
-            Text(label, style: TextStyle(color: _ui.muted, fontSize: 13)),
+            Text(
+              label,
+              style: TextStyle(color: LuxeColors.muted, fontSize: 13),
+            ),
             Text(
               valueStr,
               style: TextStyle(
-                color: _ui.text,
+                color: LuxeColors.text,
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
                 fontFamily: 'monospace',
@@ -1683,7 +1704,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           data: SliderTheme.of(context).copyWith(
             activeTrackColor: _ui.primary,
             inactiveTrackColor: _ui.border,
-            thumbColor: _ui.text,
+            thumbColor: LuxeColors.text,
             overlayColor: _ui.primary.withValues(alpha: 0.2),
             trackHeight: 4,
           ),
@@ -1730,8 +1751,8 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               Text(
                 'Kết Quả Đánh Giá Fine-Tune',
                 style: TextStyle(
-                  color: _ui.text,
-                  fontSize: 16,
+                  color: LuxeColors.text,
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -1745,7 +1766,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   'Độ chính xác: ${accuracy.toStringAsFixed(1)}%',
                   style: TextStyle(
                     color: _ui.primary,
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -1757,7 +1778,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             'Phiên bản model mới: $version',
             style: TextStyle(
               color: _ui.primary,
-              fontSize: 12,
+              fontSize: 12.5,
               fontFamily: 'monospace',
               fontWeight: FontWeight.w700,
             ),
@@ -1771,7 +1792,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 'MAPE (%)',
                 '${mape.toStringAsFixed(1)}%',
                 Icons.percent_rounded,
-                _ui.text,
+                LuxeColors.text,
               ),
               _metricPill(
                 'MAE',
@@ -1790,7 +1811,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
           SizedBox(height: 12),
           Text(
             'RMSE: ${rmseSec.toStringAsFixed(1)}s (khoảng ${(rmseSec / 60).toStringAsFixed(1)} phút sai số bình phương). Kết quả đánh giá không đồng nghĩa model đã được triển khai.',
-            style: TextStyle(color: _ui.muted, fontSize: 11),
+            style: TextStyle(color: LuxeColors.muted, fontSize: 11.5),
           ),
         ],
       ),
@@ -1813,12 +1834,15 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(color: _ui.muted, fontSize: 10)),
+                Text(
+                  label,
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 11),
+                ),
                 Text(
                   value,
                   style: TextStyle(
-                    color: _ui.text,
-                    fontSize: 12,
+                    color: LuxeColors.text,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

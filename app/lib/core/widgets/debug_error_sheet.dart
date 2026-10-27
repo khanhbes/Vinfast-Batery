@@ -151,7 +151,7 @@ class DebugErrorSheet extends StatelessWidget {
                         child: Text(
                           entry.source,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                             color: isDark
                                 ? LuxeColors.steel
@@ -206,7 +206,7 @@ class DebugErrorSheet extends StatelessWidget {
                               child: Text(
                                 'HTTP ${entry.statusCode}',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                   fontWeight: FontWeight.bold,
                                   color: entry.statusCode! >= 500
                                       ? LuxeColors.danger
@@ -235,7 +235,7 @@ class DebugErrorSheet extends StatelessWidget {
                               child: Text(
                                 entry.debugCode!,
                                 style: const TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                   fontWeight: FontWeight.bold,
                                   color: LuxeColors.steel,
                                 ),
@@ -273,7 +273,7 @@ class DebugErrorSheet extends StatelessWidget {
                               entry.endpoint!,
                               style: const TextStyle(
                                 fontFamily: 'monospace',
-                                fontSize: 12,
+                                fontSize: 12.5,
                               ),
                             ),
                           ),
@@ -334,7 +334,7 @@ class DebugErrorSheet extends StatelessWidget {
                         entry.debugDetail!,
                         style: const TextStyle(
                           fontFamily: 'monospace',
-                          fontSize: 12,
+                          fontSize: 12.5,
                         ),
                       ),
                     ),
@@ -366,7 +366,7 @@ class DebugErrorSheet extends StatelessWidget {
                           entry.stackTrace,
                           style: const TextStyle(
                             fontFamily: 'monospace',
-                            fontSize: 11,
+                            fontSize: 11.5,
                             height: 1.4,
                           ),
                         ),

@@ -320,7 +320,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Text(
                 '${BetaCapabilities.enabled ? 'BẢN BETA' : 'BẢN CHÍNH THỨC'} · $_appVersion',
                 style: LuxeText.label.copyWith(
-                  fontSize: 10.5,
+                  fontSize: 11,
                   letterSpacing: 1.8,
                   color: LuxeColors.dim,
                 ),
@@ -461,10 +461,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             SizedBox(height: 12),
             Text(
               'Cloud key, mật khẩu LAN và token đăng nhập không được hiển thị.',
-              style: TextStyle(
-                color: AppUiColors.of(context).muted,
-                fontSize: 12,
-              ),
+              style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
             ),
           ],
         ),
@@ -477,10 +474,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     child: Row(
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: TextStyle(color: AppUiColors.of(context).muted),
-          ),
+          child: Text(label, style: TextStyle(color: LuxeColors.muted)),
         ),
         Flexible(
           child: Text(

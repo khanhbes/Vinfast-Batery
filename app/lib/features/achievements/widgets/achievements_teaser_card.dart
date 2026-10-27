@@ -62,7 +62,7 @@ class AchievementsTeaserCard extends StatelessWidget {
                             rank.name,
                             style: TextStyle(
                               color: rank.rarity.metal[0],
-                              fontSize: 12,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.4,
                             ),

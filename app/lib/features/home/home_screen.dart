@@ -491,10 +491,7 @@ class _InlineErrorBanner extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  title,
-                  style: LuxeText.item.copyWith(fontSize: 14.5),
-                ),
+                child: Text(title, style: LuxeText.item.copyWith(fontSize: 14)),
               ),
               IconButton(
                 onPressed: onRetry,
@@ -534,7 +531,7 @@ class _InlineErrorBanner extends StatelessWidget {
                       Text(
                         'Xem chi tiết kỹ thuật',
                         style: LuxeText.label.copyWith(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           color: LuxeColors.dim,
                           decoration: TextDecoration.underline,
                         ),

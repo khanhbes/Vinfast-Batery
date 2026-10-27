@@ -868,7 +868,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                   child: const Text(
                     '© OpenStreetMap',
                     textScaler: TextScaler.noScaling,
-                    style: TextStyle(color: LuxeColors.muted, fontSize: 10),
+                    style: TextStyle(color: LuxeColors.muted, fontSize: 11),
                   ),
                 ),
               ),
@@ -1092,7 +1092,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                           Text(
                             '${item.distanceKm.toStringAsFixed(1)} km · '
                             '${_verdictShort(item.verdict)}',
-                            style: LuxeText.caption.copyWith(fontSize: 12),
+                            style: LuxeText.caption.copyWith(fontSize: 12.5),
                           ),
                         ],
                       ),
@@ -1173,7 +1173,7 @@ class _TripResultCard extends StatelessWidget {
                   key: const ValueKey('trip-verdict'),
                   style: TextStyle(
                     color: color,
-                    fontSize: 16,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1203,7 +1203,7 @@ class _TripResultCard extends StatelessWidget {
                   Text(
                     '${plan.useLowPct.round()}–${plan.useHighPct.round()}% '
                     'tùy đường',
-                    style: LuxeText.caption.copyWith(fontSize: 12),
+                    style: LuxeText.caption.copyWith(fontSize: 12.5),
                   ),
                 ],
               ),
@@ -1249,7 +1249,7 @@ class _TripResultCard extends StatelessWidget {
             TripKmSource.catalog =>
               'Theo định mức dòng xe (khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%). '
                   'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
-          }, style: LuxeText.caption.copyWith(fontSize: 12)),
+          }, style: LuxeText.caption.copyWith(fontSize: 12.5)),
           if (plan.suggestions.isNotEmpty) ...[
             const SizedBox(height: 14),
             const Divider(height: 1),
@@ -1346,7 +1346,7 @@ class _SuggestionRow extends StatelessWidget {
                   text,
                   style: const TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 13.5,
+                    fontSize: 13,
                     height: 1.4,
                   ),
                 ),
@@ -1514,7 +1514,7 @@ class _PlaceRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(label, style: LuxeText.label.copyWith(fontSize: 11)),
+                  Text(label, style: LuxeText.label.copyWith(fontSize: 11.5)),
                   const SizedBox(height: 2),
                   Text(
                     value.isEmpty ? placeholder : value,
@@ -1583,11 +1583,11 @@ class _TripEnergyBar extends StatelessWidget {
             children: [
               Text(
                 'Tới nơi ${end.toStringAsFixed(0)}%',
-                style: LuxeText.label.copyWith(fontSize: 11, color: color),
+                style: LuxeText.label.copyWith(fontSize: 11.5, color: color),
               ),
               Text(
                 'Xuất phát ${start.toStringAsFixed(0)}%',
-                style: LuxeText.label.copyWith(fontSize: 11),
+                style: LuxeText.label.copyWith(fontSize: 11.5),
               ),
             ],
           ),
@@ -1793,7 +1793,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                                   overflow: TextOverflow.ellipsis,
                                   style: const TextStyle(
                                     color: LuxeColors.text,
-                                    fontSize: 13.5,
+                                    fontSize: 13,
                                     height: 1.35,
                                   ),
                                 ),
@@ -1809,7 +1809,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
           const Text(
             'Dữ liệu địa điểm © OpenStreetMap contributors',
             textAlign: TextAlign.center,
-            style: TextStyle(color: LuxeColors.dim, fontSize: 11),
+            style: TextStyle(color: LuxeColors.dim, fontSize: 11.5),
           ),
         ],
       ),
@@ -1920,7 +1920,7 @@ class _MapHint extends StatelessWidget {
       'Nhấn giữ để chọn điểm đến',
       style: TextStyle(
         color: LuxeColors.muted,
-        fontSize: 10.5,
+        fontSize: 11,
         fontWeight: FontWeight.w500,
       ),
     ),
@@ -1948,14 +1948,18 @@ class _Metric extends StatelessWidget {
             value,
             style: const TextStyle(
               color: LuxeColors.text,
-              fontSize: 16,
+              fontSize: 15.5,
               fontWeight: FontWeight.w500,
               fontFeatures: [FontFeature.tabularFigures()],
             ),
           ),
         ),
         const SizedBox(height: 2),
-        Text(label, maxLines: 2, style: LuxeText.label.copyWith(fontSize: 11)),
+        Text(
+          label,
+          maxLines: 2,
+          style: LuxeText.label.copyWith(fontSize: 11.5),
+        ),
       ],
     ),
   );
@@ -1968,7 +1972,7 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     text.toUpperCase(),
     style: LuxeText.label.copyWith(
-      fontSize: 11,
+      fontSize: 11.5,
       letterSpacing: 1.6,
       color: LuxeColors.platinumMid,
     ),

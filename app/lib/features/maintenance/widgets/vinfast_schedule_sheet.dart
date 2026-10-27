@@ -254,7 +254,7 @@ class _SheetState extends State<_Sheet> {
                           p.preset.title,
                           style: const TextStyle(
                             color: LuxeColors.text,
-                            fontSize: 14.5,
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -275,7 +275,7 @@ class _SheetState extends State<_Sheet> {
                     '${groupThousands(p.targetOdo)} km',
                     style: TextStyle(
                       color: on ? LuxeColors.emerald : LuxeColors.muted,
-                      fontSize: 13.5,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),

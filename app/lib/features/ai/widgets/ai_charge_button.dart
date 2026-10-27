@@ -183,7 +183,7 @@ class _AIChargeButtonState extends State<AIChargeButton>
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: enabled ? LuxeColors.shell : LuxeColors.dim,
-                          fontSize: 14.5,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.4,
                         ),

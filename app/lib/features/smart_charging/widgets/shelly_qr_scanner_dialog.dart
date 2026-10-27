@@ -110,7 +110,7 @@ class _ShellyQrScannerDialogState extends State<ShellyQrScannerDialog> {
                       child: Text(
                         'Bạn có thể dùng ứng dụng quét mã của điện thoại hoặc dán trực tiếp mã vào đây.',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           color: colors.onSurfaceVariant,
                         ),
                       ),
@@ -184,7 +184,7 @@ class _ShellyQrScannerDialogState extends State<ShellyQrScannerDialog> {
                         Text(
                           'Model: ${_parsedResult!.model}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             color: colors.onSurfaceVariant,
                           ),
                         ),
@@ -192,7 +192,7 @@ class _ShellyQrScannerDialogState extends State<ShellyQrScannerDialog> {
                         Text(
                           'Server: ${_parsedResult!.cloudHost}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             color: colors.onSurfaceVariant,
                           ),
                         ),

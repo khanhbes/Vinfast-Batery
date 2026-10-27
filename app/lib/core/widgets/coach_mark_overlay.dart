@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import '../services/guide_registry.dart';
 import '../theme/app_motion.dart';
 import '../theme/luxe_theme.dart';
-import '../theme/app_ui_colors.dart';
 import 'battery_bot_mascot.dart';
 
 /// Explains the highlighted control; never dispatches its action.
@@ -240,7 +239,6 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
   Widget build(BuildContext context) {
     if (widget.steps.isEmpty) return const SizedBox.shrink();
     final step = widget.steps[_index];
-    final ui = AppUiColors.of(context);
     final isEn = Localizations.localeOf(context).languageCode == 'en';
     final language = isEn ? 'en' : 'vi';
     final noMotion = !AppMotion.enabled(context);
@@ -323,7 +321,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                                               ? 'Step ${_index + 1} of ${widget.steps.length}'
                                               : 'Bước ${_index + 1} / ${widget.steps.length}',
                                           style: TextStyle(
-                                            color: ui.muted,
+                                            color: LuxeColors.muted,
                                             fontWeight: FontWeight.w600,
                                           ),
                                         ),
@@ -356,7 +354,7 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                                     style: Theme.of(context)
                                         .textTheme
                                         .titleLarge
-                                        ?.copyWith(color: ui.text),
+                                        ?.copyWith(color: LuxeColors.text),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
@@ -367,7 +365,10 @@ class _CoachMarkOverlayState extends State<CoachMarkOverlay>
                                             : 'Đang đợi mục này hiển thị. Bạn có thể bỏ qua và mở lại hướng dẫn trong Cài đặt.')
                                       : step.description(language),
                                   style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: ui.muted, height: 1.4),
+                                      ?.copyWith(
+                                        color: LuxeColors.muted,
+                                        height: 1.4,
+                                      ),
                                 ),
                                 if (widget.showDontShowAgain) ...[
                                   const SizedBox(height: 8),

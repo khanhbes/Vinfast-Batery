@@ -341,7 +341,7 @@ class _VehicleCard extends StatelessWidget {
         alignment: Alignment.centerLeft,
         child: Text(
           label,
-          style: LuxeText.label.copyWith(fontSize: 11),
+          style: LuxeText.label.copyWith(fontSize: 11.5),
           maxLines: 1,
           softWrap: false,
         ),
@@ -353,7 +353,7 @@ class _VehicleCard extends StatelessWidget {
         child: Text(
           value,
           style: TextStyle(
-            fontSize: 14.5,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             color: valueColor,
             fontFeatures: const [FontFeature.tabularFigures()],

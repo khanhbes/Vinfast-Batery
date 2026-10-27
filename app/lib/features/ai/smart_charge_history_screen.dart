@@ -555,7 +555,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                     children: [
                       Text(
                         _customRange == null ? 'TỔNG KẾT THÁNG' : 'TỔNG KẾT',
-                        style: LuxeText.eyebrow.copyWith(fontSize: 10.5),
+                        style: LuxeText.eyebrow.copyWith(fontSize: 11),
                       ),
                       const SizedBox(height: 3),
                       AnimatedSwitcher(
@@ -1755,7 +1755,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       const Text(
         'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
         textAlign: TextAlign.center,
-        style: TextStyle(color: LuxeColors.dim, fontSize: 12, height: 1.45),
+        style: TextStyle(color: LuxeColors.dim, fontSize: 12.5, height: 1.45),
       ),
     ]);
   }
@@ -1978,7 +1978,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         rearmMarkers.add(source[index].elapsedSeconds / 60);
       }
     }
-    const axisStyle = TextStyle(fontSize: 10, color: LuxeColors.dim);
+    const axisStyle = TextStyle(fontSize: 11, color: LuxeColors.dim);
     return AnimatedSwitcher(
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero
@@ -2062,7 +2062,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                       const TextStyle(
                         color: LuxeColors.text,
                         fontWeight: FontWeight.w600,
-                        fontSize: 12,
+                        fontSize: 12.5,
                       ),
                     ),
                   )
@@ -2450,7 +2450,7 @@ class _SectionTitle extends StatelessWidget {
       ),
       if (subtitle != null) ...[
         const SizedBox(height: 2),
-        Text(subtitle!, style: LuxeText.caption.copyWith(fontSize: 12)),
+        Text(subtitle!, style: LuxeText.caption.copyWith(fontSize: 12.5)),
       ],
     ],
   );

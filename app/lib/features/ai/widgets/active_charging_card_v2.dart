@@ -221,7 +221,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
               // verified (the relay status above) — LUXE rule, QA 129.
               style: const TextStyle(
                 color: LuxeColors.champagne,
-                fontSize: 13.5,
+                fontSize: 13,
                 height: 1.4,
               ),
             ),
@@ -283,7 +283,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                     'Nhiệt độ ổ cắm ${widget.temperatureC!.toStringAsFixed(0)}°C',
                     style: const TextStyle(
                       color: LuxeColors.muted,
-                      fontSize: 12,
+                      fontSize: 12.5,
                     ),
                   ),
                 ),
@@ -377,7 +377,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
             const SizedBox(width: 10),
             Text(
               '→ $target%',
-              style: const TextStyle(color: LuxeColors.muted, fontSize: 18),
+              style: const TextStyle(color: LuxeColors.muted, fontSize: 19),
             ),
           ],
         ),
@@ -453,7 +453,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                 padding: EdgeInsets.fromLTRB(6, 0, 20, 6),
                 child: Text(
                   '%',
-                  style: TextStyle(color: LuxeColors.platinum, fontSize: 20),
+                  style: TextStyle(color: LuxeColors.platinum, fontSize: 19),
                 ),
               ),
               Column(
@@ -463,7 +463,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                     'MỤC TIÊU',
                     style: TextStyle(
                       color: LuxeColors.platinumMid,
-                      fontSize: 10.5,
+                      fontSize: 11,
                       letterSpacing: 1.2,
                     ),
                   ),
@@ -489,7 +489,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                           'W',
                           style: TextStyle(
                             color: LuxeColors.champagne,
-                            fontSize: 12,
+                            fontSize: 12.5,
                           ),
                         ),
                       ),
@@ -579,7 +579,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
               '%',
               style: TextStyle(
                 color: LuxeColors.champagne,
-                fontSize: 20,
+                fontSize: 19,
                 fontWeight: FontWeight.w300,
               ),
             ),
@@ -699,7 +699,7 @@ class _Metric extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(color: LuxeColors.dim, fontSize: 11),
+          style: const TextStyle(color: LuxeColors.dim, fontSize: 11.5),
         ),
       ],
     ),

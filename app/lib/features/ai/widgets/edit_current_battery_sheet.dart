@@ -109,7 +109,7 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
                         const Text(
                           '%',
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 19,
                             fontWeight: FontWeight.w300,
                             color: LuxeColors.muted,
                           ),
@@ -226,7 +226,7 @@ class _PresetPill extends StatelessWidget {
             label,
             style: TextStyle(
               color: selected ? LuxeColors.text : LuxeColors.muted,
-              fontSize: 13.5,
+              fontSize: 13,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               fontFeatures: const [FontFeature.tabularFigures()],
             ),

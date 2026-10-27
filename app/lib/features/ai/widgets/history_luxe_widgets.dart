@@ -63,7 +63,7 @@ Duration historySessionDuration(SmartChargingSession session) =>
 
 const _socStyle = TextStyle(
   color: LuxeColors.platinum,
-  fontSize: 12,
+  fontSize: 12.5,
   fontWeight: FontWeight.w500,
   fontFeatures: [ui.FontFeature.tabularFigures()],
 );
@@ -410,7 +410,7 @@ class _BarsPainter extends CustomPainter {
         text: text,
         style: TextStyle(
           color: color,
-          fontSize: 10,
+          fontSize: 11,
           fontFeatures: const [ui.FontFeature.tabularFigures()],
         ),
       ),
@@ -493,7 +493,7 @@ class HistoryScopeToggle extends StatelessWidget {
                 duration: _motion(context, 240),
                 style: TextStyle(
                   color: on ? LuxeColors.shell : LuxeColors.muted,
-                  fontSize: 13.5,
+                  fontSize: 13,
                   fontWeight: on ? FontWeight.w600 : FontWeight.w500,
                 ),
                 child: Text(label, maxLines: 1),
@@ -800,7 +800,7 @@ class HistoryTimelineTile extends StatelessWidget {
                                     child: Text(
                                       historyStrategy(session),
                                       style: LuxeText.item.copyWith(
-                                        fontSize: 14.5,
+                                        fontSize: 14,
                                       ),
                                     ),
                                   ),
@@ -810,7 +810,7 @@ class HistoryTimelineTile extends StatelessWidget {
                                 historyEnergy(session.energyUsedWh),
                                 style: const TextStyle(
                                   color: LuxeColors.platinumHi,
-                                  fontSize: 16,
+                                  fontSize: 15.5,
                                   fontWeight: FontWeight.w500,
                                   fontFeatures: [
                                     ui.FontFeature.tabularFigures(),

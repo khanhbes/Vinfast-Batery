@@ -204,7 +204,7 @@ class _Destination extends StatelessWidget {
               duration: duration,
               curve: LuxeMotion.enter,
               style: TextStyle(
-                fontSize: 11,
+                fontSize: 11.5,
                 letterSpacing: 0.3,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color: selected ? LuxeColors.text : LuxeColors.muted,

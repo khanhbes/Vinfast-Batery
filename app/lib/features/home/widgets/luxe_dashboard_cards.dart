@@ -353,7 +353,7 @@ class LuxeStatsStrip extends ConsumerWidget {
                       cells[i].$2,
                       style: const TextStyle(
                         color: LuxeColors.text,
-                        fontSize: 20,
+                        fontSize: 19,
                         fontWeight: FontWeight.w300,
                         fontFeatures: [ui.FontFeature.tabularFigures()],
                       ),
@@ -674,7 +674,7 @@ class LuxeEfficiencyNote extends StatelessWidget {
                       : 'Chưa có dữ liệu cấu hình',
                   style: const TextStyle(
                     color: LuxeColors.platinum,
-                    fontSize: 18,
+                    fontSize: 19,
                     fontWeight: FontWeight.w300,
                   ),
                 ),
@@ -719,7 +719,7 @@ class LuxeShellyPrompt extends StatelessWidget {
                 'Thiết lập bộ sạc Shelly',
                 style: TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 14.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
               ),

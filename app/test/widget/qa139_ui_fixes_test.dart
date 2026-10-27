@@ -530,6 +530,20 @@ void main() {
       expect(bad, isEmpty);
     });
 
+    test('font sizes sit on the LuxeText scale (UX-08)', () {
+      final bad = <String>[];
+      for (final e in src.entries) {
+        for (final m in RegExp(
+          r'fontSize:\s*(\d+(?:\.\d+)?)(?![\d.])',
+        ).allMatches(e.value)) {
+          final v = double.parse(m.group(1)!);
+          // Below 10: chart and painter labels sized to their canvas.
+          if (v >= 10 && !LuxeText.scale.contains(v)) bad.add('${e.key}: $v');
+        }
+      }
+      expect(bad, isEmpty);
+    });
+
     test('% is written next to its number (QA-15)', () {
       final bad = <String>[];
       for (final e in src.entries) {

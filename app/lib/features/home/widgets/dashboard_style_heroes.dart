@@ -104,7 +104,7 @@ class LcdClusterHero extends StatelessWidget {
                     f.plate!,
                     style: const TextStyle(
                       color: LuxeColors.platinumMid,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -260,7 +260,11 @@ class CompactMetricsHero extends StatelessWidget {
     final f = HeroFigures(vehicle, learned);
     final cells = [
       ('Pin hiện tại', f.percent == null ? '—' : '${f.percent}%', true),
-      ('Quãng đường ước tính', f.rangeKm == null ? '—' : '${f.rangeKm} km', false),
+      (
+        'Quãng đường ước tính',
+        f.rangeKm == null ? '—' : '${f.rangeKm} km',
+        false,
+      ),
       ('Sức khỏe pin', f.soh == null ? '—' : '${f.soh}%', false),
       ('ODO', f.odoKm == null ? '—' : '${groupThousands(f.odoKm!)} km', false),
       (
@@ -285,7 +289,7 @@ class CompactMetricsHero extends StatelessWidget {
                   f.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: LuxeText.item.copyWith(fontSize: 18),
+                  style: LuxeText.item.copyWith(fontSize: 19),
                 ),
               ),
               if (f.plate != null) Text(f.plate!, style: LuxeText.label),

@@ -153,7 +153,7 @@ class ChatMessageBubble extends StatelessWidget {
                 ],
                 Text(
                   message.isQueued ? 'Chờ mạng' : timeStr,
-                  style: const TextStyle(fontSize: 10.5, color: LuxeColors.dim),
+                  style: const TextStyle(fontSize: 11, color: LuxeColors.dim),
                 ),
               ],
             ),
@@ -187,10 +187,7 @@ class ChatMessageBubble extends StatelessWidget {
               children: [
                 BreathingBotAvatar(size: 24, isStreaming: message.isStreaming),
                 const SizedBox(width: 10),
-                Text(
-                  timeStr,
-                  style: const TextStyle(fontSize: 10.5, color: dim),
-                ),
+                Text(timeStr, style: const TextStyle(fontSize: 11, color: dim)),
               ],
             ),
             const SizedBox(height: 6),

@@ -491,7 +491,7 @@ class _LuxeSocDialState extends State<LuxeSocDial>
               '%',
               style: TextStyle(
                 color: accent ? plan.accent : LuxeColors.muted,
-                fontSize: 16,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w300,
               ),
             ),
@@ -506,7 +506,7 @@ class _LuxeSocDialState extends State<LuxeSocDial>
               // Labels stay platinum: colour belongs to the numbers (Task 125).
               style: TextStyle(
                 color: accent ? LuxeColors.platinumMid : LuxeColors.muted,
-                fontSize: 10.5,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: accent ? 1.4 : 0.3,
               ),

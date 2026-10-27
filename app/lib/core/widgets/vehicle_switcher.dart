@@ -81,7 +81,7 @@ class VehicleSwitcher extends ConsumerWidget {
                     side: BorderSide(color: LuxeColors.hairline),
                   ),
                   textStyle: const TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

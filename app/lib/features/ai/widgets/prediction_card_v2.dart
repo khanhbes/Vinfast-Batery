@@ -119,7 +119,7 @@ class PredictionCardV2 extends StatelessWidget {
               Expanded(
                 child: Text(
                   personalizationLabel,
-                  style: const TextStyle(color: LuxeColors.dim, fontSize: 12),
+                  style: const TextStyle(color: LuxeColors.dim, fontSize: 12.5),
                 ),
               ),
             ],
@@ -140,7 +140,7 @@ class PredictionCardV2 extends StatelessWidget {
                     warning,
                     style: const TextStyle(
                       color: LuxeColors.muted,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       height: 1.4,
                     ),
                   ),

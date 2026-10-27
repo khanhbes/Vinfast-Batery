@@ -140,7 +140,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                         plate,
                         style: const TextStyle(
                           color: LuxeColors.platinum,
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.8,
                         ),
@@ -242,7 +242,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                               '%',
                               style: TextStyle(
                                 color: LuxeColors.emerald,
-                                fontSize: 18,
+                                fontSize: 19,
                                 fontWeight: FontWeight.w300,
                               ),
                             ),
@@ -266,7 +266,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                           range == null ? '— km' : '$range km',
                           style: const TextStyle(
                             color: LuxeColors.text,
-                            fontSize: 20,
+                            fontSize: 19,
                             fontWeight: FontWeight.w300,
                             fontFeatures: [ui.FontFeature.tabularFigures()],
                           ),

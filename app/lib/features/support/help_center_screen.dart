@@ -824,7 +824,7 @@ class _Bubble extends StatelessWidget {
               text,
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 14.5,
+                fontSize: 14,
                 height: 1.45,
               ),
             ),

@@ -325,14 +325,11 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                         '${_sohCtrl.text}%',
                         style: const TextStyle(
                           color: LuxeColors.text,
-                          fontSize: 18,
+                          fontSize: 19,
                           fontWeight: FontWeight.w300,
                         ),
                       ),
-                      Text(
-                        'SoH',
-                        style: LuxeText.label.copyWith(fontSize: 10.5),
-                      ),
+                      Text('SoH', style: LuxeText.label.copyWith(fontSize: 11)),
                     ],
                   ),
                 ),
@@ -471,10 +468,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              label,
-              style: LuxeText.caption.copyWith(fontSize: 13.5),
-            ),
+            child: Text(label, style: LuxeText.caption.copyWith(fontSize: 13)),
           ),
           const SizedBox(width: 12),
           Flexible(
@@ -483,7 +477,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
               textAlign: TextAlign.right,
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 13.5,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 fontFeatures: [FontFeature.tabularFigures()],
               ),

@@ -64,6 +64,14 @@ abstract final class LuxeColors {
 
 /// Explicit styles: luxe screens never inherit the app's light/dark text.
 abstract final class LuxeText {
+  /// The type scale (QA 139): every hard-coded `fontSize` from 10 up uses
+  /// one of these steps. Text 11–26; numbers on dials and heroes 28–60.
+  /// `test/widget/qa139_ui_fixes_test.dart` checks the sources.
+  static const scale = <double>[
+    11, 11.5, 12.5, 13, 14, 15, 15.5, 17, 19, 22, 24, 26, //
+    28, 30, 34, 36, 40, 44, 46, 48, 52, 56, 60,
+  ];
+
   // Platinum, not emerald: emerald is reserved for verified states, and
   // every section label in the app used it (Task 125).
   static const eyebrow = TextStyle(

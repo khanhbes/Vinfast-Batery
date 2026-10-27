@@ -524,7 +524,7 @@ class _NotificationCard extends StatelessWidget {
                         Text(
                           _formatTime(notification.createdAt),
                           style: LuxeText.label.copyWith(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             color: LuxeColors.dim,
                           ),
                         ),
@@ -619,7 +619,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         _formatTime(notification.createdAt),
-                        style: LuxeText.caption.copyWith(fontSize: 12),
+                        style: LuxeText.caption.copyWith(fontSize: 12.5),
                       ),
                     ],
                   ),
@@ -629,14 +629,14 @@ class _NotificationDetailSheet extends StatelessWidget {
             const SizedBox(height: 20),
             Text(
               notification.title,
-              style: LuxeText.title.copyWith(fontSize: 20, height: 1.3),
+              style: LuxeText.title.copyWith(fontSize: 19, height: 1.3),
             ),
             const SizedBox(height: 10),
             Text(
               notification.message,
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 14.5,
+                fontSize: 14,
                 height: 1.6,
               ),
             ),
@@ -756,7 +756,7 @@ class _NotificationDetailSheet extends StatelessWidget {
                 width: 96,
                 child: Text(
                   rows[i].label,
-                  style: LuxeText.label.copyWith(fontSize: 12),
+                  style: LuxeText.label.copyWith(fontSize: 12.5),
                 ),
               ),
               Expanded(

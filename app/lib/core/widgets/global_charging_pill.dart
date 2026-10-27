@@ -346,7 +346,7 @@ class _LuxeChargingPillState extends State<_LuxeChargingPill>
                             softWrap: false,
                             style: const TextStyle(
                               color: LuxeColors.text,
-                              fontSize: 12,
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 1.1,
                               fontFeatures: [FontFeature.tabularFigures()],
@@ -361,7 +361,7 @@ class _LuxeChargingPillState extends State<_LuxeChargingPill>
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: LuxeColors.muted,
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                 ),
                               ),
                             ),

@@ -378,7 +378,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               forceUpdate ? 'Cập nhật bắt buộc' : 'Có phiên bản mới',
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 16,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -395,11 +395,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               children: [
                 const Text(
                   'Hiện tại: ',
-                  style: TextStyle(color: LuxeColors.muted, fontSize: 12),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
                 ),
                 Text(
                   currentVersion,
-                  style: const TextStyle(color: LuxeColors.text, fontSize: 12),
+                  style: const TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 12.5,
+                  ),
                 ),
               ],
             ),
@@ -408,7 +411,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               children: [
                 const Text(
                   'Mới nhất: ',
-                  style: TextStyle(color: LuxeColors.muted, fontSize: 12),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 12.5),
                 ),
                 Text(
                   latestBuild > 0
@@ -416,7 +419,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                       : latestVersion,
                   style: const TextStyle(
                     color: LuxeColors.emerald,
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -434,7 +437,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 channelLabel,
                 style: const TextStyle(
                   color: LuxeColors.muted,
-                  fontSize: 11,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -445,7 +448,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 'Có gì mới',
                 style: TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
                 ),
@@ -476,7 +479,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                   'Bắt buộc cập nhật để tiếp tục sử dụng',
                   style: TextStyle(
                     color: LuxeColors.danger,
-                    fontSize: 11,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -486,7 +489,10 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               const SizedBox(height: 12),
               Text(
                 _downloadError!,
-                style: const TextStyle(color: LuxeColors.danger, fontSize: 11),
+                style: const TextStyle(
+                  color: LuxeColors.danger,
+                  fontSize: 11.5,
+                ),
               ),
             ],
           ],
@@ -580,7 +586,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         raw,
         style: const TextStyle(
           color: LuxeColors.muted,
-          fontSize: 12,
+          fontSize: 12.5,
           height: 1.5,
         ),
       );
@@ -596,7 +602,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               children: [
                 const Text(
                   '• ',
-                  style: TextStyle(color: LuxeColors.emerald, fontSize: 12),
+                  style: TextStyle(color: LuxeColors.emerald, fontSize: 12.5),
                 ),
                 Expanded(
                   child: Text(
@@ -605,7 +611,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                         : line,
                     style: const TextStyle(
                       color: LuxeColors.muted,
-                      fontSize: 12,
+                      fontSize: 12.5,
                       height: 1.4,
                     ),
                   ),

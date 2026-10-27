@@ -516,10 +516,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: _ui.surface,
-        title: Text('Xóa cấu hình Shelly?', style: TextStyle(color: _ui.text)),
+        title: Text(
+          'Xóa cấu hình Shelly?',
+          style: TextStyle(color: LuxeColors.text),
+        ),
         content: Text(
           'Bạn có thể chỉ xóa trên điện thoại hoặc thu hồi cấu hình mã hóa khỏi mọi thiết bị.',
-          style: TextStyle(color: _ui.muted),
+          style: TextStyle(color: LuxeColors.muted),
         ),
         actions: [
           TextButton(
@@ -531,7 +534,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             child: Text('CHỈ ĐIỆN THOẠI'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: _ui.danger),
+            style: FilledButton.styleFrom(backgroundColor: LuxeColors.danger),
             onPressed: () => Navigator.pop(context, 'everywhere'),
             child: Text('THU HỒI MỌI NƠI'),
           ),
@@ -632,7 +635,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             SizedBox(width: 8),
             Text(
               'Hướng dẫn Smart Charger',
-              style: TextStyle(color: _ui.text, fontSize: 16),
+              style: TextStyle(color: LuxeColors.text, fontSize: 15.5),
             ),
           ],
         ),
@@ -643,17 +646,17 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             children: [
               Text(
                 '• Kết nối qua máy chủ (Shelly Cloud); chế độ LAN chỉ dành cho kiểm thử nâng cao.',
-                style: TextStyle(color: _ui.muted, fontSize: 13),
+                style: TextStyle(color: LuxeColors.muted, fontSize: 13),
               ),
               SizedBox(height: 8),
               Text(
                 '• Giám sát an toàn: máy chủ ngắt khi dòng, công suất, nhiệt độ hoặc điện áp vượt ngưỡng, và ổ luôn có hẹn giờ tự ngắt.',
-                style: TextStyle(color: _ui.muted, fontSize: 13),
+                style: TextStyle(color: LuxeColors.muted, fontSize: 13),
               ),
               SizedBox(height: 8),
               Text(
                 '• Safe Boot: Luôn giữ relay ở trạng thái OFF khi cắm điện lại để bảo vệ bộ sạc xe máy điện khỏi xung điện áp.',
-                style: TextStyle(color: _ui.muted, fontSize: 13),
+                style: TextStyle(color: LuxeColors.muted, fontSize: 13),
               ),
             ],
           ),
@@ -734,7 +737,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: LuxeColors.text,
-                fontSize: 18,
+                fontSize: 19,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -744,7 +747,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: LuxeText.caption.copyWith(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -945,7 +948,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         Text(
                           'Shelly Plug S Gen3',
                           style: CockpitTypography.heading(
-                            fontSize: 16,
+                            fontSize: 15.5,
                             fontWeight: FontWeight.w700,
                             color: LuxeColors.text,
                           ),
@@ -954,7 +957,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         Text(
                           'Hẹn giờ tự ngắt & giám sát an toàn',
                           style: CockpitTypography.label(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             color: LuxeColors.muted,
                           ),
                         ),
@@ -986,7 +989,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         Text(
                           'Sẵn sàng',
                           style: CockpitTypography.label(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w700,
                             color: LuxeColors.emerald,
                           ),
@@ -1034,7 +1037,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   Text(
                     'Đo lúc $lastCheckedTime',
                     style: CockpitTypography.numbers(
-                      fontSize: 11,
+                      fontSize: 11.5,
                       color: LuxeColors.dim,
                     ),
                   ),
@@ -1056,7 +1059,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       label: Text(
                         'Kiểm tra',
                         style: CockpitTypography.label(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w800,
                           color: LuxeColors.shell,
                         ),
@@ -1107,7 +1110,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     Text(
                       vehiclePlate,
                       style: CockpitTypography.numbers(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         color: LuxeColors.muted,
                       ),
                     ),
@@ -1129,7 +1132,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   child: Text(
                     'Đổi xe',
                     style: CockpitTypography.label(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w700,
                       color: LuxeColors.text,
                     ),
@@ -1163,7 +1166,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           Text(
                             'Công suất sạc',
                             style: CockpitTypography.label(
-                              fontSize: 12,
+                              fontSize: 12.5,
                               color: LuxeColors.muted,
                             ),
                           ),
@@ -1171,7 +1174,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           Text(
                             '${chargePower.text} W',
                             style: CockpitTypography.numbers(
-                              fontSize: 16,
+                              fontSize: 15.5,
                               fontWeight: FontWeight.w800,
                               color: LuxeColors.emerald,
                             ),
@@ -1203,7 +1206,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           Text(
                             'Đơn giá điện',
                             style: CockpitTypography.label(
-                              fontSize: 12,
+                              fontSize: 12.5,
                               color: LuxeColors.muted,
                             ),
                           ),
@@ -1211,7 +1214,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           Text(
                             '${formatVnd(int.tryParse(tariff.text) ?? 2800)}/kWh',
                             style: CockpitTypography.numbers(
-                              fontSize: 16,
+                              fontSize: 15.5,
                               fontWeight: FontWeight.w800,
                               color: LuxeColors.text,
                             ),
@@ -1312,7 +1315,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                                 Text(
                                   'Đo',
                                   style: CockpitTypography.label(
-                                    fontSize: 11,
+                                    fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
                                     color: LuxeColors.text,
                                   ),
@@ -1342,7 +1345,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             child: Text(
                               'Quét',
                               style: CockpitTypography.label(
-                                fontSize: 11,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
                                 color: LuxeColors.text,
                               ),
@@ -1433,7 +1436,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                                 Text(
                                   'Đo',
                                   style: CockpitTypography.label(
-                                    fontSize: 11,
+                                    fontSize: 11.5,
                                     fontWeight: FontWeight.w700,
                                     color: LuxeColors.text,
                                   ),
@@ -1463,7 +1466,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             child: Text(
                               'Đổi',
                               style: CockpitTypography.label(
-                                fontSize: 11,
+                                fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
                                 color: LuxeColors.text,
                               ),
@@ -1527,7 +1530,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   Text(
                     'Đo lúc $lastCheckedTime',
                     style: CockpitTypography.numbers(
-                      fontSize: 11,
+                      fontSize: 11.5,
                       color: LuxeColors.dim,
                     ),
                   ),
@@ -1549,7 +1552,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       label: Text(
                         'Kiểm tra',
                         style: CockpitTypography.label(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w800,
                           color: LuxeColors.shell,
                         ),
@@ -1612,7 +1615,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     child: Text(
                       'ĐANG BẬT',
                       style: CockpitTypography.label(
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w800,
                         color: LuxeColors.emerald,
                       ),
@@ -1748,7 +1751,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         Text(
                           'Khởi động an toàn & bảo vệ role',
                           style: CockpitTypography.label(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             color: LuxeColors.muted,
                           ),
                         ),
@@ -1789,7 +1792,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         Text(
                           'Kiểm tra đóng/ngắt cơ học relay',
                           style: CockpitTypography.label(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             color: LuxeColors.muted,
                           ),
                         ),
@@ -1819,7 +1822,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       label: Text(
                         'Kiểm tra',
                         style: CockpitTypography.label(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: LuxeColors.text,
                         ),
@@ -2006,7 +2009,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           Text(
                             'Xe liên kết',
                             style: CockpitTypography.label(
-                              fontSize: 11,
+                              fontSize: 11.5,
                               color: LuxeColors.muted,
                             ),
                           ),
@@ -2040,7 +2043,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: Text(
                         'Đổi xe',
                         style: CockpitTypography.label(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w700,
                           color: LuxeColors.text,
                         ),
@@ -2059,7 +2062,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               Text(
                 'Công suất sạc tiêu chuẩn (W)',
                 style: CockpitTypography.label(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: LuxeColors.muted,
                 ),
               ),
@@ -2095,7 +2098,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: Text(
                         'LƯU',
                         style: CockpitTypography.label(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w800,
                           color: LuxeColors.emerald,
                         ),
@@ -2127,7 +2130,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           ),
                         ),
                         labelStyle: CockpitTypography.numbers(
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                           color: isSelected
                               ? LuxeColors.emerald
@@ -2152,7 +2155,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               Text(
                 'Đơn giá tiền điện (VND/kWh)',
                 style: CockpitTypography.label(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: LuxeColors.muted,
                 ),
               ),
@@ -2186,7 +2189,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: Text(
                         'LƯU',
                         style: CockpitTypography.label(
-                          fontSize: 12,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w800,
                           color: LuxeColors.text,
                         ),
@@ -2314,7 +2317,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         child: Text(
                           'Khởi động lại',
                           style: CockpitTypography.label(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                             color: LuxeColors.muted,
                           ),
@@ -2342,7 +2345,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         child: Text(
                           'Xóa cấu hình',
                           style: CockpitTypography.label(
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w700,
                             color: LuxeColors.danger,
                           ),
@@ -2392,7 +2395,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           Text(
             label,
             style: CockpitTypography.label(
-              fontSize: 11,
+              fontSize: 11.5,
               fontWeight: FontWeight.w700,
               color: color,
             ),
@@ -2470,11 +2473,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       decoration: InputDecoration(
         labelText: label,
         labelStyle: CockpitTypography.label(
-          fontSize: 12,
+          fontSize: 12.5,
           color: LuxeColors.muted,
         ),
         hintText: hint,
-        hintStyle: CockpitTypography.body(fontSize: 12, color: LuxeColors.dim),
+        hintStyle: CockpitTypography.body(
+          fontSize: 12.5,
+          color: LuxeColors.dim,
+        ),
         prefixIcon: prefixIcon != null
             ? Icon(prefixIcon, color: LuxeColors.muted, size: 18)
             : null,
@@ -2538,7 +2544,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           label,
           textAlign: TextAlign.center,
           style: CockpitTypography.label(
-            fontSize: 12,
+            fontSize: 12.5,
             fontWeight: FontWeight.w700,
             color: isPrimary ? LuxeColors.emerald : LuxeColors.text,
           ),
@@ -2571,7 +2577,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               Text(
                 subtitle,
                 style: CockpitTypography.label(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   color: LuxeColors.muted,
                 ),
               ),
@@ -2627,11 +2633,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         backgroundColor: _ui.surface,
         title: Text(
           'Xác nhận test relay không tải',
-          style: TextStyle(color: _ui.text),
+          style: TextStyle(color: LuxeColors.text),
         ),
         content: Text(
           'Rút sạc xe và mọi tải khỏi Shelly. App sẽ đọc Safe Boot qua Cloud, bật relay 5 giây bằng device timer, gửi OFF và đọc lại. Không chạy test khi còn tải.',
-          style: TextStyle(color: _ui.muted),
+          style: TextStyle(color: LuxeColors.muted),
         ),
         actions: [
           TextButton(
@@ -2754,7 +2760,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   Text(
                     'Chi tiết kỹ thuật cảm biến',
                     style: CockpitTypography.heading(
-                      fontSize: 16,
+                      fontSize: 15.5,
                       fontWeight: FontWeight.w800,
                       color: LuxeColors.text,
                     ),
@@ -2789,7 +2795,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         title: Text(
           'Chỉnh công suất sạc',
           style: CockpitTypography.heading(
-            fontSize: 16,
+            fontSize: 15.5,
             fontWeight: FontWeight.w700,
             color: LuxeColors.text,
           ),
@@ -2809,7 +2815,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             ),
             labelText: 'Công suất (W)',
             labelStyle: CockpitTypography.label(
-              fontSize: 12,
+              fontSize: 12.5,
               color: LuxeColors.muted,
             ),
             filled: true,
@@ -2830,7 +2836,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             child: Text(
               'HỦY',
               style: CockpitTypography.label(
-                fontSize: 12,
+                fontSize: 12.5,
                 color: LuxeColors.muted,
               ),
             ),
@@ -2850,7 +2856,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             child: Text(
               'LƯU',
               style: CockpitTypography.label(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w800,
                 color: LuxeColors.shell,
               ),
@@ -2873,7 +2879,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         title: Text(
           'Chỉnh đơn giá điện',
           style: CockpitTypography.heading(
-            fontSize: 16,
+            fontSize: 15.5,
             fontWeight: FontWeight.w700,
             color: LuxeColors.text,
           ),
@@ -2893,7 +2899,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             ),
             labelText: 'Đơn giá',
             labelStyle: CockpitTypography.label(
-              fontSize: 12,
+              fontSize: 12.5,
               color: LuxeColors.muted,
             ),
             filled: true,
@@ -2914,7 +2920,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             child: Text(
               'HỦY',
               style: CockpitTypography.label(
-                fontSize: 12,
+                fontSize: 12.5,
                 color: LuxeColors.muted,
               ),
             ),
@@ -2934,7 +2940,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             child: Text(
               'LƯU',
               style: CockpitTypography.label(
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w800,
                 color: LuxeColors.shell,
               ),

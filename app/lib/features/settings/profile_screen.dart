@@ -551,7 +551,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               value,
               textAlign: TextAlign.right,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: LuxeColors.text, fontSize: 13.5),
+              style: const TextStyle(color: LuxeColors.text, fontSize: 13),
             ),
           ),
         ],

@@ -50,7 +50,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
               'Đồng bộ lần cuối ${DateFormat('HH:mm').format(syncedAt!.toLocal())}',
-              style: const TextStyle(color: LuxeColors.dim, fontSize: 12),
+              style: const TextStyle(color: LuxeColors.dim, fontSize: 12.5),
             ),
           ),
         if (sessions.isEmpty)
@@ -191,7 +191,7 @@ class _SessionTile extends StatelessWidget {
                           label,
                           style: TextStyle(
                             color: color,
-                            fontSize: 12,
+                            fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

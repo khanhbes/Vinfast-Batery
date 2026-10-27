@@ -305,7 +305,7 @@ class _GettingStartedScreenState extends State<GettingStartedScreen>
                   child: LuxeMetalText(
                     'PINOVA',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 12.5,
                       fontWeight: FontWeight.w400,
                       letterSpacing: 3.6,
                     ),
@@ -425,7 +425,7 @@ class _GettingStartedScreenState extends State<GettingStartedScreen>
                                   page.body,
                                   style: const TextStyle(
                                     color: LuxeColors.muted,
-                                    fontSize: 14.5,
+                                    fontSize: 14,
                                     height: 1.55,
                                   ),
                                 ),

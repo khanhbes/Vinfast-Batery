@@ -192,7 +192,7 @@ class _CommandProgressStripState extends State<CommandProgressStrip> {
                           color: verified
                               ? LuxeColors.emerald
                               : LuxeColors.text,
-                          fontSize: 16,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -227,7 +227,7 @@ class _CommandProgressStripState extends State<CommandProgressStrip> {
                               '· $usual',
                               style: const TextStyle(
                                 color: LuxeColors.dim,
-                                fontSize: 12,
+                                fontSize: 12.5,
                               ),
                             ),
                           ],

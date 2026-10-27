@@ -86,7 +86,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                   'Lịch bảo dưỡng',
                   style: TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 18,
+                    fontSize: 19,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1385,7 +1385,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                           : 'Thêm mốc bảo dưỡng',
                       style: const TextStyle(
                         color: _Lx.textPrimary,
-                        fontSize: 18,
+                        fontSize: 19,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1476,7 +1476,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
       text,
       style: TextStyle(
         color: _Lx.textSecondary,
-        fontSize: 12,
+        fontSize: 12.5,
         fontWeight: FontWeight.w700,
         letterSpacing: 0.4,
       ),
@@ -1544,7 +1544,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                     'Loại dịch vụ',
                     style: TextStyle(
                       color: _Lx.textTertiary,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.4,
                     ),
@@ -1590,7 +1590,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               entry.key.toUpperCase(),
               style: TextStyle(
                 color: _Lx.textTertiary,
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.6,
               ),
@@ -1777,7 +1777,7 @@ class _PresetCard extends StatelessWidget {
                     '${(preset.suggestedOdoInterval / 1000).toStringAsFixed(preset.suggestedOdoInterval >= 1000 ? 0 : 1)}k',
                     style: TextStyle(
                       color: meta.color,
-                      fontSize: 10,
+                      fontSize: 11,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -1791,7 +1791,7 @@ class _PresetCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: selected ? meta.color : _Lx.textPrimary,
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1803,7 +1803,7 @@ class _PresetCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: _Lx.textSecondary,
-                  fontSize: 10,
+                  fontSize: 11,
                   height: 1.25,
                 ),
               ),
@@ -1838,7 +1838,7 @@ class _TypePickerSheet extends StatelessWidget {
               'Chọn loại dịch vụ',
               style: TextStyle(
                 color: _Lx.textPrimary,
-                fontSize: 16,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1858,7 +1858,7 @@ class _TypePickerSheet extends StatelessWidget {
                           entry.key.toUpperCase(),
                           style: TextStyle(
                             color: _Lx.textTertiary,
-                            fontSize: 10,
+                            fontSize: 11,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.6,
                           ),
@@ -1911,7 +1911,7 @@ class _TypePickerSheet extends StatelessWidget {
               meta.label,
               style: TextStyle(
                 color: selected ? meta.color : _Lx.textSecondary,
-                fontSize: 12,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w700,
               ),
             ),

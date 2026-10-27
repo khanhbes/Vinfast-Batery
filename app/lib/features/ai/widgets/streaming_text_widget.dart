@@ -89,7 +89,7 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
               child: Text(
                 'Đang chuẩn bị câu trả lời…',
                 style: textStyle?.copyWith(
-                  fontSize: 12,
+                  fontSize: 12.5,
                   fontStyle: FontStyle.italic,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),

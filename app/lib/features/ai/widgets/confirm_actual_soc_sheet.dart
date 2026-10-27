@@ -251,7 +251,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
                         const Text(
                           '%',
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 19,
                             fontWeight: FontWeight.w300,
                             color: LuxeColors.muted,
                           ),

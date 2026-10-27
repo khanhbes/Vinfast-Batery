@@ -392,7 +392,7 @@ class _NoticeOverlay extends StatelessWidget {
                                 padding: const EdgeInsets.only(top: 13),
                                 child: Text(
                                   title,
-                                  style: LuxeText.item.copyWith(fontSize: 14.5),
+                                  style: LuxeText.item.copyWith(fontSize: 14),
                                 ),
                               ),
                             ),
@@ -417,7 +417,7 @@ class _NoticeOverlay extends StatelessWidget {
                             child: Text(
                               detail!,
                               style: LuxeText.caption.copyWith(
-                                fontSize: 13.5,
+                                fontSize: 13,
                                 height: 1.45,
                               ),
                             ),

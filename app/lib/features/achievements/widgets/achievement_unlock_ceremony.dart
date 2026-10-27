@@ -311,7 +311,7 @@ class _CeremonyState extends State<_Ceremony> with TickerProviderStateMixin {
                   def.rarity.label,
                   style: TextStyle(
                     color: def.rarity.metal[0],
-                    fontSize: 12,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.6,
                   ),
