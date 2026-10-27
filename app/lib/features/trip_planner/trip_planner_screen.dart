@@ -380,7 +380,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
         child: OutlinedButton.icon(
           key: const ValueKey('trip-record-start'),
           onPressed: _startTrip,
-          icon: const Icon(Icons.fiber_manual_record_outlined),
+          icon: const Icon(Icons.fiber_manual_record_rounded),
           label: const Text('Bắt đầu đi & ghi chuyến để AI học'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(50),
@@ -648,7 +648,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   }
 
   void _notice(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    AppPopup.showMessage(text);
   }
 
   // ── UI ──────────────────────────────────────────────────────────────────
@@ -1047,7 +1047,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
       message = 'Chạm vào vòng pin ở trên để nhập mức pin hiện tại của xe.';
     } else if (_catalogKmPerPct == null && _personalKmPerPct == null) {
       message =
-          'Xe chưa có định mức km cho mỗi 1 % pin. Hãy chọn đúng dòng xe trong Xe của tôi.';
+          'Xe chưa có định mức km cho mỗi 1% pin. Hãy chọn đúng dòng xe trong Xe của tôi.';
     } else {
       message =
           'Chọn điểm đi và điểm đến, hoặc nhập quãng đường, để xem pin có đủ không.';
@@ -1245,9 +1245,9 @@ class _TripResultCard extends StatelessWidget {
                   '${plan.kmPerPct.toStringAsFixed(2)} km cho 1% (số ở Tổng quan).',
             TripKmSource.personal =>
               'Dựa trên $personalPairs lần sạc có ODO của xe bạn '
-                  '(khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %).',
+                  '(khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%).',
             TripKmSource.catalog =>
-              'Theo định mức dòng xe (khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1 %). '
+              'Theo định mức dòng xe (khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%). '
                   'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
           }, style: LuxeText.caption.copyWith(fontSize: 12)),
           if (plan.suggestions.isNotEmpty) ...[
@@ -1312,13 +1312,13 @@ class _SuggestionRow extends StatelessWidget {
         null,
       ),
       TripSuggestionKind.chargeAtDestination => (
-        Icons.home_work_outlined,
+        Icons.home_work_rounded,
         'Đủ pin để tới nơi; hãy sạc ở điểm đến trước khi quay về.',
         null,
         null,
       ),
       TripSuggestionKind.rideEco => (
-        Icons.eco_outlined,
+        Icons.eco_rounded,
         'Chạy chậm lại tiết kiệm khoảng ${suggestion.savedPct!.round()}% pin.',
         'Áp dụng',
         onEco,
@@ -1737,7 +1737,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
             onSubmitted: (_) => _search(),
             style: const TextStyle(color: LuxeColors.text),
             decoration: InputDecoration(
-              hintText: 'Tên đường, địa điểm, quận...',
+              hintText: 'Tên đường, địa điểm, quận…',
               prefixIcon: const Icon(Icons.search_rounded),
               suffixIcon: IconButton(
                 tooltip: 'Tìm',
@@ -1782,7 +1782,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                           child: Row(
                             children: [
                               const LuxeMedallion(
-                                icon: Icons.location_on_outlined,
+                                icon: Icons.location_on_rounded,
                                 size: 38,
                               ),
                               const SizedBox(width: 14),
@@ -1882,7 +1882,7 @@ class _MapPin extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: LuxeColors.platinumHi,
-                border: Border.all(color: const Color(0xFF0B0C0E), width: 2),
+                border: Border.all(color: LuxeColors.shell, width: 2),
               ),
             ),
           ),
@@ -1895,12 +1895,12 @@ class _MapPin extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [LuxeColors.platinumHi, LuxeColors.platinumMid],
             ),
-            border: Border.all(color: const Color(0xFF0B0C0E), width: 2),
+            border: Border.all(color: LuxeColors.shell, width: 2),
             boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10)],
           ),
           child: const Icon(
             Icons.flag_rounded,
-            color: Color(0xFF0B0C0E),
+            color: LuxeColors.shell,
             size: 20,
           ),
         );

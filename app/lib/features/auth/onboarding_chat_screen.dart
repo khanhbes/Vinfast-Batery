@@ -1176,7 +1176,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
-                  Icons.electric_scooter_outlined,
+                  Icons.electric_scooter_rounded,
                   size: 16,
                   color: LuxeColors.emerald,
                 ),
@@ -1249,7 +1249,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                 ? OnboardingService.validateDateOfBirth(text)
                 : null,
             errorMaxLines: 3,
-            prefixIcon: const Icon(Icons.cake_outlined),
+            prefixIcon: const Icon(Icons.cake_rounded),
             suffixIcon: IconButton(
               onPressed: _pickDateOfBirth,
               tooltip: 'Chọn ngày sinh trên lịch',
@@ -1413,7 +1413,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         id: 'delivery',
         title: 'Giao hàng / Chạy xe',
         detail: 'Dùng xe cho công việc di chuyển',
-        icon: Icons.local_shipping_outlined,
+        icon: Icons.local_shipping_rounded,
       ),
       (
         id: 'leisure',
@@ -1572,20 +1572,20 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _plainInfo(
-          Icons.power_outlined,
+          Icons.power_rounded,
           'Thiết lập bộ sạc',
           'Ứng dụng sẽ hướng dẫn kiểm tra kết nối và an toàn. Chỉ điều khiển sau khi thiết bị được xác minh.',
         ),
         const SizedBox(height: 10),
         _plainInfo(
-          Icons.timer_outlined,
+          Icons.timer_rounded,
           'Tự ngắt bằng bộ đếm phần cứng',
           'Hẹn giờ được nạp vào rơ-le, an toàn kể cả khi điện thoại mất mạng.',
         ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: _isSubmitting ? null : _openShellySetup,
-          icon: const Icon(Icons.settings_input_component_outlined, size: 18),
+          icon: const Icon(Icons.settings_input_component_rounded, size: 18),
           label: const Text('Thiết lập ngay', textAlign: TextAlign.center),
         ),
         if (_shellySetupMessage != null) ...[
@@ -1607,20 +1607,20 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _plainInfo(
-          Icons.battery_charging_full_outlined,
+          Icons.battery_charging_full_rounded,
           'Theo dõi trạng thái sạc',
           'Nhận thông báo khi có cập nhật từ phiên sạc.',
         ),
         const SizedBox(height: 10),
         _plainInfo(
-          Icons.build_outlined,
+          Icons.build_rounded,
           'Nhắc nhở bảo dưỡng',
           'Nhận lời nhắc theo thiết lập của bạn.',
         ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
           onPressed: _isSubmitting ? null : () => _chooseNotifications(true),
-          icon: const Icon(Icons.notifications_active_outlined, size: 18),
+          icon: const Icon(Icons.notifications_active_rounded, size: 18),
           label: const Text('Bật thông báo', textAlign: TextAlign.center),
         ),
         const SizedBox(height: 6),
@@ -2194,7 +2194,7 @@ class OnboardingStepFrame extends StatelessWidget {
                         DecoratedBox(
                           decoration: const BoxDecoration(
                             border: Border(
-                              top: BorderSide(color: Color(0x0FFFFFFF)),
+                              top: BorderSide(color: LuxeColors.glass),
                             ),
                           ),
                           child: Padding(
@@ -2464,7 +2464,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
       const Duration(milliseconds: 260),
     );
     final fallback = Icon(
-      Icons.electric_scooter_outlined,
+      Icons.electric_scooter_rounded,
       color: selected ? LuxeColors.emerald : LuxeColors.platinumMid,
       size: 28,
     );
@@ -2496,7 +2496,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
                     borderRadius: BorderRadius.circular(16),
                     gradient: const RadialGradient(
                       center: Alignment(0, -0.3),
-                      colors: [Color(0x1FFFFFFF), Color(0x05FFFFFF)],
+                      colors: [LuxeColors.hairline, Color(0x05FFFFFF)],
                     ),
                     border: Border.all(color: LuxeColors.hairline),
                   ),

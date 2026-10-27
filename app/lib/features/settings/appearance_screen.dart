@@ -12,6 +12,7 @@ import '../../core/providers/entitlement_provider.dart';
 import '../../data/models/app_appearance.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
+import '../../core/widgets/app_popup.dart';
 
 /// Cài đặt → Giao diện (QA 131): the Overview layout, the Charge tab layout
 /// and how the charger is switched ON. Saved per account, so every phone
@@ -58,7 +59,7 @@ class AppearanceScreen extends ConsumerWidget {
             const SizedBox(height: 12),
             const LuxeNotice(
               key: ValueKey('appearance-premium-notice'),
-              icon: Icons.workspace_premium_outlined,
+              icon: Icons.workspace_premium_rounded,
               color: LuxeColors.champagne,
               message:
                   'Kiểu Tổng quan và tab Sạc thuộc gói Pro. Kiểu bật sạc '
@@ -179,10 +180,9 @@ class AppearanceScreen extends ConsumerWidget {
             ),
             label: 'Vuốt để thử (không bật sạc)',
             onConfirmed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Đúng rồi — đây chỉ là thử, không bật sạc.'),
-                ),
+              AppPopup.showMessage(
+                'Đúng rồi — đây chỉ là thử, không bật sạc.',
+                kind: AppNoticeKind.info,
               );
             },
           ),

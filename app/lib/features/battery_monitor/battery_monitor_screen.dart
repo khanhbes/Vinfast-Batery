@@ -143,7 +143,7 @@ class BatteryMonitorScreen extends ConsumerWidget {
                         reserveTagSpace: true,
                         child: LuxeSettingsRow(
                           key: const ValueKey('monitor-battery-health'),
-                          icon: Icons.health_and_safety_outlined,
+                          icon: Icons.health_and_safety_rounded,
                           title: '% pin chai',
                           subtitle:
                               'Dung lượng pin còn lại, ước tính và bài kiểm tra',

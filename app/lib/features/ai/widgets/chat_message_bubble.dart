@@ -7,12 +7,11 @@ import '../../../core/utils/battery_bot_faq.dart';
 import '../models/chat_message.dart';
 import '../models/function_call_action.dart';
 import 'action_confirmation_card.dart';
-import 'battery_status_card.dart';
 import 'breathing_bot_avatar.dart';
-import 'charging_progress_card.dart';
 import 'streaming_text_widget.dart';
 import 'trip_plan_chat_card.dart';
-import 'trip_summary_card.dart';
+import '../../../core/widgets/app_popup.dart';
+import '../../../core/theme/luxe_theme.dart';
 
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
@@ -41,12 +40,9 @@ class ChatMessageBubble extends StatelessWidget {
   void _copyToClipboard(BuildContext context) {
     Clipboard.setData(ClipboardData(text: message.content));
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Đã sao chép nội dung tin nhắn'),
-        duration: Duration(milliseconds: 1500),
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppPopup.showMessage(
+      'Đã sao chép nội dung tin nhắn',
+      kind: AppNoticeKind.success,
     );
   }
 
@@ -118,11 +114,11 @@ class ChatMessageBubble extends StatelessWidget {
                     : const LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [Color(0xFFF7F7F5), Color(0xFFD3D6DA)],
+                        colors: [LuxeColors.platinumHi, Color(0xFFD3D6DA)],
                       ),
-                color: message.isQueued ? const Color(0xFF1D1F22) : null,
+                color: message.isQueued ? LuxeColors.raisedHigh : null,
                 border: message.isQueued
-                    ? Border.all(color: const Color(0x38FFFFFF))
+                    ? Border.all(color: LuxeColors.hairlineStrong)
                     : null,
                 boxShadow: message.isQueued
                     ? null
@@ -137,9 +133,7 @@ class ChatMessageBubble extends StatelessWidget {
               child: Text(
                 message.content,
                 style: TextStyle(
-                  color: message.isQueued
-                      ? const Color(0xFFF2F2F0)
-                      : const Color(0xFF0B0C0E),
+                  color: message.isQueued ? LuxeColors.text : LuxeColors.shell,
                   fontSize: 15,
                   height: 1.4,
                 ),
@@ -153,16 +147,13 @@ class ChatMessageBubble extends StatelessWidget {
                   const Icon(
                     Icons.schedule_rounded,
                     size: 12,
-                    color: Color(0xFF858990),
+                    color: LuxeColors.dim,
                   ),
                   const SizedBox(width: 4),
                 ],
                 Text(
                   message.isQueued ? 'Chờ mạng' : timeStr,
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0xFF858990),
-                  ),
+                  style: const TextStyle(fontSize: 10.5, color: LuxeColors.dim),
                 ),
               ],
             ),
@@ -180,7 +171,7 @@ class ChatMessageBubble extends StatelessWidget {
   ) {
     // Luxe: BatteryBot answers as open text (no bubble) under a small
     // signature line; cards and actions sit flush with the text.
-    const dim = Color(0xFF858990);
+    const dim = LuxeColors.dim;
     // Only a heading: the rendered answer below is read as text (the raw
     // content here read "**" markdown and the answer twice, QA 129), and
     // its cards and buttons stay reachable.
@@ -276,13 +267,13 @@ class ChatMessageBubble extends StatelessWidget {
                     onTap: _shareMessage,
                   ),
                   _FeedbackButton(
-                    icon: Icons.thumb_up_alt_outlined,
+                    icon: Icons.thumb_up_alt_rounded,
                     activeIcon: Icons.thumb_up_alt_rounded,
                     isSelected: message.userFeedback == 'like',
                     onTap: () => onFeedback?.call('like'),
                   ),
                   _FeedbackButton(
-                    icon: Icons.thumb_down_alt_outlined,
+                    icon: Icons.thumb_down_alt_rounded,
                     activeIcon: Icons.thumb_down_alt_rounded,
                     isSelected: message.userFeedback == 'dislike',
                     onTap: () => onFeedback?.call('dislike'),
@@ -311,7 +302,7 @@ class ChatMessageBubble extends StatelessWidget {
 
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF34D399),
+        foregroundColor: LuxeColors.emerald,
         side: const BorderSide(color: Color(0x8034D399)),
         backgroundColor: const Color(0x1434D399),
         minimumSize: const Size(48, 48),
@@ -426,23 +417,10 @@ class ChatMessageBubble extends StatelessWidget {
             ),
           ),
         );
-      case 'battery_status':
-        return BatteryStatusCard(
-          title: title.isNotEmpty ? title : 'Trạng thái Pin & Xe',
-          data: data,
-        );
-      case 'charging_progress':
-        return ChargingProgressCard(
-          title: title.isNotEmpty ? title : 'Tiến độ Sạc Thông Minh',
-          data: data,
-        );
       case 'trip_plan':
         return TripPlanChatCard(title: title, data: data);
-      case 'trip_summary':
-        return TripSummaryCard(
-          title: title.isNotEmpty ? title : 'Tóm tắt Chuyến đi & Hiệu suất',
-          data: data,
-        );
+      // QA 139: battery_status, charging_progress and trip_summary cards
+      // are no longer sent by Pinova Bot; anything unknown shows nothing.
       default:
         return const SizedBox.shrink();
     }
@@ -464,7 +442,7 @@ class _BubbleActionButton extends StatelessWidget {
   Widget build(BuildContext context) => IconButton(
     tooltip: tooltip,
     onPressed: onTap,
-    icon: Icon(icon, size: 16, color: const Color(0xFF858990)),
+    icon: Icon(icon, size: 16, color: LuxeColors.dim),
   );
 }
 
@@ -485,7 +463,7 @@ class _FeedbackButton extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     selected: isSelected,
-    label: icon == Icons.thumb_up_alt_outlined ? 'Hữu ích' : 'Chưa hữu ích',
+    label: icon == Icons.thumb_up_alt_rounded ? 'Hữu ích' : 'Chưa hữu ích',
     excludeSemantics: true,
     child: IconButton(
       onPressed: onTap,
@@ -497,7 +475,7 @@ class _FeedbackButton extends StatelessWidget {
           isSelected ? activeIcon : icon,
           key: ValueKey(isSelected),
           size: 16,
-          color: isSelected ? const Color(0xFF34D399) : const Color(0xFF858990),
+          color: isSelected ? LuxeColors.emerald : LuxeColors.dim,
         ),
       ),
     ),

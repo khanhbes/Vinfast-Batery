@@ -14,6 +14,7 @@ import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
 import '../support/help_center_screen.dart';
+import '../../core/widgets/app_popup.dart';
 
 /// Provider cho stream thông báo
 final notificationsProvider = StreamProvider.autoDispose
@@ -118,7 +119,7 @@ class _NotificationCenterScreenState
               : LuxeCircleButton(
                   tooltip: 'Xóa tất cả thông báo',
                   onPressed: hasItems ? _confirmDeleteAll : null,
-                  icon: Icons.delete_sweep_outlined,
+                  icon: Icons.delete_sweep_rounded,
                 ),
         ],
       ),
@@ -217,7 +218,7 @@ class _NotificationCenterScreenState
     if (notifications.isNotEmpty) return _buildNotificationList(notifications);
     return _buildScrollableState(
       const EmptyState(
-        icon: Icons.notifications_off_outlined,
+        icon: Icons.notifications_off_rounded,
         title: 'Chưa có thông báo',
         message: 'Thông báo về pin, phiên sạc và bảo dưỡng sẽ xuất hiện ở đây.',
       ),
@@ -324,14 +325,11 @@ class _NotificationCenterScreenState
         ref.invalidate(notificationsProvider(uid));
         ref.invalidate(unreadCountProvider(uid));
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Đã đánh dấu tất cả là đã đọc'
-                : 'Không thể đánh dấu đã đọc. Vui lòng thử lại.',
-          ),
-        ),
+      AppPopup.showMessage(
+        success
+            ? 'Đã đánh dấu tất cả là đã đọc'
+            : 'Không thể đánh dấu đã đọc. Vui lòng thử lại.',
+        kind: success ? AppNoticeKind.success : AppNoticeKind.error,
       );
     }
   }
@@ -353,14 +351,11 @@ class _NotificationCenterScreenState
       ref.invalidate(notificationsProvider(_currentUid));
       ref.invalidate(unreadCountProvider(_currentUid));
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          deleted
-              ? 'Đã xóa tất cả thông báo'
-              : 'Không thể xóa thông báo. Vui lòng thử lại.',
-        ),
-      ),
+    AppPopup.showMessage(
+      deleted
+          ? 'Đã xóa tất cả thông báo'
+          : 'Không thể xóa thông báo. Vui lòng thử lại.',
+      kind: deleted ? AppNoticeKind.success : AppNoticeKind.error,
     );
   }
 
@@ -433,10 +428,9 @@ class _NotificationCenterScreenState
       ref.invalidate(notificationsProvider(uid));
       ref.invalidate(unreadCountProvider(uid));
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Không thể lưu thay đổi. Vui lòng thử lại.'),
-        ),
+      AppPopup.showMessage(
+        'Không thể lưu thay đổi. Vui lòng thử lại.',
+        kind: AppNoticeKind.error,
       );
     }
     return archived;
@@ -486,7 +480,7 @@ class _NotificationCard extends StatelessWidget {
                 ),
               ),
               SizedBox(width: 8),
-              Icon(Icons.archive_outlined, color: LuxeColors.danger),
+              Icon(Icons.archive_rounded, color: LuxeColors.danger),
             ],
           ),
         ),
@@ -847,12 +841,12 @@ class _NotificationDetailSheet extends StatelessWidget {
     'Đồng bộ xong',
   ),
   NotificationType.syncFailed => (
-    Icons.cancel_outlined,
+    Icons.cancel_rounded,
     LuxeColors.danger,
     'Lỗi đồng bộ',
   ),
   NotificationType.maintenanceDue => (
-    Icons.build_outlined,
+    Icons.build_rounded,
     LuxeColors.champagne,
     'Bảo dưỡng',
   ),

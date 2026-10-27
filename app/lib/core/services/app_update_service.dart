@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../theme/app_colors.dart';
 import 'api_service.dart';
 import 'notification_center_service.dart';
 import 'app_feature_flags.dart';
+import '../../core/widgets/app_popup.dart';
+import '../../core/theme/luxe_theme.dart';
 
 /// Kiểm tra version mới + remote config từ /api/app/config và hiển thị
 /// dialog cập nhật (optional hoặc forced).
@@ -355,19 +356,19 @@ class _UpdateDialogState extends State<_UpdateDialog> {
         : _store;
 
     return AlertDialog(
-      backgroundColor: AppColors.card,
+      backgroundColor: LuxeColors.sheet,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primary.withAlpha(28),
+              color: LuxeColors.emerald.withAlpha(28),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.system_update_rounded,
-              color: AppColors.primary,
+              color: LuxeColors.emerald,
               size: 22,
             ),
           ),
@@ -376,7 +377,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             child: Text(
               forceUpdate ? 'Cập nhật bắt buộc' : 'Có phiên bản mới',
               style: const TextStyle(
-                color: AppColors.textPrimary,
+                color: LuxeColors.text,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
               ),
@@ -394,17 +395,11 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               children: [
                 const Text(
                   'Hiện tại: ',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 12),
                 ),
                 Text(
                   currentVersion,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 12,
-                  ),
+                  style: const TextStyle(color: LuxeColors.text, fontSize: 12),
                 ),
               ],
             ),
@@ -413,17 +408,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               children: [
                 const Text(
                   'Mới nhất: ',
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 12),
                 ),
                 Text(
                   latestBuild > 0
                       ? '$latestVersion+$latestBuild'
                       : latestVersion,
                   style: const TextStyle(
-                    color: AppColors.primary,
+                    color: LuxeColors.emerald,
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),
@@ -434,14 +426,14 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: AppColors.surfaceLight,
+                color: LuxeColors.raised,
                 borderRadius: BorderRadius.circular(999),
-                border: Border.all(color: AppColors.glassBorder),
+                border: Border.all(color: LuxeColors.rule),
               ),
               child: Text(
                 channelLabel,
                 style: const TextStyle(
-                  color: AppColors.textSecondary,
+                  color: LuxeColors.muted,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
@@ -452,7 +444,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               const Text(
                 'Có gì mới',
                 style: TextStyle(
-                  color: AppColors.textPrimary,
+                  color: LuxeColors.text,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
@@ -463,7 +455,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceLight,
+                  color: LuxeColors.raised,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: _buildReleaseNotes(releaseNotes),
@@ -477,13 +469,13 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withAlpha(30),
+                  color: LuxeColors.danger.withAlpha(30),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
                   'Bắt buộc cập nhật để tiếp tục sử dụng',
                   style: TextStyle(
-                    color: AppColors.error,
+                    color: LuxeColors.danger,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                   ),
@@ -494,7 +486,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               const SizedBox(height: 12),
               Text(
                 _downloadError!,
-                style: const TextStyle(color: AppColors.error, fontSize: 11),
+                style: const TextStyle(color: LuxeColors.danger, fontSize: 11),
               ),
             ],
           ],
@@ -508,7 +500,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 : () => Navigator.pop(context, _UpdateDialogAction.later),
             child: const Text(
               'Để sau',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: LuxeColors.muted),
             ),
           ),
         FilledButton.icon(
@@ -521,8 +513,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ),
           label: Text(_downloadError == null ? 'Cập nhật' : 'Thử lại'),
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.background,
+            backgroundColor: LuxeColors.emerald,
+            foregroundColor: LuxeColors.background,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -535,11 +527,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   /// Opens Google Play or the App Store at Pinova (QA 138: no APK download).
   Future<void> _download(BuildContext context) async {
     if (deliveryMode == _UpdateDeliveryMode.shorebird) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Bản vá sẽ tự áp dụng khi bạn mở lại app.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppPopup.showMessage(
+        'Bản vá sẽ tự áp dụng khi bạn mở lại app.',
+        kind: AppNoticeKind.info,
       );
       Navigator.pop(context, _UpdateDialogAction.updateNow);
       return;
@@ -589,7 +579,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       return Text(
         raw,
         style: const TextStyle(
-          color: AppColors.textSecondary,
+          color: LuxeColors.muted,
           fontSize: 12,
           height: 1.5,
         ),
@@ -606,7 +596,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
               children: [
                 const Text(
                   '• ',
-                  style: TextStyle(color: AppColors.primary, fontSize: 12),
+                  style: TextStyle(color: LuxeColors.emerald, fontSize: 12),
                 ),
                 Expanded(
                   child: Text(
@@ -614,7 +604,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                         ? line.substring(1).trim()
                         : line,
                     style: const TextStyle(
-                      color: AppColors.textSecondary,
+                      color: LuxeColors.muted,
                       fontSize: 12,
                       height: 1.4,
                     ),

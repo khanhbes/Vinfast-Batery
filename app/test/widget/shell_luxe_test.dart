@@ -39,7 +39,7 @@ void main() {
     final theme = AppTheme.darkTheme;
     expect(theme.brightness, Brightness.dark);
     expect(theme.scaffoldBackgroundColor, LuxeColors.background);
-    expect(theme.colorScheme.primary, LuxeColors.emerald);
+    expect(theme.colorScheme.primary, LuxeColors.platinumHi); // QA 139
     expect(identical(theme, LuxeTheme.data()), isTrue);
     expect(
       theme.pageTransitionsTheme.builders[TargetPlatform.android],

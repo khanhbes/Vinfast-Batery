@@ -851,7 +851,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.shield_outlined, size: 15),
+                        Icon(Icons.shield_rounded, size: 15),
                         SizedBox(width: 6),
                         Text('Bảo vệ'),
                       ],
@@ -910,16 +910,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: CockpitColors.elevated,
+                      color: LuxeColors.raised,
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: CockpitColors.border),
+                      border: Border.all(color: LuxeColors.rule),
                     ),
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
                         const Icon(
                           Icons.power_settings_new_rounded,
-                          color: CockpitColors.muted,
+                          color: LuxeColors.muted,
                           size: 22,
                         ),
                         Positioned(
@@ -929,7 +929,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             width: 6,
                             height: 6,
                             decoration: const BoxDecoration(
-                              color: CockpitColors.emerald,
+                              color: LuxeColors.emerald,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -947,7 +947,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           style: CockpitTypography.heading(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: CockpitColors.text,
+                            color: LuxeColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -955,7 +955,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           'Hẹn giờ tự ngắt & giám sát an toàn',
                           style: CockpitTypography.label(
                             fontSize: 12,
-                            color: CockpitColors.muted,
+                            color: LuxeColors.muted,
                           ),
                         ),
                       ],
@@ -967,9 +967,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: CockpitColors.emeraldSubtle,
+                      color: LuxeColors.emeraldTint,
                       borderRadius: BorderRadius.circular(CockpitRadius.full),
-                      border: Border.all(color: CockpitColors.emeraldGlow),
+                      border: Border.all(color: LuxeColors.emeraldSoft),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -978,7 +978,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           width: 6,
                           height: 6,
                           decoration: const BoxDecoration(
-                            color: CockpitColors.emerald,
+                            color: LuxeColors.emerald,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -988,7 +988,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           style: CockpitTypography.label(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: CockpitColors.emerald,
+                            color: LuxeColors.emerald,
                           ),
                         ),
                       ],
@@ -1035,7 +1035,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     'Đo lúc $lastCheckedTime',
                     style: CockpitTypography.numbers(
                       fontSize: 11,
-                      color: CockpitColors.dim,
+                      color: LuxeColors.dim,
                     ),
                   ),
                   SizedBox(
@@ -1043,8 +1043,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     child: FilledButton.icon(
                       onPressed: busy ? null : _verifyAll,
                       style: FilledButton.styleFrom(
-                        backgroundColor: CockpitColors.emerald,
-                        foregroundColor: CockpitColors.shell,
+                        backgroundColor: LuxeColors.emerald,
+                        foregroundColor: LuxeColors.shell,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
@@ -1058,7 +1058,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: CockpitColors.shell,
+                          color: LuxeColors.shell,
                         ),
                       ),
                     ),
@@ -1080,13 +1080,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: CockpitColors.elevated,
+                  color: LuxeColors.raised,
                   borderRadius: BorderRadius.circular(CockpitRadius.small),
-                  border: Border.all(color: CockpitColors.border),
+                  border: Border.all(color: LuxeColors.rule),
                 ),
                 child: const Icon(
                   Icons.bolt_rounded,
-                  color: CockpitColors.emerald,
+                  color: LuxeColors.emerald,
                   size: 20,
                 ),
               ),
@@ -1100,7 +1100,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       style: CockpitTypography.heading(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: CockpitColors.text,
+                        color: LuxeColors.text,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1108,7 +1108,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       vehiclePlate,
                       style: CockpitTypography.numbers(
                         fontSize: 12,
-                        color: CockpitColors.muted,
+                        color: LuxeColors.muted,
                       ),
                     ),
                   ],
@@ -1118,8 +1118,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 height: 36,
                 child: OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: CockpitColors.text,
-                    side: const BorderSide(color: CockpitColors.border),
+                    foregroundColor: LuxeColors.text,
+                    side: const BorderSide(color: LuxeColors.rule),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(CockpitRadius.small),
                     ),
@@ -1131,7 +1131,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     style: CockpitTypography.label(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: CockpitColors.text,
+                      color: LuxeColors.text,
                     ),
                   ),
                 ),
@@ -1164,7 +1164,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             'Công suất sạc',
                             style: CockpitTypography.label(
                               fontSize: 12,
-                              color: CockpitColors.muted,
+                              color: LuxeColors.muted,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1173,20 +1173,20 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             style: CockpitTypography.numbers(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: CockpitColors.emerald,
+                              color: LuxeColors.emerald,
                             ),
                           ),
                         ],
                       ),
                       const Icon(
                         Icons.chevron_right_rounded,
-                        color: CockpitColors.muted,
+                        color: LuxeColors.muted,
                       ),
                     ],
                   ),
                 ),
               ),
-              const Divider(height: 1, color: CockpitColors.border),
+              const Divider(height: 1, color: LuxeColors.rule),
               InkWell(
                 borderRadius: const BorderRadius.vertical(
                   bottom: Radius.circular(CockpitRadius.large),
@@ -1204,7 +1204,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             'Đơn giá điện',
                             style: CockpitTypography.label(
                               fontSize: 12,
-                              color: CockpitColors.muted,
+                              color: LuxeColors.muted,
                             ),
                           ),
                           const SizedBox(height: 4),
@@ -1213,14 +1213,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             style: CockpitTypography.numbers(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
-                              color: CockpitColors.text,
+                              color: LuxeColors.text,
                             ),
                           ),
                         ],
                       ),
                       const Icon(
                         Icons.chevron_right_rounded,
-                        color: CockpitColors.muted,
+                        color: LuxeColors.muted,
                       ),
                     ],
                   ),
@@ -1249,7 +1249,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         children: [
                           const Icon(
                             Icons.wifi_rounded,
-                            color: CockpitColors.emerald,
+                            color: LuxeColors.emerald,
                             size: 16,
                           ),
                           const SizedBox(width: 6),
@@ -1258,7 +1258,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             style: CockpitTypography.heading(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: CockpitColors.text,
+                              color: LuxeColors.text,
                             ),
                           ),
                         ],
@@ -1278,7 +1278,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     style: CockpitTypography.numbers(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: CockpitColors.text,
+                      color: LuxeColors.text,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1289,9 +1289,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: CockpitColors.border,
-                              ),
+                              side: const BorderSide(color: LuxeColors.rule),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 4,
                               ),
@@ -1308,7 +1306,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                                 const Icon(
                                   Icons.refresh_rounded,
                                   size: 14,
-                                  color: CockpitColors.text,
+                                  color: LuxeColors.text,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
@@ -1316,7 +1314,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                                   style: CockpitTypography.label(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    color: CockpitColors.text,
+                                    color: LuxeColors.text,
                                   ),
                                 ),
                               ],
@@ -1330,9 +1328,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: CockpitColors.border,
-                              ),
+                              side: const BorderSide(color: LuxeColors.rule),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 4,
                               ),
@@ -1348,7 +1344,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                               style: CockpitTypography.label(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: CockpitColors.text,
+                                color: LuxeColors.text,
                               ),
                             ),
                           ),
@@ -1371,8 +1367,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(
-                            Icons.cloud_outlined,
-                            color: CockpitColors.info,
+                            Icons.cloud_rounded,
+                            color: LuxeColors.steel,
                             size: 16,
                           ),
                           const SizedBox(width: 6),
@@ -1381,7 +1377,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             style: CockpitTypography.heading(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: CockpitColors.text,
+                              color: LuxeColors.text,
                             ),
                           ),
                         ],
@@ -1403,7 +1399,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     style: CockpitTypography.numbers(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: CockpitColors.text,
+                      color: LuxeColors.text,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1414,9 +1410,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: CockpitColors.border,
-                              ),
+                              side: const BorderSide(color: LuxeColors.rule),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 4,
                               ),
@@ -1433,7 +1427,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                                 const Icon(
                                   Icons.refresh_rounded,
                                   size: 14,
-                                  color: CockpitColors.text,
+                                  color: LuxeColors.text,
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
@@ -1441,7 +1435,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                                   style: CockpitTypography.label(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
-                                    color: CockpitColors.text,
+                                    color: LuxeColors.text,
                                   ),
                                 ),
                               ],
@@ -1455,9 +1449,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           height: 40,
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: CockpitColors.border,
-                              ),
+                              side: const BorderSide(color: LuxeColors.rule),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 4,
                               ),
@@ -1473,7 +1465,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                               style: CockpitTypography.label(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: CockpitColors.text,
+                                color: LuxeColors.text,
                               ),
                             ),
                           ),
@@ -1536,7 +1528,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     'Đo lúc $lastCheckedTime',
                     style: CockpitTypography.numbers(
                       fontSize: 11,
-                      color: CockpitColors.dim,
+                      color: LuxeColors.dim,
                     ),
                   ),
                   SizedBox(
@@ -1544,8 +1536,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     child: FilledButton.icon(
                       onPressed: busy ? null : _verifyAll,
                       style: FilledButton.styleFrom(
-                        backgroundColor: CockpitColors.emerald,
-                        foregroundColor: CockpitColors.shell,
+                        backgroundColor: LuxeColors.emerald,
+                        foregroundColor: LuxeColors.shell,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
@@ -1559,7 +1551,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: CockpitColors.shell,
+                          color: LuxeColors.shell,
                         ),
                       ),
                     ),
@@ -1587,12 +1579,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         width: 32,
                         height: 32,
                         decoration: BoxDecoration(
-                          color: CockpitColors.emerald.withValues(alpha: 0.12),
+                          color: LuxeColors.emerald.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
-                          Icons.shield_outlined,
-                          color: CockpitColors.emerald,
+                          Icons.shield_rounded,
+                          color: LuxeColors.emerald,
                           size: 18,
                         ),
                       ),
@@ -1602,7 +1594,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.heading(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
-                          color: CockpitColors.text,
+                          color: LuxeColors.text,
                         ),
                       ),
                     ],
@@ -1613,16 +1605,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: CockpitColors.emeraldSubtle,
+                      color: LuxeColors.emeraldTint,
                       borderRadius: BorderRadius.circular(CockpitRadius.full),
-                      border: Border.all(color: CockpitColors.emeraldGlow),
+                      border: Border.all(color: LuxeColors.emeraldSoft),
                     ),
                     child: Text(
                       'ĐANG BẬT',
                       style: CockpitTypography.label(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
-                        color: CockpitColors.emerald,
+                        color: LuxeColors.emerald,
                       ),
                     ),
                   ),
@@ -1657,7 +1649,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               _protectionMetricRow(
                 'Thời gian tối đa',
                 '10 giờ',
-                icon: Icons.timer_outlined,
+                icon: Icons.timer_rounded,
                 isMuted: true,
               ),
 
@@ -1668,8 +1660,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 child: OutlinedButton(
                   onPressed: _showTechnicalDetailsDialog,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: CockpitColors.border),
-                    backgroundColor: CockpitColors.elevated,
+                    side: const BorderSide(color: LuxeColors.rule),
+                    backgroundColor: LuxeColors.raised,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(
                         CockpitButtonTokens.radius,
@@ -1684,14 +1676,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: CockpitColors.text,
+                          color: LuxeColors.text,
                         ),
                       ),
                       const SizedBox(width: 6),
                       const Icon(
                         Icons.arrow_forward_rounded,
                         size: 16,
-                        color: CockpitColors.muted,
+                        color: LuxeColors.muted,
                       ),
                     ],
                   ),
@@ -1715,12 +1707,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: CockpitColors.emerald.withValues(alpha: 0.12),
+                      color: LuxeColors.emerald.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
-                      Icons.verified_user_outlined,
-                      color: CockpitColors.emerald,
+                      Icons.verified_user_rounded,
+                      color: LuxeColors.emerald,
                       size: 18,
                     ),
                   ),
@@ -1730,7 +1722,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     style: CockpitTypography.heading(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: CockpitColors.text,
+                      color: LuxeColors.text,
                     ),
                   ),
                 ],
@@ -1749,7 +1741,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           style: CockpitTypography.heading(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: CockpitColors.text,
+                            color: LuxeColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1757,7 +1749,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           'Khởi động an toàn & bảo vệ role',
                           style: CockpitTypography.label(
                             fontSize: 12,
-                            color: CockpitColors.muted,
+                            color: LuxeColors.muted,
                           ),
                         ),
                       ],
@@ -1775,7 +1767,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
 
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
-                child: Divider(color: CockpitColors.border, height: 1),
+                child: Divider(color: LuxeColors.rule, height: 1),
               ),
 
               // Row 2: Test Relay không tải
@@ -1790,7 +1782,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           style: CockpitTypography.heading(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
-                            color: CockpitColors.text,
+                            color: LuxeColors.text,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -1798,7 +1790,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           'Kiểm tra đóng/ngắt cơ học relay',
                           style: CockpitTypography.label(
                             fontSize: 12,
-                            color: CockpitColors.muted,
+                            color: LuxeColors.muted,
                           ),
                         ),
                       ],
@@ -1808,9 +1800,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     height: 36,
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: CockpitColors.border),
-                        backgroundColor: CockpitColors.elevated,
-                        foregroundColor: CockpitColors.text,
+                        side: const BorderSide(color: LuxeColors.rule),
+                        backgroundColor: LuxeColors.raised,
+                        foregroundColor: LuxeColors.text,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
@@ -1820,16 +1812,16 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       ),
                       onPressed: busy ? null : _runNoLoadTest,
                       icon: const Icon(
-                        Icons.toggle_on_outlined,
+                        Icons.toggle_on_rounded,
                         size: 16,
-                        color: CockpitColors.emerald,
+                        color: LuxeColors.emerald,
                       ),
                       label: Text(
                         'Kiểm tra',
                         style: CockpitTypography.label(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: CockpitColors.text,
+                          color: LuxeColors.text,
                         ),
                       ),
                     ),
@@ -1909,14 +1901,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 controller: host,
                 label: 'Cloud Host',
                 hint: 'Ví dụ: https://shelly-xxx-eu.shelly.cloud',
-                prefixIcon: Icons.dns_outlined,
+                prefixIcon: Icons.dns_rounded,
                 keyboardType: TextInputType.url,
               ),
               const SizedBox(height: 10),
               _darkInputField(
                 controller: deviceId,
                 label: 'Device ID',
-                hint: 'Ví dụ: e86beae... hoặc quét QR',
+                hint: 'Ví dụ: e86beae… hoặc quét QR',
                 prefixIcon: Icons.fingerprint_rounded,
               ),
               const SizedBox(height: 10),
@@ -1924,7 +1916,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 controller: cloudKey,
                 label: 'Cloud Authorization Key',
                 hint: 'Dán key từ app Shelly hoặc quét QR',
-                prefixIcon: Icons.vpn_key_outlined,
+                prefixIcon: Icons.vpn_key_rounded,
                 isPassword: true,
               ),
               const SizedBox(height: 12),
@@ -1960,8 +1952,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           height: CockpitButtonTokens.height,
           child: FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: CockpitColors.emerald,
-              foregroundColor: CockpitColors.shell,
+              backgroundColor: LuxeColors.emerald,
+              foregroundColor: LuxeColors.shell,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
               ),
@@ -1973,7 +1965,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               style: CockpitTypography.label(
                 fontSize: 13,
                 fontWeight: FontWeight.w800,
-                color: CockpitColors.shell,
+                color: LuxeColors.shell,
               ),
             ),
           ),
@@ -1998,12 +1990,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: CockpitColors.emerald.withValues(alpha: 0.12),
+                          color: LuxeColors.emerald.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Icon(
                           Icons.bolt_rounded,
-                          color: CockpitColors.emerald,
+                          color: LuxeColors.emerald,
                           size: 18,
                         ),
                       ),
@@ -2015,7 +2007,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             'Xe liên kết',
                             style: CockpitTypography.label(
                               fontSize: 11,
-                              color: CockpitColors.muted,
+                              color: LuxeColors.muted,
                             ),
                           ),
                           const SizedBox(height: 1),
@@ -2024,7 +2016,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             style: CockpitTypography.heading(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
-                              color: CockpitColors.text,
+                              color: LuxeColors.text,
                             ),
                           ),
                         ],
@@ -2035,8 +2027,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     height: 34,
                     child: OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: CockpitColors.border),
-                        foregroundColor: CockpitColors.text,
+                        side: const BorderSide(color: LuxeColors.rule),
+                        foregroundColor: LuxeColors.text,
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
@@ -2050,7 +2042,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          color: CockpitColors.text,
+                          color: LuxeColors.text,
                         ),
                       ),
                     ),
@@ -2060,7 +2052,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
 
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
-                child: Divider(color: CockpitColors.border, height: 1),
+                child: Divider(color: LuxeColors.rule, height: 1),
               ),
 
               // Công suất sạc tiêu chuẩn
@@ -2068,7 +2060,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 'Công suất sạc tiêu chuẩn (W)',
                 style: CockpitTypography.label(
                   fontSize: 12,
-                  color: CockpitColors.muted,
+                  color: LuxeColors.muted,
                 ),
               ),
               const SizedBox(height: 6),
@@ -2087,14 +2079,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     height: 48,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: CockpitColors.emeraldSubtle,
-                        foregroundColor: CockpitColors.emerald,
+                        backgroundColor: LuxeColors.emeraldTint,
+                        foregroundColor: LuxeColors.emerald,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
                             CockpitRadius.small,
                           ),
                           side: BorderSide(
-                            color: CockpitColors.emerald.withValues(alpha: 0.3),
+                            color: LuxeColors.emerald.withValues(alpha: 0.3),
                           ),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2105,7 +2097,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: CockpitColors.emerald,
+                          color: LuxeColors.emerald,
                         ),
                       ),
                     ),
@@ -2124,22 +2116,22 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: ActionChip(
                         label: Text('$w W'),
                         backgroundColor: isSelected
-                            ? CockpitColors.emeraldSubtle
-                            : CockpitColors.elevated,
+                            ? LuxeColors.emeraldTint
+                            : LuxeColors.raised,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(
                             color: isSelected
-                                ? CockpitColors.emerald.withValues(alpha: 0.5)
-                                : CockpitColors.border,
+                                ? LuxeColors.emerald.withValues(alpha: 0.5)
+                                : LuxeColors.rule,
                           ),
                         ),
                         labelStyle: CockpitTypography.numbers(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: isSelected
-                              ? CockpitColors.emerald
-                              : CockpitColors.muted,
+                              ? LuxeColors.emerald
+                              : LuxeColors.muted,
                         ),
                         onPressed: () {
                           chargePower.text = w.toString();
@@ -2153,7 +2145,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
 
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
-                child: Divider(color: CockpitColors.border, height: 1),
+                child: Divider(color: LuxeColors.rule, height: 1),
               ),
 
               // Đơn giá tiền điện
@@ -2161,7 +2153,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 'Đơn giá tiền điện (VND/kWh)',
                 style: CockpitTypography.label(
                   fontSize: 12,
-                  color: CockpitColors.muted,
+                  color: LuxeColors.muted,
                 ),
               ),
               const SizedBox(height: 6),
@@ -2180,13 +2172,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     height: 48,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: CockpitColors.elevated,
-                        foregroundColor: CockpitColors.text,
+                        backgroundColor: LuxeColors.raised,
+                        foregroundColor: LuxeColors.text,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
                             CockpitRadius.small,
                           ),
-                          side: const BorderSide(color: CockpitColors.border),
+                          side: const BorderSide(color: LuxeColors.rule),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                       ),
@@ -2196,7 +2188,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,
-                          color: CockpitColors.text,
+                          color: LuxeColors.text,
                         ),
                       ),
                     ),
@@ -2224,7 +2216,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               ),
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(color: CockpitColors.border, height: 1),
+                child: Divider(color: LuxeColors.rule, height: 1),
               ),
               _switchSettingRow(
                 title: 'Sao lưu mã hóa lên Server',
@@ -2269,10 +2261,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: CockpitColors.danger.withValues(alpha: 0.08),
+            color: LuxeColors.danger.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(CockpitRadius.large),
             border: Border.all(
-              color: CockpitColors.danger.withValues(alpha: 0.25),
+              color: LuxeColors.danger.withValues(alpha: 0.25),
             ),
           ),
           child: Column(
@@ -2282,7 +2274,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 children: [
                   const Icon(
                     Icons.warning_amber_rounded,
-                    color: CockpitColors.danger,
+                    color: LuxeColors.danger,
                     size: 18,
                   ),
                   const SizedBox(width: 8),
@@ -2291,7 +2283,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     style: CockpitTypography.heading(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: CockpitColors.danger,
+                      color: LuxeColors.danger,
                     ),
                   ),
                 ],
@@ -2305,9 +2297,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(
-                            color: CockpitColors.danger.withValues(alpha: 0.2),
+                            color: LuxeColors.danger.withValues(alpha: 0.2),
                           ),
-                          backgroundColor: CockpitColors.elevated,
+                          backgroundColor: LuxeColors.raised,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(
                               CockpitButtonTokens.radius,
@@ -2324,7 +2316,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           style: CockpitTypography.label(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: CockpitColors.muted,
+                            color: LuxeColors.muted,
                           ),
                         ),
                       ),
@@ -2336,8 +2328,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       height: CockpitButtonTokens.height,
                       child: OutlinedButton(
                         style: OutlinedButton.styleFrom(
-                          side: const BorderSide(color: CockpitColors.danger),
-                          backgroundColor: CockpitColors.danger.withValues(
+                          side: const BorderSide(color: LuxeColors.danger),
+                          backgroundColor: LuxeColors.danger.withValues(
                             alpha: 0.15,
                           ),
                           shape: RoundedRectangleBorder(
@@ -2352,7 +2344,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           style: CockpitTypography.label(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: CockpitColors.danger,
+                            color: LuxeColors.danger,
                           ),
                         ),
                       ),
@@ -2375,8 +2367,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     required String label,
     required bool verified,
   }) {
-    final color = verified ? CockpitColors.emerald : CockpitColors.amber;
-    final bg = verified ? CockpitColors.emeraldSubtle : const Color(0x1AFBBF24);
+    final color = verified ? LuxeColors.emerald : LuxeColors.champagne;
+    final bg = verified ? LuxeColors.emeraldTint : const Color(0x1AFBBF24);
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -2416,13 +2408,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     IconData? icon,
     bool isMuted = false,
   }) {
-    final accent = isMuted ? CockpitColors.dim : CockpitColors.emerald;
+    final accent = isMuted ? LuxeColors.dim : LuxeColors.emerald;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: CockpitColors.elevated,
+        color: LuxeColors.raised,
         borderRadius: BorderRadius.circular(CockpitRadius.small),
-        border: Border.all(color: CockpitColors.border),
+        border: Border.all(color: LuxeColors.rule),
       ),
       child: Row(
         children: [
@@ -2444,7 +2436,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               style: CockpitTypography.body(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: isMuted ? CockpitColors.muted : CockpitColors.text,
+                color: isMuted ? LuxeColors.muted : LuxeColors.text,
               ),
             ),
           ),
@@ -2474,46 +2466,43 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
       controller: controller,
       obscureText: isPassword && obscure,
       keyboardType: keyboardType,
-      style: CockpitTypography.body(fontSize: 13, color: CockpitColors.text),
+      style: CockpitTypography.body(fontSize: 13, color: LuxeColors.text),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: CockpitTypography.label(
           fontSize: 12,
-          color: CockpitColors.muted,
+          color: LuxeColors.muted,
         ),
         hintText: hint,
-        hintStyle: CockpitTypography.body(
-          fontSize: 12,
-          color: CockpitColors.dim,
-        ),
+        hintStyle: CockpitTypography.body(fontSize: 12, color: LuxeColors.dim),
         prefixIcon: prefixIcon != null
-            ? Icon(prefixIcon, color: CockpitColors.muted, size: 18)
+            ? Icon(prefixIcon, color: LuxeColors.muted, size: 18)
             : null,
         suffixIcon: isPassword
             ? IconButton(
                 icon: Icon(
                   obscure
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
+                      ? Icons.visibility_off_rounded
+                      : Icons.visibility_rounded,
                   size: 18,
-                  color: CockpitColors.muted,
+                  color: LuxeColors.muted,
                 ),
                 onPressed: () => setState(() => obscure = !obscure),
               )
             : null,
         filled: true,
-        fillColor: CockpitColors.elevated,
+        fillColor: LuxeColors.raised,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 13,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(CockpitRadius.small),
-          borderSide: const BorderSide(color: CockpitColors.border),
+          borderSide: const BorderSide(color: LuxeColors.rule),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(CockpitRadius.small),
-          borderSide: const BorderSide(color: CockpitColors.emerald),
+          borderSide: const BorderSide(color: LuxeColors.emerald),
         ),
       ),
     );
@@ -2531,16 +2520,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         onPressed: busy ? null : onTap,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          foregroundColor: isPrimary
-              ? CockpitColors.emerald
-              : CockpitColors.text,
+          foregroundColor: isPrimary ? LuxeColors.emerald : LuxeColors.text,
           backgroundColor: isPrimary
-              ? CockpitColors.emeraldSubtle
-              : CockpitColors.elevated,
+              ? LuxeColors.emeraldTint
+              : LuxeColors.raised,
           side: BorderSide(
             color: isPrimary
-                ? CockpitColors.emerald.withValues(alpha: 0.3)
-                : CockpitColors.border,
+                ? LuxeColors.emerald.withValues(alpha: 0.3)
+                : LuxeColors.rule,
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
@@ -2553,7 +2540,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           style: CockpitTypography.label(
             fontSize: 12,
             fontWeight: FontWeight.w700,
-            color: isPrimary ? CockpitColors.emerald : CockpitColors.text,
+            color: isPrimary ? LuxeColors.emerald : LuxeColors.text,
           ),
         ),
       ),
@@ -2577,7 +2564,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 style: CockpitTypography.body(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: CockpitColors.text,
+                  color: LuxeColors.text,
                 ),
               ),
               const SizedBox(height: 2),
@@ -2585,7 +2572,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                 subtitle,
                 style: CockpitTypography.label(
                   fontSize: 12,
-                  color: CockpitColors.muted,
+                  color: LuxeColors.muted,
                 ),
               ),
             ],
@@ -2593,9 +2580,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         ),
         Switch.adaptive(
           value: value,
-          activeThumbColor: CockpitColors.emerald,
-          activeTrackColor: CockpitColors.emeraldSubtle,
-          inactiveTrackColor: CockpitColors.elevated,
+          activeThumbColor: LuxeColors.emerald,
+          activeTrackColor: LuxeColors.emeraldTint,
+          inactiveTrackColor: LuxeColors.raised,
           onChanged: busy ? null : onChanged,
         ),
       ],
@@ -2611,7 +2598,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             label,
             style: CockpitTypography.label(
               fontSize: 13,
-              color: CockpitColors.muted,
+              color: LuxeColors.muted,
             ),
           ),
         ),
@@ -2623,7 +2610,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             style: CockpitTypography.numbers(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: CockpitColors.text,
+              color: LuxeColors.text,
             ),
           ),
         ),
@@ -2728,14 +2715,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
   }
 
   void _showTechnicalDetailsDialog() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: CockpitColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(CockpitRadius.sheet),
-        ),
-      ),
+    showLuxeSheet(
+      context,
       builder: (ctx) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(20),
@@ -2749,7 +2730,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: CockpitColors.borderStrong,
+                    color: LuxeColors.ruleStrong,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -2760,12 +2741,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: CockpitColors.emerald.withValues(alpha: 0.12),
+                      color: LuxeColors.emerald.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
                       Icons.tune_rounded,
-                      color: CockpitColors.emerald,
+                      color: LuxeColors.emerald,
                       size: 18,
                     ),
                   ),
@@ -2775,7 +2756,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     style: CockpitTypography.heading(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
-                      color: CockpitColors.text,
+                      color: LuxeColors.text,
                     ),
                   ),
                 ],
@@ -2800,17 +2781,17 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: CockpitColors.surface,
+        backgroundColor: LuxeColors.sheet,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(CockpitRadius.large),
-          side: const BorderSide(color: CockpitColors.border),
+          side: const BorderSide(color: LuxeColors.rule),
         ),
         title: Text(
           'Chỉnh công suất sạc',
           style: CockpitTypography.heading(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: CockpitColors.text,
+            color: LuxeColors.text,
           ),
         ),
         content: TextField(
@@ -2818,28 +2799,28 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           keyboardType: TextInputType.number,
           style: CockpitTypography.numbers(
             fontSize: 15,
-            color: CockpitColors.text,
+            color: LuxeColors.text,
           ),
           decoration: InputDecoration(
             suffixText: 'W',
             suffixStyle: CockpitTypography.label(
               fontSize: 13,
-              color: CockpitColors.muted,
+              color: LuxeColors.muted,
             ),
             labelText: 'Công suất (W)',
             labelStyle: CockpitTypography.label(
               fontSize: 12,
-              color: CockpitColors.muted,
+              color: LuxeColors.muted,
             ),
             filled: true,
-            fillColor: CockpitColors.elevated,
+            fillColor: LuxeColors.raised,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(CockpitRadius.small),
-              borderSide: const BorderSide(color: CockpitColors.border),
+              borderSide: const BorderSide(color: LuxeColors.rule),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(CockpitRadius.small),
-              borderSide: const BorderSide(color: CockpitColors.emerald),
+              borderSide: const BorderSide(color: LuxeColors.emerald),
             ),
           ),
         ),
@@ -2850,14 +2831,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               'HỦY',
               style: CockpitTypography.label(
                 fontSize: 12,
-                color: CockpitColors.muted,
+                color: LuxeColors.muted,
               ),
             ),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: CockpitColors.emerald,
-              foregroundColor: CockpitColors.shell,
+              backgroundColor: LuxeColors.emerald,
+              foregroundColor: LuxeColors.shell,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(CockpitRadius.small),
               ),
@@ -2871,7 +2852,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               style: CockpitTypography.label(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: CockpitColors.shell,
+                color: LuxeColors.shell,
               ),
             ),
           ),
@@ -2884,17 +2865,17 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: CockpitColors.surface,
+        backgroundColor: LuxeColors.sheet,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(CockpitRadius.large),
-          side: const BorderSide(color: CockpitColors.border),
+          side: const BorderSide(color: LuxeColors.rule),
         ),
         title: Text(
           'Chỉnh đơn giá điện',
           style: CockpitTypography.heading(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: CockpitColors.text,
+            color: LuxeColors.text,
           ),
         ),
         content: TextField(
@@ -2902,28 +2883,28 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           keyboardType: TextInputType.number,
           style: CockpitTypography.numbers(
             fontSize: 15,
-            color: CockpitColors.text,
+            color: LuxeColors.text,
           ),
           decoration: InputDecoration(
             suffixText: 'đ/kWh',
             suffixStyle: CockpitTypography.label(
               fontSize: 13,
-              color: CockpitColors.muted,
+              color: LuxeColors.muted,
             ),
             labelText: 'Đơn giá',
             labelStyle: CockpitTypography.label(
               fontSize: 12,
-              color: CockpitColors.muted,
+              color: LuxeColors.muted,
             ),
             filled: true,
-            fillColor: CockpitColors.elevated,
+            fillColor: LuxeColors.raised,
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(CockpitRadius.small),
-              borderSide: const BorderSide(color: CockpitColors.border),
+              borderSide: const BorderSide(color: LuxeColors.rule),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(CockpitRadius.small),
-              borderSide: const BorderSide(color: CockpitColors.emerald),
+              borderSide: const BorderSide(color: LuxeColors.emerald),
             ),
           ),
         ),
@@ -2934,14 +2915,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               'HỦY',
               style: CockpitTypography.label(
                 fontSize: 12,
-                color: CockpitColors.muted,
+                color: LuxeColors.muted,
               ),
             ),
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: CockpitColors.emerald,
-              foregroundColor: CockpitColors.shell,
+              backgroundColor: LuxeColors.emerald,
+              foregroundColor: LuxeColors.shell,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(CockpitRadius.small),
               ),
@@ -2955,7 +2936,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               style: CockpitTypography.label(
                 fontSize: 12,
                 fontWeight: FontWeight.w800,
-                color: CockpitColors.shell,
+                color: LuxeColors.shell,
               ),
             ),
           ),
@@ -2975,9 +2956,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           .read(chargeLogRepositoryProvider)
           .getAllVehicles();
       if (!mounted) return;
-      final id = await showModalBottomSheet<String>(
-        context: context,
-        backgroundColor: _ui.surface,
+      final id = await showLuxeSheet<String>(
+        context,
         builder: (context) => SafeArea(
           child: ListView(
             shrinkWrap: true,

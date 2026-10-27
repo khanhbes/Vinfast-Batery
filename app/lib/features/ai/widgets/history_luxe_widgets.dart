@@ -15,16 +15,18 @@ import '../../../data/models/smart_charging_session.dart';
 /// Amber shared by "stopped early" states across the history surfaces.
 const historyAmber = LuxeColors.champagne;
 
-String historyEnergy(double wh) => wh >= 1000
-    ? '${(wh / 1000).toStringAsFixed(2)} kWh'
-    : '${wh.toStringAsFixed(0)} Wh';
+/// QA 139: one unit and one duration style across History (it mixed
+/// "576 Wh" with "1.97 kWh" and "12g 18p" with "4 giờ 25 phút").
+String historyEnergy(double wh) => '${(wh / 1000).toStringAsFixed(2)} kWh';
 
 String historyDuration(Duration value) {
   final hours = value.inHours;
   final minutes = value.inMinutes.remainder(60);
   return hours == 0
       ? '$minutes phút'
-      : '${hours}g ${minutes.toString().padLeft(2, '0')}p';
+      : minutes == 0
+      ? '$hours giờ'
+      : '$hours giờ $minutes phút';
 }
 
 String historyCost(double? vnd) => vnd == null ? '—' : formatVnd(vnd);
@@ -126,7 +128,6 @@ class _HistoryEnergyBarsState extends State<HistoryEnergyBars> {
   @override
   Widget build(BuildContext context) {
     final total = widget.totalWh;
-    final kwh = total >= 1000;
     final peak = widget.buckets.fold<double>(0, math.max);
     final peakIndex = peak > 0 ? widget.buckets.indexOf(peak) : null;
     final selected = _selected;
@@ -162,13 +163,12 @@ class _HistoryEnergyBarsState extends State<HistoryEnergyBars> {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.bottomLeft,
                     child: TweenAnimationBuilder<double>(
-                      tween: Tween(end: kwh ? total / 1000 : total),
+                      tween: Tween(end: total / 1000),
                       duration: _motion(context, 900),
                       curve: LuxeMotion.enter,
                       builder: (context, v, _) => LuxeMetalText(
-                        kwh
-                            ? v.toStringAsFixed(v >= 100 ? 0 : 1)
-                            : '${v.round()}',
+                        // Always kWh (QA 139), like every History figure.
+                        v.toStringAsFixed(v >= 100 ? 0 : 1),
                         style: const TextStyle(
                           fontSize: 40,
                           height: 1.0,
@@ -184,7 +184,7 @@ class _HistoryEnergyBarsState extends State<HistoryEnergyBars> {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 5),
                   child: Text(
-                    kwh ? 'kWh' : 'Wh',
+                    'kWh',
                     style: TextStyle(
                       color: plan.accent,
                       fontSize: 13,
@@ -492,7 +492,7 @@ class HistoryScopeToggle extends StatelessWidget {
               child: AnimatedDefaultTextStyle(
                 duration: _motion(context, 240),
                 style: TextStyle(
-                  color: on ? const Color(0xFF0B0C0E) : LuxeColors.muted,
+                  color: on ? LuxeColors.shell : LuxeColors.muted,
                   fontSize: 13.5,
                   fontWeight: on ? FontWeight.w600 : FontWeight.w500,
                 ),
@@ -560,7 +560,7 @@ class HistoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = selected ? const Color(0xFF0B0C0E) : LuxeColors.text;
+    final fg = selected ? LuxeColors.shell : LuxeColors.text;
     return Semantics(
       button: true,
       selected: selected,
@@ -988,7 +988,7 @@ class _SocTrackPainter extends CustomPainter {
       y + 1.5,
       const Radius.circular(2),
     );
-    canvas.drawRRect(track, Paint()..color = const Color(0x1FFFFFFF));
+    canvas.drawRRect(track, Paint()..color = LuxeColors.hairline);
     final lo = math.min(from, to) * size.width;
     final hi = math.max(from, to) * size.width;
     if (hi - lo < 0.5) return;
@@ -1304,7 +1304,11 @@ class _PlugPainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           body.outerRect.topCenter,
           body.outerRect.bottomCenter,
-          const [LuxeColors.platinumHi, LuxeColors.platinum, Color(0xFF9EA2A8)],
+          const [
+            LuxeColors.platinumHi,
+            LuxeColors.platinum,
+            LuxeColors.platinumMid,
+          ],
           const [0.0, 0.55, 1.0],
         ),
     );

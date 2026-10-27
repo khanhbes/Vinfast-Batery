@@ -8,6 +8,7 @@ import '../../../core/services/dashboard_preferences_service.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_settings.dart';
+import '../../../core/widgets/app_popup.dart';
 
 /// LUXE sheet (Task 118) cho phép người dùng:
 /// - Kéo thả đổi thứ tự 6 widget nội dung (thẻ được "nhấc" lên khi kéo)
@@ -97,15 +98,11 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                   HapticFeedback.selectionClick();
                   await prefService.resetToDefault();
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        isEn
-                            ? 'Restored default layout'
-                            : 'Đã khôi phục bố cục mặc định',
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
+                  AppPopup.showMessage(
+                    isEn
+                        ? 'Restored default layout'
+                        : 'Đã khôi phục bố cục mặc định',
+                    kind: AppNoticeKind.success,
                   );
                 },
                 icon: const Icon(Icons.restore_rounded, size: 16),
@@ -191,15 +188,11 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                                 val,
                               );
                               if (!success && !val) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      isEn
-                                          ? 'At least one widget must remain visible.'
-                                          : 'Phải giữ lại ít nhất 1 widget nội dung.',
-                                    ),
-                                    duration: const Duration(seconds: 2),
-                                  ),
+                                AppPopup.showMessage(
+                                  isEn
+                                      ? 'At least one widget must remain visible.'
+                                      : 'Phải giữ lại ít nhất 1 widget nội dung.',
+                                  kind: AppNoticeKind.warning,
                                 );
                               }
                             },

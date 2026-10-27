@@ -89,7 +89,7 @@ class AchievementMedal extends StatelessWidget {
                 height: size * 0.26,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFF17181B),
+                  color: LuxeColors.raised,
                   border: Border.all(color: LuxeColors.hairlineStrong),
                 ),
                 child: Icon(
@@ -202,7 +202,7 @@ class _MedalPainter extends CustomPainter {
           r * 1.1,
           unlocked
               ? [
-                  Color.lerp(metal[2], const Color(0xFF0B0C0E), 0.55)!,
+                  Color.lerp(metal[2], LuxeColors.shell, 0.55)!,
                   Color.lerp(metal[2], const Color(0xFF050506), 0.85)!,
                 ]
               : const [Color(0xFF1B1C1F), Color(0xFF0A0A0C)],
@@ -217,7 +217,7 @@ class _MedalPainter extends CustomPainter {
         ..strokeWidth = math.max(0.8, s * 0.01)
         ..color = unlocked
             ? metal[0].withValues(alpha: 0.35)
-            : const Color(0x1FFFFFFF),
+            : LuxeColors.hairline,
     );
     // Rim highlight from 10 o'clock.
     canvas.drawArc(

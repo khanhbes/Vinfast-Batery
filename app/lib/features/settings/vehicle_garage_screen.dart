@@ -133,7 +133,11 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
     final activeCount = _vehicles.where((v) => !_isArchived(v)).length;
     final archivedCount = _vehicles.length - activeCount;
     return LuxeScaffold(
-      floatingActionButton: _showArchived || _isLoading
+      // QA 139: one "add" control. The empty state has its own button, so
+      // the floating one only shows once there are vehicles (at large text
+      // it covered the empty state), and the duplicate "+" in the bar went.
+      floatingActionButton:
+          _showArchived || _isLoading || _visibleVehicles.isEmpty
           ? null
           : FloatingActionButton.extended(
               onPressed: _showAddVehicleSheet,
@@ -143,16 +147,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-      appBar: LuxeAppBar(
-        actions: [
-          LuxeCircleButton(
-            tooltip: 'Thêm xe mới',
-            icon: Icons.add_rounded,
-            color: LuxeColors.emerald,
-            onPressed: _showArchived ? null : _showAddVehicleSheet,
-          ),
-        ],
-      ),
+      appBar: const LuxeAppBar(),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -207,7 +202,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
               hasScrollBody: false,
               child: _showArchived
                   ? const EmptyState(
-                      icon: Icons.archive_outlined,
+                      icon: Icons.archive_rounded,
                       title: 'Chưa có xe lưu trữ',
                       message:
                           'Xe bạn lưu trữ sẽ nằm ở đây và có thể khôi phục.',
@@ -448,8 +443,8 @@ class _VehicleCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         LuxeCircleButton(
                           icon: isArchived
-                              ? Icons.unarchive_outlined
-                              : Icons.archive_outlined,
+                              ? Icons.unarchive_rounded
+                              : Icons.archive_rounded,
                           tooltip: isArchived ? 'Khôi phục xe' : 'Lưu trữ xe',
                           color: isArchived
                               ? LuxeColors.emerald
@@ -649,7 +644,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                   controller: _searchCtrl,
                   style: const TextStyle(color: LuxeColors.text, fontSize: 14),
                   decoration: InputDecoration(
-                    hintText: 'Tìm kiếm model...',
+                    hintText: 'Tìm kiếm model…',
                     prefixIcon: const Icon(Icons.search_rounded, size: 20),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(99),
@@ -771,7 +766,7 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                       decoration: const InputDecoration(
                         isDense: true,
                         hintText: 'Biển số (không bắt buộc)',
-                        prefixIcon: Icon(Icons.pin_outlined, size: 18),
+                        prefixIcon: Icon(Icons.pin_rounded, size: 18),
                       ),
                     ),
                   ],
@@ -978,7 +973,7 @@ class _SpecCard extends StatelessWidget {
                               dimension: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Color(0xFF0B0C0E),
+                                color: LuxeColors.shell,
                               ),
                             )
                           : const Text('Thêm'),

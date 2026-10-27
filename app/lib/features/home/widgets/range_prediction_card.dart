@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/vehicle_model.dart';
 import '../../../data/services/range_estimator.dart';
@@ -18,7 +17,7 @@ class RangePredictionCard extends StatelessWidget {
     final text = Theme.of(context).textTheme;
     final estimate = estimateRange(vehicle, learned: learned);
     final learnedSource = estimate?.source == RangeSource.learned;
-    return AppReveal(
+    return LuxeReveal(
       child: LuxeGlass(
         padding: const EdgeInsets.all(20),
         child: Column(

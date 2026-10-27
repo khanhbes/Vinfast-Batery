@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/utils/number_text.dart';
@@ -10,6 +11,8 @@ import '../../../data/models/vehicle_model.dart';
 import '../../../data/services/range_estimator.dart';
 import '../../../data/services/trip_energy_model.dart';
 import '../../../data/models/entitlement.dart';
+import '../../../core/providers/entitlement_provider.dart';
+import '../../battery_monitor/battery_health_screen.dart';
 import '../../premium/premium_gate.dart';
 
 /// Tinted glass orb for accented dashboard actions. Neutral icon wells use
@@ -131,7 +134,7 @@ class LuxeQuickActions extends StatelessWidget {
         null,
       ),
       (
-        Icons.monitor_heart_outlined,
+        Icons.monitor_heart_rounded,
         'Theo dõi pin',
         LuxeColors.platinum,
         onBatteryMonitor,
@@ -215,7 +218,7 @@ class LuxeQuickActions extends StatelessWidget {
                     child: Row(
                       children: [
                         LuxeOrb(
-                          icon: Icons.photo_camera_outlined,
+                          icon: Icons.photo_camera_rounded,
                           color: LuxeColors.steel,
                           size: 40,
                         ),
@@ -284,8 +287,8 @@ class LuxeQuickActions extends StatelessWidget {
   }
 }
 
-/// ODO · efficiency · SoH (the battery itself lives in the hero).
-class LuxeStatsStrip extends StatelessWidget {
+/// ODO · efficiency · capacity (the battery itself lives in the hero).
+class LuxeStatsStrip extends ConsumerWidget {
   const LuxeStatsStrip({super.key, required this.vehicle, this.learned});
   final VehicleModel? vehicle;
 
@@ -293,9 +296,20 @@ class LuxeStatsStrip extends StatelessWidget {
   final TripModelParams? learned;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final v = vehicle;
     final perPct = v == null ? null : kmPerPctFor(v, learned);
+    // QA 139: the estimated capacity left (Pro) once there is one; the SoH
+    // the owner typed otherwise, and said so.
+    final allowed = ref.watch(
+      entitlementProvider.select(
+        (plan) => plan.allows(PremiumFeature.batteryHealth),
+      ),
+    );
+    final health = allowed && v != null
+        ? ref.watch(batteryHealthProvider(v.vehicleId)).valueOrNull
+        : null;
+    final capacity = (health?.test ?? health?.estimate)?.sohPct;
     final cells = [
       (
         Icons.speed_rounded,
@@ -307,11 +321,17 @@ class LuxeStatsStrip extends StatelessWidget {
         perPct == null ? '—' : perPct.toStringAsFixed(2),
         'km / 1% pin',
       ),
-      (
-        Icons.favorite_rounded,
-        v?.hasSohData == true ? '${v!.stateOfHealth.round()}%' : '—',
-        'sức khỏe pin',
-      ),
+      capacity != null
+          ? (
+              Icons.battery_std_rounded,
+              '${capacity.clamp(0, 100).round()}%',
+              'dung lượng pin',
+            )
+          : (
+              Icons.battery_std_rounded,
+              v?.hasSohData == true ? '${v!.stateOfHealth.round()}%' : '—',
+              v?.hasSohData == true ? 'SoH bạn nhập' : 'dung lượng pin',
+            ),
     ];
     return Row(
       children: [
@@ -358,111 +378,173 @@ class LuxeStatsStrip extends StatelessWidget {
   }
 }
 
-/// Battery health: SoH on a platinum ring, tap for cell details.
-class LuxeBatteryHealthCard extends StatelessWidget {
-  const LuxeBatteryHealthCard({
-    super.key,
-    required this.soh,
-    required this.onTap,
+/// Battery capacity (QA 139): how much of its rated capacity the battery
+/// still holds, estimated by the server from the charges whose % the owner
+/// confirmed (`/api/learning/<vehicle>/health`, the "% pin chai" of Pro).
+/// An estimate, so champagne; Free sees the card locked with its PRO tag.
+class LuxeBatteryCapacityCard extends ConsumerWidget {
+  const LuxeBatteryCapacityCard({super.key, required this.vehicleId});
+  final String? vehicleId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final allowed = ref.watch(
+      entitlementProvider.select(
+        (plan) => plan.allows(PremiumFeature.batteryHealth),
+      ),
+    );
+    final id = vehicleId;
+    if (!allowed) {
+      return const PremiumLocked(
+        feature: PremiumFeature.batteryHealth,
+        allowed: false,
+        child: _CapacityShell(
+          value: null,
+          title: 'Dung lượng pin còn lại',
+          caption: 'Ước tính từ các lần sạc của bạn, có ở gói Pro.',
+        ),
+      );
+    }
+    if (id == null) {
+      return const _CapacityShell(
+        value: null,
+        title: 'Chưa chọn xe',
+        caption: 'Chọn xe để xem dung lượng pin còn lại.',
+      );
+    }
+    final async = ref.watch(batteryHealthProvider(id));
+    final shell = async.when(
+      loading: () => const _CapacityShell(
+        value: null,
+        title: 'Dung lượng pin còn lại',
+        caption: 'Đang tải ước tính…',
+      ),
+      error: (_, _) => const _CapacityShell(
+        value: null,
+        title: 'Dung lượng pin còn lại',
+        caption: 'Chưa tải được ước tính. Chạm để xem chi tiết.',
+      ),
+      data: (health) {
+        final best = health.test ?? health.estimate;
+        if (health.nominalCapacityWh == null) {
+          return const _CapacityShell(
+            value: null,
+            title: 'Chưa tính được dung lượng',
+            caption: 'Xe chưa có dung lượng danh định trong danh mục.',
+          );
+        }
+        if (best == null) {
+          return const _CapacityShell(
+            value: null,
+            title: 'Chưa đủ dữ liệu',
+            caption: 'Sau mỗi lần sạc, nhập % trên đồng hồ xe để app ước tính.',
+          );
+        }
+        final pct = best.sohPct.clamp(0.0, 100.0);
+        return _CapacityShell(
+          value: pct,
+          title: pct >= 95
+              ? 'Pin gần như mới'
+              : pct >= 80
+              ? 'Pin còn tốt'
+              : pct >= 70
+              ? 'Pin đã chai, nên theo dõi'
+              : 'Pin chai nhiều, nên kiểm tra',
+          caption:
+              'Còn khoảng ${pct.round()}% dung lượng · '
+              '${health.test != null ? 'theo bài kiểm tra' : '${best.confidenceLabel.toLowerCase()}, ${best.samples ?? 0} lần sạc'}',
+        );
+      },
+    );
+    return LuxePressable(
+      onTap: () => BatteryHealthScreen.open(context, ref, id),
+      semanticsLabel: '${shell.title}. ${shell.caption} Mở % pin chai',
+      child: shell,
+    );
+  }
+}
+
+class _CapacityShell extends StatelessWidget {
+  const _CapacityShell({
+    required this.value,
+    required this.title,
+    required this.caption,
   });
-  final double? soh;
-  final VoidCallback onTap;
+
+  /// Capacity in %, or null while there is no estimate.
+  final double? value;
+  final String title;
+  final String caption;
 
   @override
   Widget build(BuildContext context) {
-    final has = soh != null && soh!.isFinite;
-    final value = has ? soh!.clamp(0.0, 100.0) : 0.0;
-    final verdict = !has
-        ? 'Chưa có số SoH'
-        : value >= 90
-        ? 'Pin rất khỏe'
-        : value >= 80
-        ? 'Pin còn tốt'
-        : value >= 70
-        ? 'Pin đã hao mòn, nên theo dõi'
-        : 'Pin xuống cấp, nên kiểm tra';
-    // The app cannot measure SoH (no BMS link): the number is what the owner
-    // entered, and the card says so (QA 129: "Pin rất khỏe" read as a test).
-    return LuxePressable(
-      onTap: onTap,
-      semanticsLabel:
-          'Sức khỏe pin ${has ? '${value.round()} phần trăm theo số bạn nhập' : 'chưa có dữ liệu'}. Mở chi tiết pin',
-      child: LuxeGlass(
-        padding: const EdgeInsets.all(16),
-        child: ExcludeSemantics(
-          child: Row(
-            children: [
-              SizedBox.square(
-                dimension: 84,
-                child: TweenAnimationBuilder<double>(
-                  tween: Tween(end: value / 100),
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 1300),
-                  curve: LuxeMotion.enter,
-                  builder: (context, t, _) => CustomPaint(
-                    painter: _RingPainter(t),
-                    child: Center(
-                      child: Text(
-                        has ? '${(t * 100).round()}' : '—',
-                        style: const TextStyle(
-                          color: LuxeColors.text,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w300,
-                          fontFeatures: [ui.FontFeature.tabularFigures()],
-                        ),
+    final v = value;
+    return LuxeGlass(
+      padding: const EdgeInsets.all(16),
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            SizedBox.square(
+              dimension: 84,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: (v ?? 0) / 100),
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : const Duration(milliseconds: 1300),
+                curve: LuxeMotion.enter,
+                builder: (context, t, _) => CustomPaint(
+                  painter: _RingPainter(t),
+                  child: Center(
+                    child: Text(
+                      v == null ? '—' : '${(t * 100).round()}%',
+                      style: const TextStyle(
+                        color: LuxeColors.text,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w300,
+                        fontFeatures: [ui.FontFeature.tabularFigures()],
                       ),
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('SỨC KHỎE PIN · SoH', style: LuxeText.eyebrow),
-                    const SizedBox(height: 6),
-                    Text(
-                      verdict,
-                      style: const TextStyle(
-                        color: LuxeColors.text,
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      has
-                          ? 'Theo số bạn nhập · app không đo được SoH'
-                          : 'Nhập SoH trong Xe của tôi nếu bạn biết',
-                      style: LuxeText.caption,
-                    ),
-                    const SizedBox(height: 6),
-                    const Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Chi tiết pin',
-                            style: TextStyle(
-                              color: LuxeColors.emerald,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'DUNG LƯỢNG PIN · ƯỚC TÍNH',
+                    style: LuxeText.eyebrow,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(title, style: LuxeText.item),
+                  const SizedBox(height: 2),
+                  Text(caption, style: LuxeText.caption),
+                  const SizedBox(height: 6),
+                  const Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '% pin chai',
+                          style: TextStyle(
+                            color: LuxeColors.platinum,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          size: 18,
-                          color: LuxeColors.emerald,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      ),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: LuxeColors.platinum,
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -500,11 +582,8 @@ class _RingPainter extends CustomPainter {
     }
     if (t <= 0) return;
     final sweep = 2 * math.pi * t;
-    final color = t >= 0.8
-        ? LuxeColors.emerald
-        : t >= 0.7
-        ? LuxeColors.champagne
-        : LuxeColors.danger;
+    // An estimate is never emerald (QA 139); rose only when it is low.
+    final color = t >= 0.7 ? LuxeColors.champagne : LuxeColors.danger;
     canvas.drawArc(
       rect,
       -math.pi / 2,
@@ -539,8 +618,8 @@ class LuxeDataHint extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: const Color(0x55FBBF24)),
-      color: const Color(0x0FFBBF24),
+      border: Border.all(color: LuxeColors.champagne.withValues(alpha: 0.33)),
+      color: LuxeColors.champagne.withValues(alpha: 0.06),
     ),
     child: Row(
       children: [

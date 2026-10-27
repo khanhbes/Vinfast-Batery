@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
 import '../theme/luxe_theme.dart';
+import '../utils/app_error_formatter.dart';
 import '../utils/error_mapper.dart';
 
 enum AppNoticeKind { success, error, warning, info }
@@ -74,6 +75,31 @@ class AppPopup {
 
   static void showInfo(String title, {String? detail, VoidCallback? action}) =>
       _show(AppNoticeKind.info, title, detail, action);
+
+  /// App-authored copy (a literal, maybe with a count), shown like every
+  /// other notice (QA 139: the screens that used SnackBars moved here).
+  /// Text that looks like an id, a URL or an email is still replaced.
+  static void showMessage(
+    String text, {
+    AppNoticeKind kind = AppNoticeKind.info,
+    VoidCallback? action,
+    String actionLabel = 'Thử lại',
+  }) {
+    final private = RegExp(
+      r'https?:|www\.|@|[A-Za-z0-9_-]{16,}|\d{7,}|\d{1,3}(\.\d{1,3}){3}',
+    ).hasMatch(text);
+    final failure =
+        kind == AppNoticeKind.error || kind == AppNoticeKind.warning;
+    _show(
+      kind,
+      private ? (failure ? AppErrorFormatter.fallback : 'Thông báo') : text,
+      null,
+      action,
+      actionLabel: actionLabel,
+      trusted: true,
+      userInitiated: true,
+    );
+  }
 
   /// Xóa bộ nhớ đệm các lỗi đã hiển thị (gọi khi đổi tab, đổi xe hoặc kéo refresh).
   static void clearShownErrors() {
@@ -150,12 +176,14 @@ class AppPopup {
     String actionLabel = 'MỞ',
     bool persistent = false,
     bool userInitiated = false,
+    bool trusted = false,
   }) {
     if (WidgetsBinding.instance.rootElement == null) return;
 
     // This boundary covers success/info too: some legacy callers interpolate
     // device IDs, hostnames or server response text into otherwise friendly copy.
-    final copy = _safeCopy(kind, title, detail);
+    // [showMessage] checks its own text before passing it as trusted.
+    final copy = trusted ? (title, detail) : _safeCopy(kind, title, detail);
     title = copy.$1;
     detail = copy.$2;
     actionLabel = AppNoticeCopy.actionLabel(actionLabel);
@@ -270,16 +298,14 @@ class _NoticeOverlay extends StatelessWidget {
                 media.viewInsets.bottom -
                 112)
             .clamp(80.0, 420.0);
-    // In-app failures use calm champagne. Rose remains reserved for
-    // emergency OFF and hardware danger controls, not routine notices.
+    // QA 139: the status colours of the rest of the app. Errors are rose
+    // but calm (only the icon well and a faint glow; the card stays dark),
+    // warnings champagne; the off-palette orange is gone.
     final (color, icon) = switch (kind) {
       AppNoticeKind.success => (LuxeColors.emerald, Icons.check_rounded),
-      AppNoticeKind.error => (
-        LuxeColors.champagne,
-        Icons.error_outline_rounded,
-      ),
+      AppNoticeKind.error => (LuxeColors.danger, Icons.error_outline_rounded),
       AppNoticeKind.warning => (
-        const Color(0xFFF0A46B),
+        LuxeColors.champagne,
         Icons.warning_amber_rounded,
       ),
       AppNoticeKind.info => (LuxeColors.steel, Icons.info_outline_rounded),

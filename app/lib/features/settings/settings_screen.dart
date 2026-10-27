@@ -23,6 +23,7 @@ import '../../core/providers/appearance_provider.dart';
 import 'personal_ai_settings_screen.dart';
 import 'personal_ai_training_data_screen.dart';
 import 'developer_ai_studio_screen.dart';
+import '../../core/widgets/luxe_kit.dart';
 
 // =============================================================================
 // Settings Screen V5 — PLAN #4, #5, #7
@@ -40,7 +41,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _pushNotifications = false;
   bool _isLoading = false;
-  String _appVersion = '...';
+  String _appVersion = '…';
   String _shellyLabel = 'Shelly chưa kết nối';
   bool _developerUnlocked = false;
   int _versionTapCount = 0;
@@ -205,7 +206,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       LuxeSettingsGroup(
         children: [
           LuxeSettingsRow(
-            icon: Icons.notifications_active_outlined,
+            icon: Icons.notifications_active_rounded,
             title: 'Thông báo đẩy',
             subtitle: 'Nhận cảnh báo quan trọng trên thiết bị',
             trailing: LuxeSwitch(
@@ -223,7 +224,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           // separate sync to switch off (the old toggle did nothing).
           const LuxeSettingsRow(
             key: ValueKey('settings-data-autosaved'),
-            icon: Icons.cloud_done_outlined,
+            icon: Icons.cloud_done_rounded,
             title: 'Dữ liệu tự lưu theo tài khoản',
             subtitle:
                 'Xe, lịch sử sạc và bộ nhớ Pinova Bot lưu lên máy chủ khi có mạng',
@@ -242,7 +243,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           LuxeSettingsRow(
             key: const ValueKey('settings-appearance'),
-            icon: Icons.palette_outlined,
+            icon: Icons.palette_rounded,
             title: 'Giao diện',
             subtitle: AppearanceScreen.summary(
               ref.watch(effectiveAppearanceProvider),
@@ -296,7 +297,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: _openShellySetup,
             ),
             LuxeSettingsRow(
-              icon: Icons.dataset_outlined,
+              icon: Icons.dataset_rounded,
               title: 'Dữ liệu fine-tune AI (Firestore)',
               subtitle: 'Xem mẫu học gốc của xe đang chọn',
               onTap: _openTrainingData,
@@ -433,22 +434,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     AppPopup.showSuccess('Đã mở Developer Mode');
   }
 
-  Future<void> _showAppearanceSheet() => showModalBottomSheet<void>(
-    context: context,
+  Future<void> _showAppearanceSheet() => showLuxeSheet<void>(
+    context,
     isScrollControlled: true,
-    showDragHandle: true,
-    backgroundColor: const Color(0xFF0C0D0F),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      side: BorderSide(color: LuxeColors.hairline),
-    ),
     builder: (_) => AppearanceSheet(settings: _settingsService),
   );
 
-  Future<void> _showDeveloperSheet() => showModalBottomSheet<void>(
-    context: context,
-    showDragHandle: true,
-    backgroundColor: const Color(0xFF0C0D0F),
+  Future<void> _showDeveloperSheet() => showLuxeSheet<void>(
+    context,
     builder: (context) => SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(20, 0, 20, 24),

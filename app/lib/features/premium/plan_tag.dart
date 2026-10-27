@@ -82,7 +82,7 @@ EdgeInsets _padding(bool large) => large
 
 TextStyle _text(bool large, Color color) => TextStyle(
   color: color,
-  fontSize: large ? 11.5 : 10,
+  fontSize: large ? 11.5 : 11, // QA 139: 10 px was the smallest text
   height: 1.2,
   fontWeight: FontWeight.w800,
   letterSpacing: 1.4,
@@ -173,7 +173,7 @@ class _UltraPill extends StatelessWidget {
         children: [
           Icon(
             Icons.auto_awesome_rounded,
-            size: large ? 12 : 10,
+            size: large ? 12 : 11,
             color: PlanColors.ink,
           ),
           const SizedBox(width: 3),

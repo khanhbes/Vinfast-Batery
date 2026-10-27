@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import '../services/app_error_reporter.dart';
+import '../../core/theme/luxe_theme.dart';
 
 /// Modal bottom sheet displaying detailed error and debug information.
 class DebugErrorSheet extends StatelessWidget {
@@ -71,7 +72,7 @@ class DebugErrorSheet extends StatelessWidget {
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF121315) : Colors.white,
+        color: isDark ? LuxeColors.sheet : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         boxShadow: [
           BoxShadow(
@@ -106,7 +107,7 @@ class DebugErrorSheet extends StatelessWidget {
                 children: [
                   const Icon(
                     Icons.bug_report_rounded,
-                    color: Color(0xFFE8C170),
+                    color: LuxeColors.champagne,
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -118,7 +119,7 @@ class DebugErrorSheet extends StatelessWidget {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close_rounded),
                     tooltip: 'Đóng',
                     onPressed: () => Navigator.of(context).pop(),
                   ),
@@ -143,7 +144,7 @@ class DebugErrorSheet extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: isDark
-                              ? const Color(0xFF1D1F22)
+                              ? LuxeColors.raisedHigh
                               : Colors.blueGrey.shade100,
                           borderRadius: BorderRadius.circular(6),
                         ),
@@ -153,8 +154,8 @@ class DebugErrorSheet extends StatelessWidget {
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                             color: isDark
-                                ? const Color(0xFF9DB8E8)
-                                : const Color(0xFF1D1F22),
+                                ? LuxeColors.steel
+                                : LuxeColors.raisedHigh,
                           ),
                         ),
                       ),
@@ -208,8 +209,8 @@ class DebugErrorSheet extends StatelessWidget {
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: entry.statusCode! >= 500
-                                      ? const Color(0xFFF59E9E)
-                                      : const Color(0xFFE8C170),
+                                      ? LuxeColors.danger
+                                      : LuxeColors.champagne,
                                 ),
                               ),
                             ),
@@ -236,7 +237,7 @@ class DebugErrorSheet extends StatelessWidget {
                                 style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFF9DB8E8),
+                                  color: LuxeColors.steel,
                                 ),
                               ),
                             ),
@@ -264,7 +265,7 @@ class DebugErrorSheet extends StatelessWidget {
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: isDark
-                                  ? const Color(0xFF0E0F11)
+                                  ? LuxeColors.surface
                                   : const Color(0xFFF1F3F5),
                               borderRadius: BorderRadius.circular(6),
                             ),
@@ -293,18 +294,16 @@ class DebugErrorSheet extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF59E9E).withValues(alpha: 0.08),
+                      color: LuxeColors.danger.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: const Color(0xFFF59E9E).withValues(alpha: 0.3),
+                        color: LuxeColors.danger.withValues(alpha: 0.3),
                       ),
                     ),
                     child: Text(
                       entry.message,
                       style: TextStyle(
-                        color: isDark
-                            ? const Color(0xFFF59E9E)
-                            : Colors.red.shade900,
+                        color: isDark ? LuxeColors.danger : Colors.red.shade900,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -327,7 +326,7 @@ class DebugErrorSheet extends StatelessWidget {
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF0E0F11)
+                            ? LuxeColors.surface
                             : const Color(0xFFF1F3F5),
                         borderRadius: BorderRadius.circular(6),
                       ),
@@ -358,7 +357,7 @@ class DebugErrorSheet extends StatelessWidget {
                       constraints: const BoxConstraints(maxHeight: 180),
                       decoration: BoxDecoration(
                         color: isDark
-                            ? const Color(0xFF0B0C0E)
+                            ? LuxeColors.shell
                             : const Color(0xFFE9ECEF),
                         borderRadius: BorderRadius.circular(8),
                       ),

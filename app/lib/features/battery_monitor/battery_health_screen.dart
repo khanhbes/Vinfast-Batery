@@ -182,8 +182,8 @@ class _Body extends StatelessWidget {
         const LuxeNotice(
           message:
               'Xe không gửi dữ liệu cell pin, nên đây là ước tính từ điện năng '
-              'ổ Shelly đo và % bạn đọc trên đồng hồ (hiệu suất sạc khoảng 90 %). '
-              'Pin mới thường 95–100 %; dưới 70 % nên đưa xe đi kiểm tra.',
+              'ổ Shelly đo và % bạn đọc trên đồng hồ (hiệu suất sạc khoảng 90%). '
+              'Pin mới thường 95–100%; dưới 70% nên đưa xe đi kiểm tra.',
         ),
       ],
     );
@@ -301,7 +301,7 @@ class _TestCard extends StatelessWidget {
         if (test != null)
           LuxeSettingsRow(
             key: const ValueKey('health-test-result'),
-            icon: Icons.verified_outlined,
+            icon: Icons.verified_rounded,
             accent: LuxeColors.champagne,
             title: 'Lần kiểm tra gần nhất: ${test.sohPct.round()}%',
             subtitle:

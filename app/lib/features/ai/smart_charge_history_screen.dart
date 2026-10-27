@@ -380,7 +380,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
               bottom: false,
               child: RefreshIndicator(
                 color: LuxeColors.emerald,
-                backgroundColor: const Color(0xFF17181B),
+                backgroundColor: LuxeColors.raised,
                 onRefresh: () => _load(reset: true),
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(),
@@ -467,7 +467,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                           sliver: SliverToBoxAdapter(
                             child: LuxeNotice(
                               key: const ValueKey('history-plan-window'),
-                              icon: Icons.workspace_premium_outlined,
+                              icon: Icons.workspace_premium_rounded,
                               color: LuxeColors.champagne,
                               message:
                                   'Gói Free hiển thị $_historyDays ngày gần '
@@ -1106,7 +1106,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: .72),
+      barrierColor: luxeSheetBarrier,
       builder: (_) => FractionallySizedBox(
         heightFactor: .96,
         child: ClipRRect(
@@ -1144,13 +1144,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     final to = _rangeEnd;
     final allVehicles = _allVehicles;
     final vehicleId = _vehicleId;
-    final format = await showModalBottomSheet<ChargeReportFormat>(
-      context: context,
-      backgroundColor: const Color(0xFF0C0D0F),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        side: BorderSide(color: LuxeColors.hairline),
-      ),
+    final format = await showLuxeSheet<ChargeReportFormat>(
+      context,
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
@@ -1264,7 +1259,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF121315),
+        backgroundColor: LuxeColors.sheet,
         title: const Text('Ẩn phiên sạc?'),
         content: const Text(
           'Phiên sẽ được ẩn khỏi lịch sử thường. Dữ liệu gốc vẫn được giữ lại.',
@@ -1293,14 +1288,16 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
           () =>
               _items.removeWhere((item) => item.sessionId == session.sessionId),
         );
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Đã ẩn phiên khỏi lịch sử.')),
+        AppPopup.showMessage(
+          'Đã ẩn phiên khỏi lịch sử.',
+          kind: AppNoticeKind.success,
         );
       }
     } catch (error) {
       if (mounted && contextGeneration == _contextGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppErrorFormatter.format(error))),
+        AppPopup.showError(
+          AppErrorFormatter.format(error),
+          userInitiated: true,
         );
       }
     }
@@ -1744,13 +1741,13 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       const SizedBox(height: 10),
       OutlinedButton.icon(
         onPressed: terminal ? _hideSession : null,
-        icon: const Icon(Icons.visibility_off_outlined, size: 20),
+        icon: const Icon(Icons.visibility_off_rounded, size: 20),
         label: const Text('Ẩn phiên khỏi lịch sử'),
       ),
       const SizedBox(height: 4),
       TextButton.icon(
         onPressed: terminal ? _privacyErase : null,
-        icon: const Icon(Icons.delete_forever_outlined, size: 20),
+        icon: const Icon(Icons.delete_forever_rounded, size: 20),
         label: const Text('Xóa vĩnh viễn dữ liệu phiên'),
         style: TextButton.styleFrom(foregroundColor: LuxeColors.danger),
       ),
@@ -1803,7 +1800,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         highlight: false,
       ),
       (
-        icon: Icons.timer_outlined,
+        icon: Icons.timer_rounded,
         title: 'Thời gian sạc',
         value: formatChargeDuration(duration),
         highlight: false,
@@ -2055,7 +2052,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                 ),
             ],
             touchTooltipData: LineTouchTooltipData(
-              getTooltipColor: (_) => const Color(0xFF1D1F22),
+              getTooltipColor: (_) => LuxeColors.raisedHigh,
               tooltipRoundedRadius: 12,
               tooltipBorder: const BorderSide(color: LuxeColors.hairline),
               getTooltipItems: (items) => items
@@ -2201,11 +2198,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             ),
           ),
         ),
-        AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 320),
-          curve: LuxeMotion.enter,
+        LuxeFold(
           alignment: Alignment.topCenter,
           child: _showTechnical
               ? Padding(
@@ -2322,7 +2315,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF121315),
+        backgroundColor: LuxeColors.sheet,
         title: const Text('Xóa vĩnh viễn phiên sạc?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2379,8 +2372,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       }
     } catch (error) {
       if (mounted && contextGeneration == _contextGeneration) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(AppErrorFormatter.format(error))),
+        AppPopup.showError(
+          AppErrorFormatter.format(error),
+          userInitiated: true,
         );
       }
     }
@@ -2393,7 +2387,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF121315),
+        backgroundColor: LuxeColors.sheet,
         title: const Text('Ẩn phiên sạc?'),
         content: const Text(
           'Phiên sẽ biến mất khỏi danh sách thường nhưng dữ liệu gốc vẫn được giữ.',

@@ -166,7 +166,7 @@ class _EditTargetSheetState extends State<EditTargetSheet> {
               const LuxeNotice(message: 'Chọn mức khác để đổi mục tiêu.')
             else if (_raising) ...[
               const LuxeNotice(
-                icon: Icons.shield_outlined,
+                icon: Icons.shield_rounded,
                 color: LuxeColors.champagne,
                 message:
                     'Sạc lâu hơn: máy chủ gia hạn giới hạn an toàn của ổ (vẫn '

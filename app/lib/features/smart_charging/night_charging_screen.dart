@@ -355,7 +355,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
               const SizedBox(height: 16),
               const LuxeNotice(
                 key: ValueKey('night-safety'),
-                icon: Icons.shield_moon_outlined,
+                icon: Icons.shield_moon_rounded,
                 color: LuxeColors.emerald,
                 message:
                     'Ban đêm ngắt ngay khi ổ trên 60 °C (ban ngày 75 °C), khi '

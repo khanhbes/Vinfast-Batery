@@ -7,12 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/services/api_service.dart';
 import '../../core/theme/luxe_theme.dart';
-import '../../core/theme/app_motion.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/loading_skeleton.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import 'smart_charging_control_screen.dart';
+import '../../core/widgets/app_popup.dart';
 
 String _catalogLabel(String key, String fallback) =>
     key == 'charging_time' ? 'Smart Charge' : fallback;
@@ -494,7 +494,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                   child: LuxeNotice(
                     icon: Icons.history_rounded,
                     color: LuxeColors.champagne,
-                    message: 'Dữ liệu cache — đang kiểm tra server...',
+                    message: 'Dữ liệu cache — đang kiểm tra server…',
                   ),
                 ),
               ),
@@ -570,13 +570,13 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                 const SizedBox(height: 6),
                 Text(
                   _loading
-                      ? 'Đang tải...'
+                      ? 'Đang tải…'
                       : '$loadedCount/$total mô hình đang hoạt động',
                   style: LuxeText.item.copyWith(fontSize: 15),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${total == 0 ? '...' : '$total'} mô hình trong danh mục',
+                  '${total == 0 ? '…' : '$total'} mô hình trong danh mục',
                   style: LuxeText.caption.copyWith(fontSize: 12.5),
                 ),
               ],
@@ -724,7 +724,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
     final last = _lastFetchedAt;
     String label;
     if (_loading) {
-      label = 'Đang đồng bộ...';
+      label = 'Đang đồng bộ…';
     } else if (last == null) {
       label = 'Chưa đồng bộ';
     } else {
@@ -746,17 +746,16 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
         ? null
         : ref.read(vehicleProvider(vehicleId)).value;
     if (vehicle == null || vehicleId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hãy chọn một xe trước khi mở Smart Charge.'),
-        ),
+      AppPopup.showMessage(
+        'Hãy chọn một xe trước khi mở Smart Charge.',
+        kind: AppNoticeKind.warning,
       );
       return;
     }
     Navigator.push(
       context,
-      AppMotion.pageRoute(
-        SmartChargingControlScreen(
+      MaterialPageRoute<void>(
+        builder: (_) => SmartChargingControlScreen(
           vehicleId: vehicleId,
           currentSoc: vehicle.currentBattery.toDouble(),
         ),

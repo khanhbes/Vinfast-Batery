@@ -156,7 +156,7 @@ class AppNoticeCopy {
     'Fine-tune thất bại. Không có kết quả mới được ghi nhận.',
     'Máy chủ đã hoàn tất fine-tune.',
     'Không nhận được kết quả fine-tune từ máy chủ.',
-    'Đang kiểm tra máy chủ...',
+    'Đang kiểm tra máy chủ…',
     'Không thấy phản hồi từ cổng sạc. Vui lòng kiểm tra server.',
   };
 

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:vinfast_battery/core/widgets/app_popup.dart';
 import 'package:vinfast_battery/features/ai/assistant_sheet.dart';
 import 'package:vinfast_battery/features/ai/models/function_call_action.dart';
 import 'package:vinfast_battery/features/ai/services/chat_api_service.dart';
@@ -68,7 +69,9 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     FlutterSecureStorage.setMockInitialValues({});
+    AppPopup.resetForTesting();
   });
+  tearDown(AppPopup.resetForTesting);
   Future<void> open(
     WidgetTester tester,
     _FakeChat api, {
@@ -95,6 +98,8 @@ void main() {
             ),
         ],
         child: MaterialApp(
+          // Notices are AppPopup toasts, as in the app (QA 139).
+          navigatorKey: AppPopup.navigatorKey,
           home: MediaQuery(
             data: MediaQueryData(
               size: Size(width, 844),
@@ -230,6 +235,7 @@ void main() {
     expect(find.text('Chưa có lịch sử hội thoại nào.'), findsNothing);
     expect(find.text('Thử lại'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    AppPopup.dismiss();
     await tester.pumpWidget(const SizedBox());
   });
 

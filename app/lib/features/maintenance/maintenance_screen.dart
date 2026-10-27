@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/utils/number_text.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
 import '../../core/widgets/empty_state.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +18,8 @@ import '../../core/widgets/error_state.dart';
 import '../../data/models/maintenance_task_model.dart';
 import '../../data/repositories/maintenance_repository.dart';
 import 'vinfast_service_catalog.dart';
+import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/app_popup.dart';
 
 // =============================================================================
 // Service / Maintenance Screen V6 — Category-first, Urgency-clear
@@ -96,7 +99,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
             : FloatingActionButton.extended(
                 onPressed: () => _showAddEditDialog(context),
                 backgroundColor: LuxeColors.platinum,
-                foregroundColor: const Color(0xFF0B0C0E),
+                foregroundColor: LuxeColors.shell,
                 shape: const StadiumBorder(),
                 icon: const Icon(Icons.add_rounded),
                 label: const Text(
@@ -163,7 +166,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
 
         return RefreshIndicator(
           color: LuxeColors.emerald,
-          backgroundColor: const Color(0xFF17181B),
+          backgroundColor: LuxeColors.raised,
           onRefresh: _loadCurrentOdo,
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(
@@ -501,11 +504,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       },
     );
     if (created != null && created > 0 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Đã tạo $created mốc theo sổ tay VinFast'),
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppPopup.showMessage(
+        'Đã tạo $created mốc theo sổ tay VinFast',
+        kind: AppNoticeKind.success,
       );
     }
   }
@@ -555,18 +556,14 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
         'completedDate': DateTime.now().toUtc(),
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã đánh dấu hoàn thành'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppPopup.showMessage(
+          'Đã đánh dấu hoàn thành',
+          kind: AppNoticeKind.success,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(AppErrorFormatter.format(e))));
+        AppPopup.showError(AppErrorFormatter.format(e), userInitiated: true);
       }
     }
   }
@@ -577,7 +574,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       builder: (_) => Theme(
         data: LuxeTheme.of(context),
         child: AlertDialog(
-          backgroundColor: const Color(0xFF121315),
+          backgroundColor: LuxeColors.sheet,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
           ),
@@ -607,18 +604,11 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     try {
       await MaintenanceRepository.deleteMaintenanceTask(task.taskId!);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Đã xóa'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        AppPopup.showMessage('Đã xóa', kind: AppNoticeKind.success);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(AppErrorFormatter.format(e))));
+        AppPopup.showError(AppErrorFormatter.format(e), userInitiated: true);
       }
     }
   }
@@ -654,19 +644,16 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
               }
               if (context.mounted) {
                 Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      task != null ? 'Đã cập nhật' : 'Đã thêm mốc bảo dưỡng',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
+                AppPopup.showMessage(
+                  task != null ? 'Đã cập nhật' : 'Đã thêm mốc bảo dưỡng',
+                  kind: AppNoticeKind.success,
                 );
               }
             } catch (e) {
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(AppErrorFormatter.format(e))),
+                AppPopup.showError(
+                  AppErrorFormatter.format(e),
+                  userInitiated: true,
                 );
               }
             }
@@ -692,8 +679,8 @@ extension on _UrgencyFilter {
 /// Luxe palette for the add/edit sheet and helpers (was AppColors).
 abstract final class _Lx {
   static const background = Color(0xFF0C0D0F);
-  static const card = Color(0xFF121315);
-  static const surfaceVariant = Color(0xFF17181B);
+  static const card = LuxeColors.sheet;
+  static const surfaceVariant = LuxeColors.raised;
   static const glassBorder = LuxeColors.hairline;
   static const primary = LuxeColors.emerald;
   static const success = LuxeColors.emerald;
@@ -702,7 +689,7 @@ abstract final class _Lx {
   static const textPrimary = LuxeColors.text;
   static const textSecondary = LuxeColors.muted;
   static const textTertiary = LuxeColors.dim;
-  static const textHint = LuxeColors.dim;
+  static const textHint = LuxeColors.muted; // QA 139 (hint contrast)
 }
 
 class _LuxeFilterChip extends StatelessWidget {
@@ -760,7 +747,7 @@ class _LuxeFilterChip extends StatelessWidget {
               Text(
                 '$label  $count',
                 style: TextStyle(
-                  color: selected ? const Color(0xFF0B0C0E) : LuxeColors.text,
+                  color: selected ? LuxeColors.shell : LuxeColors.text,
                   fontSize: 13,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                 ),
@@ -806,10 +793,10 @@ class _TaskCard extends StatelessWidget {
         ? 1.0
         : (1 - remain / interval).clamp(0.0, 1.0);
     final status = switch (urgency) {
-      MaintenanceUrgency.overdue => 'Quá ${-remain} km',
-      MaintenanceUrgency.dueSoon => 'Còn $remain km',
+      MaintenanceUrgency.overdue => 'Quá ${groupThousands(-remain)} km',
+      MaintenanceUrgency.dueSoon => 'Còn ${groupThousands(remain)} km',
       MaintenanceUrgency.upcoming =>
-        'Còn $remain km · mốc ${task.targetOdo} km',
+        'Còn ${groupThousands(remain)} km · mốc ${groupThousands(task.targetOdo)} km',
       MaintenanceUrgency.completed =>
         task.completedDate == null
             ? 'Đã hoàn thành'
@@ -888,7 +875,7 @@ class _TaskCard extends StatelessWidget {
                     ),
                   PopupMenuButton<String>(
                     tooltip: 'Tùy chọn',
-                    color: const Color(0xFF17181B),
+                    color: LuxeColors.raised,
                     icon: const Icon(
                       Icons.more_vert_rounded,
                       color: LuxeColors.platinumMid,
@@ -1412,7 +1399,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: const Icon(
-                        Icons.close,
+                        Icons.close_rounded,
                         color: _Lx.textSecondary,
                         size: 18,
                       ),
@@ -1581,12 +1568,8 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
   }
 
   Future<void> _showTypePicker() async {
-    final picked = await showModalBottomSheet<ServiceType>(
-      context: context,
-      backgroundColor: _Lx.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    final picked = await showLuxeSheet<ServiceType>(
+      context,
       builder: (ctx) => _TypePickerSheet(currentType: _selectedType),
     );
     if (picked != null) {
@@ -1710,11 +1693,9 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
     final title = _titleCtrl.text.trim();
     final odo = int.tryParse(_odoCtrl.text.trim()) ?? 0;
     if (title.isEmpty || odo <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vui lòng nhập tên dịch vụ và mốc ODO hợp lệ'),
-          backgroundColor: _Lx.error,
-        ),
+      AppPopup.showMessage(
+        'Vui lòng nhập tên dịch vụ và mốc ODO hợp lệ',
+        kind: AppNoticeKind.warning,
       );
       return;
     }
@@ -1847,22 +1828,12 @@ class _TypePickerSheet extends StatelessWidget {
     final groups = _groupedTypes();
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        // The handle comes from showLuxeSheet (QA 139).
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: _Lx.textTertiary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
             const Text(
               'Chọn loại dịch vụ',
               style: TextStyle(

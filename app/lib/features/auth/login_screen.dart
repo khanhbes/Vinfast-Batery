@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/services/auth_attempt_limiter.dart';
 import '../../core/services/auth_service.dart';
-import '../../core/theme/app_motion.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
 import 'password_reset_screen.dart';
@@ -105,8 +104,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _openPasswordReset() async {
     await Navigator.of(context).push<void>(
-      AppMotion.pageRoute<void>(
-        PasswordResetScreen(initialEmail: _emailCtrl.text.trim()),
+      MaterialPageRoute<void>(
+        builder: (_) =>
+            PasswordResetScreen(initialEmail: _emailCtrl.text.trim()),
       ),
     );
   }
@@ -292,7 +292,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: _loading
                         ? null
                         : () => Navigator.of(context).push<void>(
-                            AppMotion.pageRoute<void>(const RegisterScreen()),
+                            MaterialPageRoute<void>(
+                              builder: (_) => const RegisterScreen(),
+                            ),
                           ),
                   ),
                 ),

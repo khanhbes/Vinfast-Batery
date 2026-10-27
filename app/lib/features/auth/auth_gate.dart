@@ -269,8 +269,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
             }
           },
           message: (_wasAuthenticated && !_explicitSignedOut)
-              ? 'Đang khôi phục phiên đăng nhập...'
-              : 'Đang khởi động...',
+              ? 'Đang khôi phục phiên đăng nhập…'
+              : 'Đang khởi động…',
         ),
       );
     } else {
@@ -285,7 +285,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
                 !_authResolved &&
                 snapshot.data == null) {
               return const _BootstrapSplashScreen(
-                message: 'Đang xác thực...',
+                message: 'Đang xác thực…',
                 animate: false,
               );
             }
@@ -710,7 +710,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
               ? const KeyedSubtree(
                   key: ValueKey('auth-held'),
                   child: BootstrapSplash(
-                    message: 'Đang tải hồ sơ...',
+                    message: 'Đang tải hồ sơ…',
                     animate: false,
                   ),
                 )

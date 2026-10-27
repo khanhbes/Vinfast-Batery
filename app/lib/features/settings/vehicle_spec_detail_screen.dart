@@ -196,7 +196,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             const LuxeReveal(
               index: 1,
               child: LuxeNotice(
-                icon: Icons.verified_user_outlined,
+                icon: Icons.verified_user_rounded,
                 message:
                     'Thông số hãng được quản lý bởi catalog chung. Bạn chỉ có thể sửa tên gọi riêng, biển số, ODO và tình trạng pin thực tế.',
               ),
@@ -214,7 +214,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                   label: 'Biển số xe',
                   controller: _licensePlateCtrl,
                   isEditing: _isEditing,
-                  icon: Icons.pin_outlined,
+                  icon: Icons.pin_rounded,
                 ),
                 _SpecRow(
                   label: 'Loại pin (LFP / NMC)',

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../theme/app_motion.dart';
+import '../theme/luxe_theme.dart';
 
 /// One-shot entrance; never delays interaction or loops during polling.
 class SettingsReveal extends StatelessWidget {
@@ -9,6 +9,7 @@ class SettingsReveal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppReveal(duration: AppMotion.slow, child: child);
+    // QA 139: the one LUXE entrance (520 ms, LuxeMotion.enter).
+    return LuxeReveal(child: child);
   }
 }

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../services/achievement_engine.dart';
 import 'achievement_medal.dart';
+import '../../../core/widgets/luxe_kit.dart';
 
 /// Detail of one achievement: the medal floating with a periodic shine,
 /// rarity, points, how to unlock and the progress or unlock date.
@@ -16,7 +17,7 @@ abstract final class AchievementDetailSheet {
         isScrollControlled: true,
         useSafeArea: true,
         backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.72),
+        barrierColor: luxeSheetBarrier,
         builder: (context) => Theme(
           data: LuxeTheme.of(context),
           child: _Sheet(progress: p),
@@ -44,7 +45,8 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
     if (MediaQuery.disableAnimationsOf(context)) {
       _loop.stop();
     } else if (!_loop.isAnimating) {
-      _loop.repeat();
+      // QA 139 (QA-13): one pass when shown; no endless decorative loop.
+      _loop.forward();
     }
   }
 
@@ -61,7 +63,7 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
     final hidden = def.secret && !p.unlocked;
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFF0C0D0F),
+        color: LuxeColors.sheet,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         border: Border(top: BorderSide(color: LuxeColors.hairline)),
       ),

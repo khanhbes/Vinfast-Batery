@@ -487,7 +487,7 @@ class _Step extends StatelessWidget {
                     ? const Icon(
                         Icons.check_rounded,
                         size: 10,
-                        color: Color(0xFF0B0C0E),
+                        color: LuxeColors.shell,
                       )
                     : current
                     ? Center(

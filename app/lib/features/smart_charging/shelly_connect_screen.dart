@@ -19,6 +19,7 @@ import '../../data/services/shelly_cloud_auth_service.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import '../../data/services/smart_charger_service.dart';
 import 'smart_charger_setup_hub_screen.dart';
+import '../../core/widgets/app_popup.dart';
 
 /// Normal Mode Shelly setup.
 /// Designed for everyday users: hides all technical secrets (Cloud keys,
@@ -243,8 +244,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   suffixIcon: IconButton(
                     icon: Icon(
                       obscure
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined,
+                          ? Icons.visibility_rounded
+                          : Icons.visibility_off_rounded,
                       color: AppUiColors.of(context).muted,
                     ),
                     onPressed: () {
@@ -293,7 +294,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         title: Row(
           children: [
             Icon(
-              Icons.shield_outlined,
+              Icons.shield_rounded,
               color: AppUiColors.of(context).primary,
               size: 28,
             ),
@@ -436,13 +437,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       await _coordinator.disconnect();
     } on SmartChargerException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message),
-          backgroundColor: AppUiColors.of(context).danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      AppPopup.showError(error.message, userInitiated: true);
     }
   }
 
@@ -491,7 +486,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                 children: [
                   if (_snapshot.codeRefreshRequired) ...[
                     LuxeNotice(
-                      icon: Icons.vpn_key_outlined,
+                      icon: Icons.vpn_key_rounded,
                       color: LuxeColors.champagne,
                       message:
                           'Thiết bị có mã kết nối mới. Liên kết hiện tại vẫn được giữ. Nhập mã mới do quản trị viên cấp khi thuận tiện.',
@@ -651,7 +646,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.cloud_outlined, color: ui.primary, size: 24),
+                Icon(Icons.cloud_rounded, color: ui.primary, size: 24),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -714,8 +709,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                 suffixIcon: IconButton(
                   icon: Icon(
                     _cloudKeyObscure
-                        ? Icons.visibility_outlined
-                        : Icons.visibility_off_outlined,
+                        ? Icons.visibility_rounded
+                        : Icons.visibility_off_rounded,
                     color: ui.muted,
                   ),
                   onPressed: () =>
@@ -742,7 +737,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Color(0xFF0B0C0E),
+                          color: LuxeColors.shell,
                         ),
                       )
                     : const Icon(Icons.search_rounded),
@@ -940,7 +935,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Color(0xFF0B0C0E),
+                          color: LuxeColors.shell,
                         ),
                       )
                     : const Icon(Icons.check_circle_outline_rounded),
@@ -1047,11 +1042,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               style: TextStyle(color: ui.muted, fontSize: 12.5, height: 1.3),
             ),
             const SizedBox(height: 10),
-            _featurePill(
-              Icons.shield_outlined,
-              'Kiểm tra cấu hình an toàn',
-              ui,
-            ),
+            _featurePill(Icons.shield_rounded, 'Kiểm tra cấu hình an toàn', ui),
             const SizedBox(height: 4),
             _featurePill(
               Icons.speed_rounded,
@@ -1267,7 +1258,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.verified_user_outlined, color: ui.primary, size: 22),
+                Icon(Icons.verified_user_rounded, color: ui.primary, size: 22),
                 const SizedBox(width: 8),
                 Text(
                   'Cần xác thực an toàn phần cứng',
@@ -1535,7 +1526,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         const SizedBox(height: 10),
         OutlinedButton.icon(
           onPressed: () => openAppSettings(),
-          icon: const Icon(Icons.settings_outlined),
+          icon: const Icon(Icons.settings_rounded),
           label: const Text('Mở Cài đặt hệ thống để cấp quyền'),
         ),
       ],
@@ -1585,7 +1576,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         );
                       });
                     },
-                    icon: const Icon(Icons.cloud_outlined, size: 16),
+                    icon: const Icon(Icons.cloud_rounded, size: 16),
                     label: const Text('Qua Bước 2: Cloud'),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1603,7 +1594,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                         );
                       });
                     },
-                    icon: const Icon(Icons.vpn_key_outlined, size: 16),
+                    icon: const Icon(Icons.vpn_key_rounded, size: 16),
                     label: const Text('Qua Bước 3: Mã Admin'),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1775,13 +1766,13 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
 
   IconData _iconFor(ShellyConnectionFlowState state) {
     if (state == ShellyConnectionFlowState.disconnected) {
-      if (_activeFlow == 2) return Icons.cloud_outlined;
+      if (_activeFlow == 2) return Icons.cloud_rounded;
       if (_activeFlow == 3) return Icons.vpn_key_rounded;
       return Icons.bolt_rounded;
     }
     return switch (state) {
       ShellyConnectionFlowState.connected => Icons.check_circle_outline_rounded,
-      ShellyConnectionFlowState.verificationRequired => Icons.shield_outlined,
+      ShellyConnectionFlowState.verificationRequired => Icons.shield_rounded,
       ShellyConnectionFlowState.deviceFound => Icons.power_rounded,
       ShellyConnectionFlowState.multipleDevices => Icons.devices_other_rounded,
       ShellyConnectionFlowState.connectionFailed => Icons.error_outline_rounded,
@@ -1813,7 +1804,7 @@ const _glass = LinearGradient(
 const _glassEmerald = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0x1A34D399), Color(0x0634D399)],
+  colors: [LuxeColors.emeraldTint, Color(0x0634D399)],
 );
 
 /// Status medallion: a metal well holding the state icon, ringed by an arc
@@ -2006,7 +1997,7 @@ class _EngravedCodeFieldState extends State<_EngravedCodeField> {
                           gradient: const LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Color(0xFF1D1F22), Color(0xFF0E0F11)],
+                            colors: [LuxeColors.raisedHigh, LuxeColors.surface],
                           ),
                           border: Border.all(
                             color: _focus.hasFocus && i == text.length
@@ -2021,7 +2012,7 @@ class _EngravedCodeFieldState extends State<_EngravedCodeField> {
                           boxShadow: _focus.hasFocus && i == text.length
                               ? const [
                                   BoxShadow(
-                                    color: Color(0x3334D399),
+                                    color: LuxeColors.emeraldSoft,
                                     blurRadius: 12,
                                   ),
                                 ]

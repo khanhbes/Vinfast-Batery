@@ -122,7 +122,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                     gradient: const LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0xFF151619), Color(0xFF0B0C0E)],
+                      colors: [Color(0xFF151619), LuxeColors.shell],
                     ),
                     border: Border.all(
                       color: enabled
@@ -216,7 +216,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                                     ],
                                   )
                                 : null,
-                            color: enabled ? null : const Color(0xFF1D1F22),
+                            color: enabled ? null : LuxeColors.raisedHigh,
                             boxShadow: enabled
                                 ? [
                                     BoxShadow(
@@ -233,7 +233,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                             size: knob * 0.44,
                             color: enabled
                                 ? Color.lerp(
-                                    const Color(0xFF0B0C0E),
+                                    LuxeColors.shell,
                                     LuxeColors.emeraldDeep,
                                     t,
                                   )

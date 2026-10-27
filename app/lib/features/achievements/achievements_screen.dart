@@ -78,7 +78,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
               SafeArea(
                 child: RefreshIndicator(
                   color: LuxeColors.emerald,
-                  backgroundColor: const Color(0xFF17181B),
+                  backgroundColor: LuxeColors.raised,
                   onRefresh: () => ref
                       .read(achievementsControllerProvider.notifier)
                       .sync(force: true),
@@ -218,7 +218,8 @@ class _RankHeroState extends State<_RankHero>
     if (MediaQuery.disableAnimationsOf(context)) {
       _loop.stop();
     } else if (!_loop.isAnimating) {
-      _loop.repeat();
+      // QA 139 (QA-13): one pass when shown; no endless decorative loop.
+      _loop.forward();
     }
   }
 
@@ -331,7 +332,7 @@ class _OrbitPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1
-        ..color = const Color(0x1FFFFFFF),
+        ..color = LuxeColors.hairline,
     );
     final sweep = 2 * math.pi * progress.clamp(0.0, 1.0);
     if (sweep > 0.01) {
@@ -564,13 +565,13 @@ class _CategoryFilter extends StatelessWidget {
                   Icon(
                     icon,
                     size: 15,
-                    color: on ? const Color(0xFF0B0C0E) : LuxeColors.muted,
+                    color: on ? LuxeColors.shell : LuxeColors.muted,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '$label  ${count(c)}',
                     style: TextStyle(
-                      color: on ? const Color(0xFF0B0C0E) : LuxeColors.text,
+                      color: on ? LuxeColors.shell : LuxeColors.text,
                       fontSize: 13,
                       fontWeight: on ? FontWeight.w600 : FontWeight.w400,
                     ),

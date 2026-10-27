@@ -72,7 +72,7 @@ class ShellyConnectionSnapshot {
       : syncDelayed
       ? 'Đang đồng bộ lại với máy chủ. Chờ trạng thái mới trước khi bật sạc.'
       : fromCache && state == ShellyConnectionFlowState.connected
-      ? 'Đang cập nhật trạng thái mới nhất của Shelly...'
+      ? 'Đang cập nhật trạng thái mới nhất của Shelly…'
       : state == ShellyConnectionFlowState.serverConnectionRequired
       ? 'Liên kết cũ chưa cho phép điều khiển qua máy chủ. Hãy nhập mã kết nối do quản trị viên cấp.'
       : status?.relay == true

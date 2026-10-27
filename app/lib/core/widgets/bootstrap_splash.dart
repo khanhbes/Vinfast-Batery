@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'pinova_brand.dart';
+import '../../core/theme/luxe_theme.dart';
 
 /// ============================================================================
 /// PINOVA — "PLATINUM" SPLASH (V6 timeline, Pinova mark since QA 133)
@@ -301,7 +302,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
                         colors: [
                           Color.lerp(
                             BootstrapSplash.background,
-                            const Color(0xFF17181B),
+                            LuxeColors.raised,
                             _ambient.value,
                           )!,
                           BootstrapSplash.background,

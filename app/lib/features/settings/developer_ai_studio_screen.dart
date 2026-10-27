@@ -190,13 +190,9 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
     );
     bool excluded = record['training_excluded'] == true;
 
-    final saved = await showModalBottomSheet<bool>(
-      context: context,
+    final saved = await showLuxeSheet<bool>(
+      context,
       isScrollControlled: true,
-      backgroundColor: _ui.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (ctx) => StatefulBuilder(
         builder: (context, setSheetState) => Padding(
           padding: EdgeInsets.fromLTRB(
@@ -635,15 +631,15 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               controller: _tabController,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
-                color: CockpitColors.emerald.withValues(alpha: 0.14),
+                color: LuxeColors.emerald.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(CockpitRadius.small),
                 border: Border.all(
-                  color: CockpitColors.emerald.withValues(alpha: 0.4),
+                  color: LuxeColors.emerald.withValues(alpha: 0.4),
                   width: 1.2,
                 ),
               ),
               dividerColor: Colors.transparent,
-              labelColor: CockpitColors.emeraldStrong,
+              labelColor: LuxeColors.emeraldDeep,
               unselectedLabelColor: _ui.muted,
               labelStyle: CockpitTypography.label(
                 fontSize: 13,
@@ -888,7 +884,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     decoration: InputDecoration(
                       labelText: 'Server URL',
                       labelStyle: TextStyle(color: _ui.primary, fontSize: 12),
-                      hintText: 'https://... hoặc http://...',
+                      hintText: 'https://… hoặc http://…',
                       hintStyle: TextStyle(color: _ui.muted, fontSize: 12),
                       isDense: true,
                       contentPadding: EdgeInsets.symmetric(
@@ -962,7 +958,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                           : () async {
                               setDlgState(() {
                                 pinging = true;
-                                pingResult = 'Đang kiểm tra kết nối...';
+                                pingResult = 'Đang kiểm tra kết nối…';
                               });
                               final res = await _service.pingServer(
                                 customUrl: controller.text.trim(),
@@ -1460,7 +1456,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                     side: BorderSide(color: _ui.border),
                   ),
                   onPressed: () async {
-                    AppPopup.showSuccess('Đang kiểm tra máy chủ...');
+                    AppPopup.showSuccess('Đang kiểm tra máy chủ…');
                     final res = await _service.pingServer();
                     if (res['online'] == true) {
                       AppPopup.showSuccess(
@@ -1642,9 +1638,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   )
                 : Icon(Icons.flash_on_rounded, size: 22),
             label: Text(
-              _tuning
-                  ? 'Đang Fine-tune Model...'
-                  : '⚡ Kích Hoạt Fine-Tune Ngay',
+              _tuning ? 'Đang Fine-tune Model…' : '⚡ Kích Hoạt Fine-Tune Ngay',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
             ),
           ),
@@ -1782,7 +1776,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               _metricPill(
                 'MAE',
                 '${(maeSec / 60).toStringAsFixed(1)}p',
-                Icons.timer_outlined,
+                Icons.timer_rounded,
                 _ui.primary,
               ),
               _metricPill(

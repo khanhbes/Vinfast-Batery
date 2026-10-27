@@ -299,7 +299,7 @@ class LuxeButtonSpinner extends StatelessWidget {
     dimension: 22,
     child: CircularProgressIndicator(
       strokeWidth: 2.2,
-      color: const Color(0xFF0B0C0E),
+      color: LuxeColors.shell,
       semanticsLabel: semanticsLabel,
     ),
   );
@@ -349,7 +349,7 @@ class LuxePasswordStrength extends StatelessWidget {
                   height: 3,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
-                    color: i < s ? color : const Color(0x1FFFFFFF),
+                    color: i < s ? color : LuxeColors.hairline,
                   ),
                 ),
               ),

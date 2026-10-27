@@ -194,7 +194,7 @@ class GuideRegistry {
     _step(
       'charge_soc',
       'Nhập mức pin',
-      'Kéo núm bạc theo số % trên đồng hồ xe, núm xanh tới mức muốn sạc. '
+      'Kéo núm tối theo số % trên đồng hồ xe, núm sáng tới mức muốn sạc. '
           'Nhập đúng % giúp dự đoán thời gian chính xác hơn.',
       keyChargeSocInput,
     ),

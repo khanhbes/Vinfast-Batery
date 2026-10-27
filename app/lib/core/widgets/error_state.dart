@@ -87,7 +87,7 @@ class ErrorState extends StatelessWidget {
                 error: rawError,
                 source: 'ErrorState',
               ),
-              icon: const Icon(Icons.bug_report_outlined, size: 16),
+              icon: const Icon(Icons.bug_report_rounded, size: 16),
               label: const Text('Xem chi tiết lỗi (Debug)'),
               style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
             ),

@@ -6,6 +6,7 @@ import '../../../data/services/charge_estimator.dart';
 import '../../../data/models/smart_charging_session.dart';
 import 'history_luxe_widgets.dart';
 import 'start_charge_confirmation_sheet.dart';
+import '../../../core/widgets/luxe_kit.dart';
 
 class StopChargingDecision {
   const StopChargingDecision(this.reason);
@@ -23,7 +24,7 @@ Future<StopChargingDecision?> showStopChargingConfirmationSheet(
   context: context,
   isScrollControlled: true,
   backgroundColor: Colors.transparent,
-  barrierColor: Colors.black.withValues(alpha: .72),
+  barrierColor: luxeSheetBarrier,
   builder: (context) => _StopChargingConfirmationSheet(
     currentSoc: currentSoc,
     targetSoc: targetSoc,
@@ -97,14 +98,14 @@ class _StopChargingConfirmationSheetState
                 // A timed charge has no target (QA 130).
                 if (widget.targetMode) ...[
                   LuxeInfoRow(
-                    icon: Icons.flag_outlined,
+                    icon: Icons.flag_rounded,
                     label: 'Mục tiêu',
                     value: '${widget.targetSoc.round()}%',
                   ),
                   const Divider(height: 1),
                 ],
                 LuxeInfoRow(
-                  icon: Icons.timer_outlined,
+                  icon: Icons.timer_rounded,
                   label: widget.targetMode
                       ? 'Còn tới mục tiêu'
                       : 'Shelly tự ngắt sau',

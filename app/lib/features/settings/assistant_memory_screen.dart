@@ -110,7 +110,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
               key: ValueKey('assistant-privacy-note'),
               message:
                   'Câu hỏi và thông tin xe cần thiết được xử lý bởi Google Gemini qua máy chủ Pinova. Không gửi mật khẩu hay mã truy cập; toàn bộ cuộc trò chuyện không được lưu trên máy chủ.',
-              icon: Icons.shield_outlined,
+              icon: Icons.shield_rounded,
             ),
             const SizedBox(height: 18),
             if (_error != null) ...[
@@ -141,7 +141,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
                 ),
                 if (snapshot != null)
                   LuxeSettingsRow(
-                    icon: Icons.forum_outlined,
+                    icon: Icons.forum_rounded,
                     title: 'Lượt AI hôm nay',
                     subtitle:
                         '${snapshot.usedToday}/${snapshot.dailyLimit} tin · hết lượt sẽ dùng chế độ cơ bản',

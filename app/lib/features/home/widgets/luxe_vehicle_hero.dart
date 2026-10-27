@@ -336,7 +336,7 @@ class _StagePainter extends CustomPainter {
         ..shader = ui.Gradient.linear(
           Offset(0, horizon - 10),
           Offset(0, horizon + 10),
-          const [Color(0x00FFFFFF), Color(0x1FFFFFFF), Color(0x00FFFFFF)],
+          const [Color(0x00FFFFFF), LuxeColors.hairline, Color(0x00FFFFFF)],
           const [0.0, 0.5, 1.0],
         ),
     );

@@ -143,9 +143,9 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
     final statusText = widget.stopAwaitingReadback
         ? 'ĐÃ GỬI LỆNH TẮT · CHỜ XÁC NHẬN'
         : widget.isStopping
-        ? 'ĐANG TẮT...'
+        ? 'ĐANG TẮT…'
         : widget.isStarting
-        ? 'ĐANG XÁC NHẬN...'
+        ? 'ĐANG XÁC NHẬN…'
         : 'ĐANG SẠC';
 
     return LuxeGlass(
@@ -294,9 +294,9 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
           OutlinedButton.icon(
             onPressed: widget.isStopping ? null : widget.onStop,
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFF59E9E),
+              foregroundColor: LuxeColors.danger,
               side: BorderSide(
-                color: const Color(0xFFF59E9E).withValues(alpha: 0.45),
+                color: LuxeColors.danger.withValues(alpha: 0.45),
               ),
               backgroundColor: const Color(0x14F59E9E),
             ),
@@ -632,7 +632,7 @@ class _Chip extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(99),
-      color: accent ? const Color(0x1A34D399) : LuxeColors.glass,
+      color: accent ? LuxeColors.emeraldTint : LuxeColors.glass,
       border: Border.all(
         color: accent
             ? LuxeColors.emerald.withValues(alpha: 0.35)

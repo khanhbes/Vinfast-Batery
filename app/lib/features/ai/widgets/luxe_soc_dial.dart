@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Two-knob platinum dial: the platinum knob is the battery level the user
 /// reads off the scooter (there is no BMS feed), the emerald knob is the
@@ -105,7 +107,8 @@ class _LuxeSocDialState extends State<LuxeSocDial>
       _flow.stop();
     } else {
       if (_enter.isDismissed) _enter.forward();
-      _flow.repeat();
+      // QA 139 (QA-13): one pass when shown; no endless decorative loop.
+      _flow.forward();
     }
   }
 
@@ -303,6 +306,7 @@ class _LuxeSocDialState extends State<LuxeSocDial>
                       animation: Listenable.merge([_enter, _flow]),
                       builder: (context, _) => CustomPaint(
                         painter: LuxeDialPainter(
+                          accent: PlanStyle.of(context).accentColors,
                           current: _shownCurrent,
                           target: _full ? null : _shownTarget,
                           enter: _enter.value,
@@ -342,6 +346,7 @@ class _LuxeSocDialState extends State<LuxeSocDial>
   }
 
   Widget _centre(int current, int target) {
+    final accent = PlanStyle.of(context).accent;
     final reveal = _reduced ? 1.0 : Curves.easeOut.transform(_enter.value);
     return Opacity(
       opacity: reveal.clamp(0.0, 1.0),
@@ -410,11 +415,11 @@ class _LuxeSocDialState extends State<LuxeSocDial>
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(99),
-              color: _full ? LuxeColors.glass : const Color(0x1A34D399),
+              color: _full ? LuxeColors.glass : accent.withValues(alpha: 0.1),
               border: Border.all(
                 color: _full
                     ? LuxeColors.hairline
-                    : LuxeColors.emerald.withValues(alpha: 0.35),
+                    : accent.withValues(alpha: 0.35),
               ),
             ),
             child: Row(
@@ -423,15 +428,15 @@ class _LuxeSocDialState extends State<LuxeSocDial>
                 Icon(
                   _full ? Icons.battery_full_rounded : Icons.bolt_rounded,
                   size: 14,
-                  color: _full ? LuxeColors.platinumMid : LuxeColors.emerald,
+                  color: _full ? LuxeColors.platinumMid : accent,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   _full
-                      ? 'Pin đã đầy · kéo núm bạc để sửa'
+                      ? 'Pin đã đầy · kéo núm tối để sửa'
                       : '+${target - current}%${widget.etaLabel == null ? '' : ' · ${widget.etaLabel}'}',
                   style: TextStyle(
-                    color: _full ? LuxeColors.muted : LuxeColors.emerald,
+                    color: _full ? LuxeColors.muted : accent,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.3,
@@ -451,66 +456,70 @@ class _LuxeSocDialState extends State<LuxeSocDial>
     required String label,
     required bool accent,
     bool editable = false,
-  }) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.baseline,
-        textBaseline: TextBaseline.alphabetic,
-        children: [
-          ShaderMask(
-            blendMode: BlendMode.srcIn,
-            shaderCallback: (b) => LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: accent
-                  ? const [Color(0xFFB9F5DC), LuxeColors.emerald]
-                  : const [LuxeColors.platinumHi, LuxeColors.platinumMid],
-            ).createShader(b),
-            child: Text(
-              '$value',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 48,
-                height: 1.0,
-                fontWeight: FontWeight.w200,
-                letterSpacing: -1.5,
-                fontFeatures: [ui.FontFeature.tabularFigures()],
+  }) {
+    final plan = PlanStyle.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            ShaderMask(
+              blendMode: BlendMode.srcIn,
+              shaderCallback: (b) => LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: accent
+                    ? [plan.accentColors[0], plan.accent]
+                    : const [LuxeColors.platinum, LuxeColors.platinumLow],
+              ).createShader(b),
+              child: Text(
+                '$value',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 48,
+                  height: 1.0,
+                  fontWeight: FontWeight.w200,
+                  letterSpacing: -1.5,
+                  fontFeatures: [ui.FontFeature.tabularFigures()],
+                ),
               ),
             ),
-          ),
-          Text(
-            '%',
-            style: TextStyle(
-              color: accent ? LuxeColors.emerald : LuxeColors.muted,
-              fontSize: 16,
-              fontWeight: FontWeight.w300,
+            Text(
+              '%',
+              style: TextStyle(
+                color: accent ? plan.accent : LuxeColors.muted,
+                fontSize: 16,
+                fontWeight: FontWeight.w300,
+              ),
             ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 6),
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: accent ? LuxeColors.emerald : LuxeColors.muted,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              letterSpacing: accent ? 1.4 : 0.3,
-            ),
-          ),
-          if (editable) ...[
-            const SizedBox(width: 4),
-            const Icon(Icons.edit_rounded, size: 11, color: LuxeColors.dim),
           ],
-        ],
-      ),
-    ],
-  );
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              // Labels stay platinum: colour belongs to the numbers (Task 125).
+              style: TextStyle(
+                color: accent ? LuxeColors.platinumMid : LuxeColors.muted,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                letterSpacing: accent ? 1.4 : 0.3,
+              ),
+            ),
+            if (editable) ...[
+              const SizedBox(width: 4),
+              const Icon(Icons.edit_rounded, size: 11, color: LuxeColors.dim),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 /// Claims a drag that starts on a knob and moves along the ring. Within
@@ -592,12 +601,24 @@ class LuxeDialPainter extends CustomPainter {
     this.active,
     this.enabled = true,
     this.charging = false,
+    this.accent = defaultAccent,
   });
 
   final double current;
   final double? target;
   final double enter;
   final double flow;
+
+  /// The target knob and the charge window (QA 139): the plan's accent
+  /// (`PlanStyle.accentColors`, light to deep), never emerald, which stays
+  /// for a verified charge (the read-only charging look).
+  final List<Color> accent;
+
+  static const defaultAccent = [
+    LuxeColors.platinumHi,
+    LuxeColors.platinum,
+    Color(0xFFB9BCC1),
+  ];
 
   /// 0 = current knob grabbed, 1 = target knob grabbed.
   final int? active;
@@ -628,8 +649,10 @@ class LuxeDialPainter extends CustomPainter {
       r * 1.2,
       Paint()
         ..shader = ui.Gradient.radial(c, r * 1.2, [
-          LuxeColors.emerald.withValues(alpha: 0.07 * e * dim),
-          const Color(0x0034D399),
+          (charging ? LuxeColors.emerald : accent[1]).withValues(
+            alpha: 0.07 * e * dim,
+          ),
+          (charging ? LuxeColors.emerald : accent[1]).withValues(alpha: 0),
         ]),
     );
 
@@ -670,9 +693,9 @@ class LuxeDialPainter extends CustomPainter {
           ..strokeWidth = major ? 1.5 : 1
           ..strokeCap = StrokeCap.round
           ..color = inWindow
-              ? LuxeColors.emerald.withValues(alpha: (major ? 0.95 : 0.6) * dim)
+              ? accent[0].withValues(alpha: (major ? 0.95 : 0.6) * dim)
               : below
-              ? Color.fromRGBO(230, 231, 233, (major ? 0.7 : 0.35) * dim)
+              ? Color.fromRGBO(154, 158, 165, (major ? 0.7 : 0.35) * dim)
               : Color.fromRGBO(255, 255, 255, major ? 0.28 : 0.12),
       );
     }
@@ -727,10 +750,12 @@ class LuxeDialPainter extends CustomPainter {
                     LuxeColors.emerald,
                     Color(0xFFCFF7E6),
                   ]
+                // Graphite: what is already in the battery, so the
+                // window above it reads as the part still to charge.
                 : const [
+                    LuxeColors.ruleStrong,
                     LuxeColors.platinumLow,
-                    LuxeColors.platinum,
-                    LuxeColors.platinumHi,
+                    LuxeColors.platinumMid,
                   ],
             const [0.0, 0.8, 1.0],
             TileMode.clamp,
@@ -740,13 +765,13 @@ class LuxeDialPainter extends CustomPainter {
       );
     }
 
-    // Charge window: emerald glow current → target, with flowing energy.
+    // Charge window: the plan's accent current → target, with flowing energy.
     if (target != null && target! > current) {
       final a0 = _start + _sweep * current / 100;
       final winSweep = _sweep * (target! - current) / 100 * e;
       final shader = ui.Gradient.sweep(
         c,
-        const [LuxeColors.emeraldDeep, LuxeColors.emerald, Color(0xFFCFF7E6)],
+        [accent[2], accent[1], accent[0]],
         const [0.0, 0.75, 1.0],
         TileMode.clamp,
         a0,
@@ -823,18 +848,11 @@ class LuxeDialPainter extends CustomPainter {
       return;
     }
 
-    // Target knob (emerald) then current knob (platinum) on top.
+    // Target knob (the plan's accent) then current knob (graphite) on top.
     if (target != null) {
-      _knob(
-        canvas,
-        at(target!),
-        s,
-        knobIn,
-        emerald: true,
-        grabbed: active == 1,
-      );
+      _knob(canvas, at(target!), s, knobIn, lit: true, grabbed: active == 1);
     }
-    _knob(canvas, at(current), s, knobIn, emerald: false, grabbed: active == 0);
+    _knob(canvas, at(current), s, knobIn, lit: false, grabbed: active == 0);
   }
 
   void _targetMark(Canvas canvas, Offset p, double s, double t) {
@@ -844,7 +862,7 @@ class LuxeDialPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.5
-        ..color = LuxeColors.emerald.withValues(alpha: t),
+        ..color = accent[0].withValues(alpha: t),
     );
   }
 
@@ -853,7 +871,7 @@ class LuxeDialPainter extends CustomPainter {
     Offset p,
     double s,
     double t, {
-    required bool emerald,
+    required bool lit,
     required bool grabbed,
   }) {
     final r = s * 0.042 * (grabbed ? 1.18 : 1.0) * (0.6 + 0.4 * t);
@@ -864,14 +882,12 @@ class LuxeDialPainter extends CustomPainter {
         ..color = Color.fromRGBO(0, 0, 0, 0.55 * t)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
     );
-    if (emerald) {
+    if (lit) {
       canvas.drawCircle(
         p,
         r * (grabbed ? 2.2 : 1.7),
         Paint()
-          ..color = LuxeColors.emerald.withValues(
-            alpha: (grabbed ? 0.35 : 0.22) * t,
-          )
+          ..color = accent[1].withValues(alpha: (grabbed ? 0.35 : 0.22) * t)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
       );
     }
@@ -882,16 +898,12 @@ class LuxeDialPainter extends CustomPainter {
         ..shader = ui.Gradient.radial(
           p.translate(-r * 0.35, -r * 0.45),
           r * 1.4,
-          emerald
-              ? const [
-                  Color(0xFFD5FBEA),
-                  LuxeColors.emerald,
-                  LuxeColors.emeraldDeep,
-                ]
+          lit
+              ? accent
               : const [
-                  LuxeColors.platinumHi,
-                  LuxeColors.platinum,
+                  LuxeColors.platinumMid,
                   LuxeColors.platinumLow,
+                  LuxeColors.ruleStrong,
                 ],
           const [0.0, 0.5, 1.0],
         ),
@@ -907,8 +919,7 @@ class LuxeDialPainter extends CustomPainter {
     canvas.drawCircle(
       p,
       r * 0.28,
-      Paint()
-        ..color = emerald ? const Color(0xFF04140D) : const Color(0xFF2A2C30),
+      Paint()..color = lit ? PlanColors.ink : LuxeColors.background,
     );
   }
 
@@ -920,5 +931,6 @@ class LuxeDialPainter extends CustomPainter {
       old.flow != flow ||
       old.active != active ||
       old.enabled != enabled ||
-      old.charging != charging;
+      old.charging != charging ||
+      !listEquals(old.accent, accent);
 }

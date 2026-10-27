@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/utils/number_text.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/maintenance_task_model.dart';
 import '../vinfast_service_catalog.dart';
+import '../../../core/widgets/luxe_kit.dart';
 
 /// One proposed milestone from the VinFast service book.
 class ScheduleProposal {
@@ -46,7 +48,7 @@ abstract final class VinFastScheduleSheet {
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: 0.72),
+    barrierColor: luxeSheetBarrier,
     builder: (context) => Theme(
       data: LuxeTheme.of(context),
       child: _Sheet(
@@ -116,7 +118,7 @@ class _SheetState extends State<_Sheet> {
       minChildSize: 0.5,
       builder: (context, scroll) => Container(
         decoration: const BoxDecoration(
-          color: Color(0xFF0C0D0F),
+          color: LuxeColors.sheet,
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           border: Border(top: BorderSide(color: LuxeColors.hairline)),
         ),
@@ -169,7 +171,7 @@ class _SheetState extends State<_Sheet> {
             ),
             DecoratedBox(
               decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0x0FFFFFFF))),
+                border: Border(top: BorderSide(color: LuxeColors.glass)),
               ),
               child: SafeArea(
                 top: false,
@@ -226,7 +228,7 @@ class _SheetState extends State<_Sheet> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Semantics(
         checked: on,
-        label: '${p.preset.title}, mốc ${p.targetOdo} km',
+        label: '${p.preset.title}, mốc ${groupThousands(p.targetOdo)} km',
         excludeSemantics: true,
         child: Material(
           type: MaterialType.transparency,
@@ -260,7 +262,7 @@ class _SheetState extends State<_Sheet> {
                         Text(
                           [
                             if (p.preset.subtitle != null) p.preset.subtitle!,
-                            'mỗi ${p.preset.suggestedOdoInterval} km',
+                            'mỗi ${groupThousands(p.preset.suggestedOdoInterval)} km',
                             if (p.alreadyOpen) 'đã có mốc đang mở',
                           ].join(' · '),
                           style: LuxeText.caption,
@@ -270,7 +272,7 @@ class _SheetState extends State<_Sheet> {
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    '${p.targetOdo} km',
+                    '${groupThousands(p.targetOdo)} km',
                     style: TextStyle(
                       color: on ? LuxeColors.emerald : LuxeColors.muted,
                       fontSize: 13.5,
@@ -282,7 +284,7 @@ class _SheetState extends State<_Sheet> {
                   Icon(
                     on
                         ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked,
+                        : Icons.radio_button_unchecked_rounded,
                     color: on ? LuxeColors.emerald : LuxeColors.dim,
                     size: 22,
                   ),

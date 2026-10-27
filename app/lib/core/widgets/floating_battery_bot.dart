@@ -174,7 +174,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                                     .dismissBubble();
                               },
                               icon: const Icon(
-                                Icons.close,
+                                Icons.close_rounded,
                                 size: 14,
                                 color: LuxeColors.muted,
                               ),
@@ -224,7 +224,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               gradient: const LinearGradient(
-                                colors: [Color(0xFF2A2C30), Color(0xFF0B0C0E)],
+                                colors: [Color(0xFF2A2C30), LuxeColors.shell],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
@@ -238,7 +238,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                               ),
                               boxShadow: const [
                                 BoxShadow(
-                                  color: Color(0x3334D399),
+                                  color: LuxeColors.emeraldSoft,
                                   blurRadius: 18,
                                 ),
                               ],

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/models/vehicle_showroom.dart';
 import '../../data/models/vinfast_model_spec.dart';
+import '../../core/theme/luxe_theme.dart';
 
 /// One photo per vehicle, the same on every screen (QA 131: the 360° viewer
 /// was removed). A Feliz always shows the owner's photo bundled with the
@@ -116,7 +117,7 @@ class VehiclePhoto extends StatelessWidget {
                     shaderCallback: (b) => const LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0x38FFFFFF), Color(0x00FFFFFF)],
+                      colors: [LuxeColors.hairlineStrong, Color(0x00FFFFFF)],
                     ).createShader(b),
                     child: ClipRect(
                       child: OverflowBox(

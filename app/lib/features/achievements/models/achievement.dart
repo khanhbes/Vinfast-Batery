@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/theme/luxe_theme.dart';
 
 /// Rarity drives the medal metal, the points and the ceremony intensity.
 enum AchievementRarity {
@@ -12,7 +13,7 @@ enum AchievementRarity {
   ]),
   emerald('Ngọc lục bảo', 250, [
     Color(0xFFD5FBEA),
-    Color(0xFF34D399),
+    LuxeColors.emerald,
     Color(0xFF065F46),
   ]);
 

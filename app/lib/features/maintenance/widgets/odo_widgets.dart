@@ -9,7 +9,7 @@ import '../../../data/models/maintenance_task_model.dart';
 
 /// Colour per urgency, shared by the track, chips and cards.
 Color urgencyColor(MaintenanceUrgency u) => switch (u) {
-  MaintenanceUrgency.overdue => const Color(0xFFF59E9E),
+  MaintenanceUrgency.overdue => LuxeColors.danger,
   MaintenanceUrgency.dueSoon => LuxeColors.champagne,
   MaintenanceUrgency.upcoming => LuxeColors.emerald,
   MaintenanceUrgency.completed => LuxeColors.platinumMid,
@@ -300,11 +300,7 @@ class _TrackPainter extends CustomPainter {
         7,
         Paint()..color = LuxeColors.platinumHi,
       );
-      canvas.drawCircle(
-        Offset(now, y),
-        3,
-        Paint()..color = const Color(0xFF0B0C0E),
-      );
+      canvas.drawCircle(Offset(now, y), 3, Paint()..color = LuxeColors.shell);
       label(
         'Xe · ${_short(current)}',
         Offset(now, y - 12),
@@ -318,7 +314,7 @@ class _TrackPainter extends CustomPainter {
 
   static String _short(int km) => km >= 10000
       ? '${(km / 1000).toStringAsFixed(km % 1000 == 0 ? 0 : 1)}k km'
-      : '$km km';
+      : '${groupThousands(km)} km'; // QA 139 (QA-19)
 
   @override
   bool shouldRepaint(_TrackPainter old) =>

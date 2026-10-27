@@ -146,7 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           child: StatefulBuilder(
             builder: (ctx, setDialogState) {
               return Dialog(
-                backgroundColor: const Color(0xFF121315),
+                backgroundColor: LuxeColors.sheet,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(28),
                   side: const BorderSide(color: LuxeColors.hairline),
@@ -292,7 +292,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             icon: Icon(
                               _isEditing
                                   ? Icons.check_rounded
-                                  : Icons.edit_outlined,
+                                  : Icons.edit_rounded,
                               size: 18,
                             ),
                             label: Text(_isEditing ? 'Lưu' : 'Sửa'),
@@ -380,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF2A2C30), Color(0xFF0B0C0E)],
+                colors: [Color(0xFF2A2C30), LuxeColors.shell],
               ),
             ),
             alignment: Alignment.center,
@@ -424,7 +424,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         isEditing: false, // Email not editable
       ),
       _buildInfoRow(
-        icon: Icons.phone_outlined,
+        icon: Icons.phone_rounded,
         label: 'Số điện thoại',
         value: _phone.isEmpty ? 'Chưa cập nhật' : _phone,
         isEditing: _isEditing,

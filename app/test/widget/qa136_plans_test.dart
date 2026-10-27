@@ -88,7 +88,8 @@ void main() {
     final pro = LuxeTheme.data(tier: PlanTier.pro);
     final ultra = LuxeTheme.data(tier: PlanTier.ultra);
     expect(free.extension<PlanStyle>()!.tier, PlanTier.free);
-    expect(free.colorScheme.primary, LuxeColors.emerald);
+    // QA 139: Free accents in platinum; emerald means "verified" only.
+    expect(free.colorScheme.primary, LuxeColors.platinumHi);
     expect(pro.colorScheme.primary, PlanStyle.pro.accent);
     expect(ultra.extension<PlanStyle>()!.isUltra, isTrue);
     expect(ultra.colorScheme.error, LuxeColors.danger);
@@ -150,10 +151,13 @@ void main() {
         ),
       ),
     );
-    final opacity = tester.widget<Opacity>(
-      find.ancestor(of: find.text('Lộ trình'), matching: find.byType(Opacity)),
+    final filter = tester.widget<ColorFiltered>(
+      find.ancestor(
+        of: find.text('Lộ trình'),
+        matching: find.byType(ColorFiltered),
+      ),
     );
-    expect(opacity.opacity, PremiumLocked.fadedOpacity);
+    expect(filter.colorFilter, PremiumLocked.lockedFilter);
     await tester.tap(find.text('Lộ trình'), warnIfMissed: false);
     await tester.pump();
     expect(opened, 0);
@@ -252,7 +256,7 @@ void main() {
         Offset(box.left + box.width * 4.5 / 31, box.center.dy),
       );
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.textContaining('Ngày 5/10 · 900 Wh'), findsOneWidget);
+      expect(find.textContaining('Ngày 5/10 · 0.90 kWh'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

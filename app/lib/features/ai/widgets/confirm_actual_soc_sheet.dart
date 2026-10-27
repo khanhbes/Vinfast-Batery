@@ -203,7 +203,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
             child: FilledButton.tonalIcon(
               key: const ValueKey('actual-soc-photo'),
               onPressed: _reading ? null : _readPhoto,
-              icon: const Icon(Icons.document_scanner_outlined),
+              icon: const Icon(Icons.document_scanner_rounded),
               label: const Text('Quét đồng hồ để tự đọc'),
               style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
             ),
@@ -326,7 +326,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
           ),
           const SizedBox(height: 14),
           const LuxeNotice(
-            icon: Icons.school_outlined,
+            icon: Icons.school_rounded,
             color: LuxeColors.steel,
             message:
                 'Xe không có kết nối pin, nên app học từ số bạn đọc trên đồng '

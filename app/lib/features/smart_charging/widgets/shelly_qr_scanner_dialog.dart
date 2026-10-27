@@ -124,7 +124,7 @@ class _ShellyQrScannerDialogState extends State<ShellyQrScannerDialog> {
                 maxLines: 2,
                 decoration: InputDecoration(
                   labelText: 'Dán mã QR, URL hoặc Device ID',
-                  hintText: 'Ví dụ: shellyplugs3-c049ef87b64c hoặc https://...',
+                  hintText: 'Ví dụ: shellyplugs3-c049ef87b64c hoặc https://…',
                   errorText: _errorText,
                   suffixIcon: IconButton(
                     tooltip: 'Dán từ bộ nhớ tạm',

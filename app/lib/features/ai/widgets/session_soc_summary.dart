@@ -279,7 +279,7 @@ class _SocArcPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 8
         ..strokeCap = StrokeCap.round
-        ..color = const Color(0x17FFFFFF),
+        ..color = LuxeColors.glassStrong,
     );
     // Fine 10 % graduations outside the track.
     for (var i = 0; i <= 10; i++) {

@@ -13,14 +13,9 @@ import '../../data/repositories/vehicle_spec_repository.dart';
 class VehiclePickerSheet extends ConsumerStatefulWidget {
   const VehiclePickerSheet({super.key});
   static Future<void> show(BuildContext context, WidgetRef ref) =>
-      showModalBottomSheet<void>(
-        context: context,
+      showLuxeSheet<void>(
+        context,
         isScrollControlled: true,
-        backgroundColor: LuxeColors.sheet,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          side: BorderSide(color: LuxeColors.hairline),
-        ),
         clipBehavior: Clip.antiAlias,
         builder: (_) => const VehiclePickerSheet(),
       );
@@ -41,10 +36,9 @@ class _VehiclePickerSheetState extends ConsumerState<VehiclePickerSheet> {
       Navigator.of(context).pop();
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không lưu được xe đã chọn. Vui lòng thử lại.'),
-          ),
+        AppPopup.showMessage(
+          'Không lưu được xe đã chọn. Vui lòng thử lại.',
+          kind: AppNoticeKind.error,
         );
       }
     } finally {
@@ -105,7 +99,7 @@ class _VehiclePickerSheetState extends ConsumerState<VehiclePickerSheet> {
                           TextButton.icon(
                             onPressed: () =>
                                 ref.invalidate(allVehiclesProvider),
-                            icon: const Icon(Icons.refresh),
+                            icon: const Icon(Icons.refresh_rounded),
                             label: const Text('Thử lại'),
                           ),
                         ],

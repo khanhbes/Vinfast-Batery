@@ -3,11 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/features/ai/models/chat_message.dart';
 import 'package:vinfast_battery/features/ai/models/function_call_action.dart';
 import 'package:vinfast_battery/features/ai/widgets/action_confirmation_card.dart';
-import 'package:vinfast_battery/features/ai/widgets/battery_status_card.dart';
 import 'package:vinfast_battery/features/ai/widgets/breathing_bot_avatar.dart';
 import 'package:vinfast_battery/features/ai/widgets/chat_message_bubble.dart';
-import 'package:vinfast_battery/features/ai/widgets/charging_progress_card.dart';
-import 'package:vinfast_battery/features/ai/widgets/trip_summary_card.dart';
 import 'package:vinfast_battery/features/ai/widgets/typing_indicator_dots.dart';
 
 Widget _wrapWithNarrowViewport({
@@ -124,88 +121,6 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('BatteryStatusCard renders without overflow on 320px', (
-      tester,
-    ) async {
-      final data = {
-        'soc': 82.0,
-        'soh': 97.5,
-        'voltage': 72.4,
-        'temperature': 29.0,
-        'estimatedRangeKm': 88.0,
-        'chargingStatus': 'charging',
-        'vehicleId': 'VF-FELIZ-001',
-      };
-
-      await tester.pumpWidget(
-        _wrapWithNarrowViewport(
-          child: SingleChildScrollView(child: BatteryStatusCard(data: data)),
-        ),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 500));
-
-      expect(find.text('82%'), findsOneWidget);
-      expect(find.text('VF-FELIZ-001'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets(
-      'ChargingProgressCard safety footer and metrics fit 320px without overflow',
-      (tester) async {
-        final data = {
-          'currentSoc': 45.0,
-          'targetSoc': 80.0,
-          'chargingPowerW': 2100.0,
-          'currentAmps': 9.2,
-          'remainingMinutes': 48,
-          'status': 'charging',
-        };
-
-        await tester.pumpWidget(
-          _wrapWithNarrowViewport(
-            child: SingleChildScrollView(
-              child: ChargingProgressCard(data: data),
-            ),
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-
-        expect(find.textContaining('An toàn phần cứng'), findsOneWidget);
-        expect(find.text('2100 W'), findsOneWidget);
-        expect(tester.takeException(), isNull);
-      },
-    );
-
-    testWidgets(
-      'TripSummaryCard metrics and eco tips fit 320px without overflow',
-      (tester) async {
-        final data = {
-          'distanceKm': 28.6,
-          'energyUsedWh': 850.0,
-          'efficiencyWhKm': 29.7,
-          'co2SavedKg': 2.45,
-          'durationMinutes': 50,
-        };
-
-        await tester.pumpWidget(
-          _wrapWithNarrowViewport(
-            child: SingleChildScrollView(child: TripSummaryCard(data: data)),
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 300));
-
-        expect(find.text('28.6 km'), findsOneWidget);
-        expect(
-          find.textContaining('Phong cách lái xe rất mượt mà'),
-          findsOneWidget,
-        );
-        expect(tester.takeException(), isNull);
-      },
-    );
-
     testWidgets(
       'ActionConfirmationCard buttons wrap and fit 320px without overflow',
       (tester) async {
@@ -317,7 +232,10 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 500));
 
-        expect(find.text('70%'), findsWidgets);
+        // QA 139: the bot no longer sends these card types; they render
+        // nothing (no crash), the message text stays.
+        expect(find.text('70%'), findsNothing);
+        expect(find.text('Dưới đây là thông số xe của bạn:'), findsOneWidget);
         expect(tester.takeException(), isNull);
       },
     );

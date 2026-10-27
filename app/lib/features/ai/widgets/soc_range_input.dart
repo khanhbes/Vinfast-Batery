@@ -230,7 +230,7 @@ class _Readout extends StatelessWidget {
                 key: const ValueKey('soc-range-edit-current'),
                 onPressed: onEditCurrent,
                 style: TextButton.styleFrom(minimumSize: const Size(48, 40)),
-                icon: const Icon(Icons.edit_outlined, size: 16),
+                icon: const Icon(Icons.edit_rounded, size: 16),
                 label: const Text('Nhập % pin'),
               ),
           ],

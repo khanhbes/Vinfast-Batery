@@ -152,7 +152,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           .redeemPromo(code);
       _promo.clear();
       AppPopup.showSuccess(
-        'Đã áp mã ${quote.code}: giảm ${quote.percentOff} %.',
+        'Đã áp mã ${quote.code}: giảm ${quote.percentOff}%.',
       );
       return true;
     } on PinovaApiException catch (error) {
@@ -277,10 +277,10 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           _Fold(
             key: GuideRegistry.keyPremiumPromo,
             foldKey: const ValueKey('premium-promo-toggle'),
-            icon: Icons.local_offer_outlined,
+            icon: Icons.local_offer_rounded,
             title: promo == null
                 ? 'Có mã khuyến mãi?'
-                : 'Mã ${promo.code} · giảm ${promo.percentOff} %',
+                : 'Mã ${promo.code} · giảm ${promo.percentOff}%',
             open: _promoOpen || promo != null,
             onToggle: () => setState(() => _promoOpen = !_promoOpen),
             child: _PromoField(
@@ -308,13 +308,13 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           const SizedBox(height: 10),
           const _Fold(
             foldKey: ValueKey('premium-compare-toggle'),
-            icon: Icons.table_rows_outlined,
+            icon: Icons.table_rows_rounded,
             title: 'So sánh đầy đủ Free · Pro · Ultra',
             child: _CompareTable(),
           ),
           const SizedBox(height: 16),
           const LuxeNotice(
-            icon: Icons.shield_outlined,
+            icon: Icons.shield_rounded,
             color: LuxeColors.emerald,
             message:
                 'An toàn luôn miễn phí ở mọi gói: bật/dừng sạc có xác minh, '
@@ -462,7 +462,7 @@ class _TierPill extends StatelessWidget {
                   'ĐỀ XUẤT',
                   style: TextStyle(
                     color: selected ? PlanColors.ink : PlanColors.lavender,
-                    fontSize: 9.5,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
                   ),
@@ -473,8 +473,10 @@ class _TierPill extends StatelessWidget {
           Text(
             'khoảng ${formatVnd(from.round())}/tháng',
             style: TextStyle(
-              color: selected ? const Color(0xCC0B0C14) : LuxeColors.muted,
+              // QA 139: solid ink (80 % ink was 3.8:1 on the violet stop).
+              color: selected ? PlanColors.ink : LuxeColors.muted,
               fontSize: 12,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
         ],
@@ -628,7 +630,7 @@ class _BenefitsCard extends StatelessWidget {
             if (highlight != null) ...[
               const SizedBox(height: 10),
               LuxeNotice(
-                icon: Icons.touch_app_outlined,
+                icon: Icons.touch_app_rounded,
                 color: ultra ? PlanColors.lavender : PlanColors.steelText,
                 message: 'Bạn vừa mở: ${highlight!.label}.',
               ),
@@ -1036,7 +1038,7 @@ class _PromoField extends StatelessWidget {
           icon: Icons.local_offer_rounded,
           color: LuxeColors.emerald,
           message:
-              'Mã ${applied!.code}: giảm ${applied!.percentOff} %'
+              'Mã ${applied!.code}: giảm ${applied!.percentOff}%'
               '${applied!.validTo != null ? ' · đến ${_date(applied!.validTo!)}' : ''}. '
               'Giá đã giảm hiện ở trên.',
           action: onRemove == null
@@ -1056,7 +1058,7 @@ class _PromoField extends StatelessWidget {
         ],
         decoration: InputDecoration(
           labelText: 'Nhập mã khuyến mãi',
-          prefixIcon: const Icon(Icons.confirmation_number_outlined),
+          prefixIcon: const Icon(Icons.confirmation_number_rounded),
           errorText: error,
         ),
         onSubmitted: (_) => onApply(),

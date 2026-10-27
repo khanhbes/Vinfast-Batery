@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/entitlement_provider.dart';
 import '../../core/theme/luxe_theme.dart';
-import '../../data/models/entitlement.dart';
+import '../../core/theme/plan_style.dart';
 import 'premium_screen.dart';
 
 /// Tab Cài đặt: the account's plan and the way into Pinova Premium.
@@ -14,6 +14,8 @@ class PremiumBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final plan = ref.watch(entitlementProvider);
+    // QA 139: the plan's accent, not emerald (that means "verified").
+    final accent = PlanStyle.of(context).accent;
     if (plan.known && !plan.serverSupportsBilling) {
       return const SizedBox.shrink();
     }
@@ -45,14 +47,18 @@ class PremiumBanner extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(22),
-              gradient: const LinearGradient(
+              gradient: LinearGradient(
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
-                colors: [Color(0xFF15261F), Color(0xFF111316)],
+                colors: [
+                  Color.alphaBlend(
+                    accent.withValues(alpha: 0.08),
+                    LuxeColors.raised,
+                  ),
+                  LuxeColors.sheet,
+                ],
               ),
-              border: Border.all(
-                color: LuxeColors.emerald.withValues(alpha: 0.32),
-              ),
+              border: Border.all(color: accent.withValues(alpha: 0.32)),
             ),
             child: Row(
               children: [
@@ -61,17 +67,10 @@ class PremiumBanner extends ConsumerWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: LuxeColors.emerald.withValues(alpha: 0.12),
-                    border: Border.all(
-                      color: LuxeColors.emerald.withValues(alpha: 0.4),
-                    ),
+                    color: accent.withValues(alpha: 0.12),
+                    border: Border.all(color: accent.withValues(alpha: 0.4)),
                   ),
-                  child: Icon(
-                    plan.tier == PlanTier.free
-                        ? Icons.workspace_premium_outlined
-                        : Icons.workspace_premium_rounded,
-                    color: LuxeColors.emerald,
-                  ),
+                  child: Icon(Icons.workspace_premium_rounded, color: accent),
                 ),
                 const SizedBox(width: 14),
                 Expanded(

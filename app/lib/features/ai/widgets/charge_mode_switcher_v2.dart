@@ -118,7 +118,7 @@ class _ModeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF0B0C0E) : LuxeColors.muted;
+    final color = selected ? LuxeColors.shell : LuxeColors.muted;
     return Semantics(
       button: true,
       selected: selected,

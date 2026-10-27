@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../theme/cockpit_design_system.dart';
+import '../../core/theme/luxe_theme.dart';
 
 /// Các trạng thái biểu cảm (mood) của mascot BatteryBot
 enum BatteryBotMood { idle, greeting, happy, thinking, charging, listening }
@@ -156,7 +157,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
           dx: math.cos(angle) * dist,
           dy: math.sin(angle) * dist,
           size: 3.0 + _random.nextDouble() * 3.5,
-          color: i % 2 == 0 ? CockpitColors.emerald : CockpitColors.emeraldGlow,
+          color: i % 2 == 0 ? LuxeColors.emerald : LuxeColors.emeraldSoft,
         ),
       );
     }
@@ -279,7 +280,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
                     borderRadius: BorderRadius.circular(10),
                     boxShadow: [
                       BoxShadow(
-                        color: CockpitColors.emerald.withValues(alpha: 0.35),
+                        color: LuxeColors.emerald.withValues(alpha: 0.35),
                         blurRadius: 8,
                         spreadRadius: 2,
                       ),
@@ -471,8 +472,8 @@ class _BatteryBotPainter extends CustomPainter {
     // Viên ngọc năng lượng ở 2 đầu ăng-ten
     final glowRadius = (bodyW * 0.08) * (1.0 + pulse * 0.22);
     final glowColor = (mood == BatteryBotMood.charging)
-        ? CockpitColors.emeraldGlow
-        : CockpitColors.emerald;
+        ? LuxeColors.emeraldSoft
+        : LuxeColors.emerald;
 
     for (final x in [leftX, rightX]) {
       // Vầng hào quang
@@ -519,7 +520,7 @@ class _BatteryBotPainter extends CustomPainter {
       );
       // Ánh sáng phản chiếu của chân
       final glowStrip = Paint()
-        ..color = CockpitColors.emerald.withValues(alpha: 0.5)
+        ..color = LuxeColors.emerald.withValues(alpha: 0.5)
         ..strokeWidth = 1.5;
       canvas.drawLine(
         Offset(padRect.left + 3, padRect.bottom - 1),
@@ -533,7 +534,7 @@ class _BatteryBotPainter extends CustomPainter {
   void _drawBody(Canvas canvas, Rect bodyRect, Radius bodyRadius) {
     // Viền phát sáng ngọc ngoài thân
     final outerGlow = Paint()
-      ..color = CockpitColors.emerald.withValues(alpha: 0.22 + pulse * 0.15)
+      ..color = LuxeColors.emerald.withValues(alpha: 0.22 + pulse * 0.15)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
     canvas.drawRRect(RRect.fromRectAndRadius(bodyRect, bodyRadius), outerGlow);
 
@@ -559,8 +560,8 @@ class _BatteryBotPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          Color(0xFF34D399), // Emerald sáng trên đỉnh
-          Color(0xFF10B981),
+          LuxeColors.emerald, // Emerald sáng trên đỉnh
+          LuxeColors.emeraldDeep,
           Color(0xFF0F172A), // Tối dần xuống dưới
         ],
       ).createShader(bodyRect);
@@ -601,7 +602,7 @@ class _BatteryBotPainter extends CustomPainter {
     final visorBorder = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0
-      ..color = CockpitColors.emerald.withValues(alpha: 0.35);
+      ..color = LuxeColors.emerald.withValues(alpha: 0.35);
     canvas.drawRRect(
       RRect.fromRectAndRadius(visorRect, visorRadius),
       visorBorder,
@@ -619,7 +620,7 @@ class _BatteryBotPainter extends CustomPainter {
 
     final eyeColor = (mood == BatteryBotMood.charging)
         ? const Color(0xFF38BDF8) // Sky cyan khi sạc
-        : const Color(0xFF34D399); // Emerald rực rỡ thường
+        : LuxeColors.emerald; // Emerald rực rỡ thường
 
     switch (mood) {
       case BatteryBotMood.happy:
@@ -906,7 +907,7 @@ class _BatteryBotPainter extends CustomPainter {
       final barColor = isActive
           ? (i == 0 && activeCount == 1
                 ? const Color(0xFFF59E0B)
-                : CockpitColors.emerald)
+                : LuxeColors.emerald)
           : const Color(0xFF1E293B);
 
       final barPaint = Paint()..color = barColor;
@@ -934,7 +935,7 @@ class _BatteryBotPainter extends CustomPainter {
     final eSize = bodyW * 0.08;
 
     final emblemPaint = Paint()
-      ..color = CockpitColors.emerald.withValues(alpha: 0.4 + pulse * 0.3)
+      ..color = LuxeColors.emerald.withValues(alpha: 0.4 + pulse * 0.3)
       ..strokeWidth = 1.2
       ..style = PaintingStyle.stroke;
 
@@ -993,12 +994,12 @@ class _SpeechBubbleWidget extends StatelessWidget {
         color: const Color(0xFF0F172A).withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: CockpitColors.emerald.withValues(alpha: 0.45),
+          color: LuxeColors.emerald.withValues(alpha: 0.45),
           width: 1.2,
         ),
         boxShadow: [
           BoxShadow(
-            color: CockpitColors.emerald.withValues(alpha: 0.12),
+            color: LuxeColors.emerald.withValues(alpha: 0.12),
             blurRadius: 16,
             spreadRadius: 2,
           ),
@@ -1015,7 +1016,7 @@ class _SpeechBubbleWidget extends StatelessWidget {
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: CockpitColors.text,
+          color: LuxeColors.text,
           height: 1.35,
           letterSpacing: 0.1,
         ),
@@ -1045,7 +1046,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
 
     // 1. Viền ngoài phát sáng ngọc nhẹ
     final glowPaint = Paint()
-      ..color = CockpitColors.emerald.withValues(alpha: 0.25 + pulse * 0.15)
+      ..color = LuxeColors.emerald.withValues(alpha: 0.25 + pulse * 0.15)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawCircle(center, radius - 1, glowPaint);
 
@@ -1065,7 +1066,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [Color(0xFF34D399), Color(0xFF10B981), Color(0xFF047857)],
+        colors: [LuxeColors.emerald, LuxeColors.emeraldDeep, Color(0xFF047857)],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius - 1.5, borderPaint);
 
@@ -1085,7 +1086,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
     final visorBorder = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.8
-      ..color = CockpitColors.emerald.withValues(alpha: 0.35);
+      ..color = LuxeColors.emerald.withValues(alpha: 0.35);
     canvas.drawRRect(
       RRect.fromRectAndRadius(visorRect, visorRadius),
       visorBorder,
@@ -1099,7 +1100,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
 
     final eyeColor = (mood == BatteryBotMood.charging)
         ? const Color(0xFF38BDF8)
-        : const Color(0xFF34D399);
+        : LuxeColors.emerald;
 
     final eyeRadiusX = w * 0.085;
     final eyeRadiusY = (h * 0.10) * eyeOpen.clamp(0.12, 1.0);

@@ -1,10 +1,10 @@
-import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'charge_estimator.dart';
+import '../../core/theme/luxe_theme.dart';
 
 /// "Charging now" notification kept alive by server pushes (Task 126).
 ///
@@ -118,7 +118,7 @@ abstract final class ChargeProgressNotification {
           usesChronometer: finish != null,
           chronometerCountDown: finish != null,
           timeoutAfter: expiry.inMilliseconds,
-          color: const Color(0xFF9DB8E8),
+          color: LuxeColors.steel,
         ),
       ),
       payload: payload,
@@ -240,7 +240,8 @@ class ChargeProgressContent {
         'Xe chưa nhận điện'
       else if (power != null)
         '${power.round()} W',
-      if (finish != null && finish.isAfter(now)) 'xong khoảng ${formatClock(finish)}',
+      if (finish != null && finish.isAfter(now))
+        'xong khoảng ${formatClock(finish)}',
       if (ceiling != null && !targetMode) 'tự tắt ${formatClock(ceiling)}',
       'cập nhật ${formatClock(base)}',
     ];

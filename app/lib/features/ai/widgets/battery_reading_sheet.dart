@@ -237,14 +237,14 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
               FilledButton.tonalIcon(
                 key: const ValueKey('reading-camera'),
                 onPressed: _reading ? null : () => _readPhoto(true),
-                icon: const Icon(Icons.document_scanner_outlined),
+                icon: const Icon(Icons.document_scanner_rounded),
                 label: const Text('Quét đồng hồ'),
                 style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('reading-gallery'),
                 onPressed: _reading ? null : () => _readPhoto(false),
-                icon: const Icon(Icons.photo_library_outlined),
+                icon: const Icon(Icons.photo_library_rounded),
                 label: const Text('Chọn ảnh'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(48, 48),
@@ -269,7 +269,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
               key: const ValueKey('reading-ocr-result'),
               icon: read.isEmpty
                   ? Icons.help_outline_rounded
-                  : Icons.document_scanner_outlined,
+                  : Icons.document_scanner_rounded,
               color: LuxeColors.champagne,
               message: read.isEmpty
                   ? 'Chưa đọc được số nào. Chụp gần, thẳng, đủ sáng và không '

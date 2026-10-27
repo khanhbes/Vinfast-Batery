@@ -317,7 +317,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
               if (!trainAllowed) ...[
                 LuxeNotice(
                   key: const ValueKey('learning-train-ultra'),
-                  icon: Icons.workspace_premium_outlined,
+                  icon: Icons.workspace_premium_rounded,
                   message:
                       'Huấn luyện mô hình riêng có trong gói Ultra. Dữ liệu '
                       'vẫn của bạn: xem, tắt hoặc xóa ở cuối trang.',
@@ -378,7 +378,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                 children: [
                   LuxeSettingsRow(
                     key: const ValueKey('learning-add-reading'),
-                    icon: Icons.photo_camera_outlined,
+                    icon: Icons.photo_camera_rounded,
                     title: 'Cập nhật % pin & ODO',
                     subtitle: 'Quét đồng hồ xe hoặc nhập tay',
                     onTap: _training == null ? _addReading : null,
@@ -437,7 +437,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
     final power = (status.raw['powerW'] as num?)?.toDouble();
     if (wh == null) return 'Đang dùng thông số dòng xe (chưa huấn luyện).';
     final mae = status.mae;
-    return '${wh.toStringAsFixed(1)} Wh cho 1 %'
+    return '${wh.toStringAsFixed(1)} Wh cho 1%'
         '${power == null ? '' : ' · sạc khoảng ${power.round()} W'}'
         '${mae == null ? '' : ' · sai số khoảng ±${mae.toStringAsFixed(1)}%'}';
   }
@@ -447,7 +447,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
     final model = status.trip.raw['model'];
     final source = model is Map ? model['source'] : null;
     if (km == null) return 'Chưa có định mức km/% cho xe này.';
-    final value = 'khoảng ${km.toStringAsFixed(2)} km cho 1 %';
+    final value = 'khoảng ${km.toStringAsFixed(2)} km cho 1%';
     return switch (source) {
       'model' =>
         '$value · đã huấn luyện từ ${status.trip.trained} chuyến'
@@ -479,7 +479,9 @@ Widget _sampleTile(ChargeSampleRow row, {bool pending = false}) {
     child: Row(
       children: [
         Icon(
-          pending ? Icons.hourglass_top_rounded : Icons.check_circle_outline,
+          pending
+              ? Icons.hourglass_top_rounded
+              : Icons.check_circle_outline_rounded,
           size: 16,
           color: pending ? LuxeColors.champagne : LuxeColors.platinumMid,
         ),
@@ -641,7 +643,7 @@ class _ModelCard extends StatelessWidget {
                     title: title,
                     report: report,
                   ),
-                  icon: const Icon(Icons.analytics_outlined, size: 18),
+                  icon: const Icon(Icons.analytics_rounded, size: 18),
                   label: const Text('Xem đánh giá chi tiết'),
                   style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 ),

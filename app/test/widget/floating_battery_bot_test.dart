@@ -36,7 +36,7 @@ void main() {
     expect(find.text('Bong bóng thoại test'), findsOneWidget);
 
     // Chạm vào nút đóng icon để đóng bong bóng
-    final closeIcon = find.byIcon(Icons.close);
+    final closeIcon = find.byIcon(Icons.close_rounded);
     expect(closeIcon, findsOneWidget);
     expect(
       tester.getSize(find.byTooltip('Đóng gợi ý Pinova Bot')).height,

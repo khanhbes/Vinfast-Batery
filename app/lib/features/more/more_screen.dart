@@ -248,7 +248,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       onTap: () => _push(const AchievementsScreen()),
                     ),
                     _GridTile(
-                      icon: Icons.build_circle_outlined,
+                      icon: Icons.build_circle_rounded,
                       title: 'Bảo dưỡng xe',
                       value: 'Lịch theo ODO',
                       onTap: () => _push(const MaintenanceScreen()),
@@ -625,7 +625,7 @@ class _RankAvatar extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF2A2C30), Color(0xFF0E0F11)],
+                colors: [Color(0xFF2A2C30), LuxeColors.surface],
               ),
             ),
             alignment: Alignment.center,
@@ -655,7 +655,7 @@ class _RingPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
-        ..color = const Color(0x1FFFFFFF),
+        ..color = LuxeColors.hairline,
     );
     if (progress <= 0) return;
     final rect = Rect.fromCircle(center: c, radius: r);

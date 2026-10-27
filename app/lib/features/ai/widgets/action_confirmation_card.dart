@@ -29,6 +29,8 @@ class ActionConfirmationCard extends StatelessWidget {
     if (toolName.contains('reminder')) return Icons.event_rounded;
     if (toolName == 'app_set_app_setting') return Icons.tune_rounded;
     if (toolName.startsWith('app_')) return Icons.edit_rounded;
+    // QA 139: stopping is not the bolt that starts a charge.
+    if (toolName.contains('stop')) return Icons.power_settings_new_rounded;
     return Icons.bolt_rounded;
   }
 
@@ -87,7 +89,7 @@ class ActionConfirmationCard extends StatelessWidget {
                   action.isConfirmed
                       ? Icons.check_circle_rounded
                       : action.isCancelled
-                      ? Icons.cancel_outlined
+                      ? Icons.cancel_rounded
                       : _failed
                       ? Icons.error_outline_rounded
                       : pendingIcon(action.toolName),
@@ -182,7 +184,7 @@ class ActionConfirmationCard extends StatelessWidget {
                 children: [
                   // Information, not a verified state: steel, not emerald.
                   const Icon(
-                    Icons.shield_outlined,
+                    Icons.shield_rounded,
                     size: 15,
                     color: LuxeColors.steel,
                   ),
@@ -258,7 +260,7 @@ class ActionConfirmationCard extends StatelessWidget {
                       minimumSize: const Size(48, 48),
                       // Dark text on platinum (white on emerald was ~1.9:1).
                       backgroundColor: LuxeColors.platinumHi,
-                      foregroundColor: const Color(0xFF0B0C0E),
+                      foregroundColor: LuxeColors.shell,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
@@ -278,7 +280,7 @@ class ActionConfirmationCard extends StatelessWidget {
               ),
           ] else if (action.isConfirmed) ...[
             _ResultStrip(
-              icon: Icons.check_circle,
+              icon: Icons.check_circle_rounded,
               color: LuxeColors.emerald,
               message: action.resultMessage ?? 'Đã xác nhận thành công.',
             ),

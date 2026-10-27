@@ -136,7 +136,7 @@ class _Jewel extends StatelessWidget {
           end: Alignment.bottomCenter,
           colors: plan.isUltra
               ? const [Color(0x268B5CF6), Color(0x0A22D3EE)]
-              : const [Color(0x1FFFFFFF), Color(0x08FFFFFF)],
+              : const [LuxeColors.hairline, Color(0x08FFFFFF)],
         ),
         border: Border.all(
           color: plan.tier == PlanStyle.free.tier

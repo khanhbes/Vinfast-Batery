@@ -709,7 +709,7 @@ class _CameraProblemView extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const Icon(
-            Icons.no_photography_outlined,
+            Icons.no_photography_rounded,
             size: 44,
             color: LuxeColors.platinumMid,
           ),
@@ -819,7 +819,7 @@ class DashboardScanPanel extends StatelessWidget {
               FilledButton.icon(
                 key: const ValueKey('scan-settings'),
                 onPressed: onOpenSettings,
-                icon: const Icon(Icons.settings_outlined),
+                icon: const Icon(Icons.settings_rounded),
                 label: const Text('Mở cài đặt quyền'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
@@ -842,7 +842,7 @@ class DashboardScanPanel extends StatelessWidget {
               const SizedBox(height: 12),
               LuxeNotice(
                 key: const ValueKey('scan-note'),
-                icon: Icons.wb_sunny_outlined,
+                icon: Icons.wb_sunny_rounded,
                 color: LuxeColors.champagne,
                 message: note!,
               ),
@@ -864,7 +864,7 @@ class DashboardScanPanel extends StatelessWidget {
                               dimension: 18,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : const Icon(Icons.camera_alt_outlined),
+                          : const Icon(Icons.camera_alt_rounded),
                       label: const Text('Chụp ảnh'),
                       style: TextButton.styleFrom(
                         minimumSize: const Size(48, 48),
@@ -874,14 +874,14 @@ class DashboardScanPanel extends StatelessWidget {
                 TextButton.icon(
                   key: const ValueKey('scan-gallery'),
                   onPressed: onGallery,
-                  icon: const Icon(Icons.photo_library_outlined),
+                  icon: const Icon(Icons.photo_library_rounded),
                   label: const Text('Chọn ảnh'),
                   style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 ),
                 TextButton.icon(
                   key: const ValueKey('scan-manual'),
                   onPressed: onManual,
-                  icon: const Icon(Icons.keyboard_outlined),
+                  icon: const Icon(Icons.keyboard_rounded),
                   label: const Text('Nhập tay'),
                   style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                 ),

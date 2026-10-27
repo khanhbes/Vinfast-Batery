@@ -79,9 +79,9 @@ class _SignedOutEntryState extends State<SignedOutEntry> {
     if (!register) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      Navigator.of(
-        context,
-      ).push<void>(AppMotion.pageRoute<void>(const RegisterScreen()));
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const RegisterScreen()),
+      );
     });
   }
 
@@ -208,8 +208,9 @@ class _GettingStartedScreenState extends State<GettingStartedScreen>
         c.value = 1;
       }
     } else {
-      _loop.repeat();
-      _drift.repeat();
+      // QA 139 (QA-13): one pass when shown; no endless decorative loop.
+      _loop.forward();
+      _drift.forward();
       _enter[_index].forward();
     }
   }
@@ -1189,7 +1190,7 @@ class _Bubble extends StatelessWidget {
               colors: [LuxeColors.platinumHi, LuxeColors.platinum],
             )
           : const LinearGradient(
-              colors: [Color(0x1FFFFFFF), Color(0x0DFFFFFF)],
+              colors: [LuxeColors.hairline, Color(0x0DFFFFFF)],
             ),
       border: Border.all(
         color: mine ? const Color(0x66FFFFFF) : LuxeColors.hairline,
@@ -1201,7 +1202,7 @@ class _Bubble extends StatelessWidget {
         fontSize: 13 * scale,
         height: 1.35,
         fontWeight: mine ? FontWeight.w600 : FontWeight.w400,
-        color: mine ? const Color(0xFF0B0C0E) : LuxeColors.text,
+        color: mine ? LuxeColors.shell : LuxeColors.text,
       ),
     ),
   );

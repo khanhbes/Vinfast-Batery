@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_connection_notice.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/app_popup.dart';
@@ -252,7 +253,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             SafeArea(
               child: RefreshIndicator(
                 color: LuxeColors.emerald,
-                backgroundColor: const Color(0xFF17181B),
+                backgroundColor: LuxeColors.raised,
                 onRefresh: () => controller.refresh(force: true),
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
@@ -422,7 +423,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                           isScrollControlled: true,
                           useSafeArea: true,
                           backgroundColor: Colors.transparent,
-                          barrierColor: Colors.black.withValues(alpha: .72),
+                          barrierColor: luxeSheetBarrier,
                           builder: (_) => FractionallySizedBox(
                             heightFactor: .96,
                             child: ClipRRect(
@@ -573,7 +574,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 6),
                   child: Text(
-                    'Kéo núm bạc theo số pin trên xe, núm xanh tới mức muốn sạc.',
+                    'Kéo núm tối theo số pin trên xe, núm sáng tới mức muốn sạc.',
                     style: LuxeText.caption,
                   ),
                 ),
@@ -636,11 +637,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             ),
           ),
         ),
-        AnimatedSize(
-          duration: MediaQuery.disableAnimationsOf(context)
-              ? Duration.zero
-              : const Duration(milliseconds: 360),
-          curve: LuxeMotion.enter,
+        LuxeFold(
+          duration: const Duration(milliseconds: 360),
           child: preview == null
               ? const SizedBox(width: double.infinity)
               : Padding(
@@ -692,7 +690,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 context,
                 PremiumFeature.targetCharging,
               ),
-              icon: const Icon(Icons.workspace_premium_outlined, size: 18),
+              icon: const Icon(Icons.workspace_premium_rounded, size: 18),
               label: const Text('Mở Sạc đến % tự ngắt (Pro)'),
             ),
           ),
@@ -1531,7 +1529,7 @@ class _TargetPresets extends StatelessWidget {
                       child: Text(
                         'Khuyên dùng',
                         style: TextStyle(
-                          color: LuxeColors.emerald.withValues(alpha: 0.9),
+                          color: LuxeColors.platinum,
                           fontSize: 10.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.4,
@@ -1553,11 +1551,12 @@ String _time(DateTime value) => DateFormat('HH:mm').format(value.toLocal());
 String _duration(int minutes) =>
     formatChargeDuration(Duration(minutes: math.max(0, minutes)));
 
-/// Compact ETA for the dial pill: "≈ 1g10" / "≈ 45 phút".
+/// Compact ETA for the dial pill: "khoảng 1g10" / "khoảng 45 phút" (QA 137
+/// rule, QA 139: no "≈").
 String _shortDuration(int minutes) {
   final m = math.max(0, minutes);
-  if (m < 60) return '≈ $m phút';
-  return '≈ ${formatChargeDurationShort(Duration(minutes: m))}';
+  if (m < 60) return 'khoảng $m phút';
+  return 'khoảng ${formatChargeDurationShort(Duration(minutes: m))}';
 }
 
 /// "Lần sạc lúc 21:40 chưa có % thực tế" — one tap opens the sheet.

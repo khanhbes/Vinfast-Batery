@@ -50,7 +50,8 @@ class _AIChargeButtonState extends State<AIChargeButton>
   void _sync() {
     final animate = widget.enabled && !MediaQuery.disableAnimationsOf(context);
     if (animate && !_sheen.isAnimating) {
-      _sheen.repeat();
+      // QA 139 (QA-13): one pass when shown; no endless decorative loop.
+      _sheen.forward();
     } else if (!animate && _sheen.isAnimating) {
       _sheen.stop();
     }
@@ -171,7 +172,7 @@ class _AIChargeButtonState extends State<AIChargeButton>
                           color: enabled
                               ? (widget.emphasis
                                     ? LuxeColors.emeraldDeep
-                                    : const Color(0xFF1D1F22))
+                                    : LuxeColors.raisedHigh)
                               : LuxeColors.dim,
                         ),
                       ),
@@ -181,9 +182,7 @@ class _AIChargeButtonState extends State<AIChargeButton>
                         widget.label,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: enabled
-                              ? const Color(0xFF0B0C0E)
-                              : LuxeColors.dim,
+                          color: enabled ? LuxeColors.shell : LuxeColors.dim,
                           fontSize: 14.5,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.4,

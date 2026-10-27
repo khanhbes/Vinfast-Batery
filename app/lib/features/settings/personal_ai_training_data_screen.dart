@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
-import '../../core/theme/app_colors.dart';
 import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../data/services/server_smart_charger_service.dart';
@@ -180,10 +179,7 @@ class _PersonalAiTrainingDataScreenState
                 children: [
                   const Row(
                     children: [
-                      Icon(
-                        Icons.science_outlined,
-                        color: CockpitColors.emerald,
-                      ),
+                      Icon(Icons.science_rounded, color: LuxeColors.emerald),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -199,7 +195,7 @@ class _PersonalAiTrainingDataScreenState
                   const SizedBox(height: 10),
                   Text(
                     'Xe ${widget.vehicleId} · ${_samples.length} mẫu',
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: const TextStyle(color: LuxeColors.muted),
                   ),
                   const SizedBox(height: 8),
                   InkWell(
@@ -218,7 +214,7 @@ class _PersonalAiTrainingDataScreenState
                             child: Text(
                               _collectionPath,
                               style: const TextStyle(
-                                color: CockpitColors.muted,
+                                color: LuxeColors.muted,
                                 fontFamily: 'JetBrainsMono',
                                 fontSize: 11,
                               ),
@@ -227,7 +223,7 @@ class _PersonalAiTrainingDataScreenState
                           const Icon(
                             Icons.copy_rounded,
                             size: 18,
-                            color: CockpitColors.emerald,
+                            color: LuxeColors.emerald,
                           ),
                         ],
                       ),
@@ -241,7 +237,7 @@ class _PersonalAiTrainingDataScreenState
                         : 'Chế độ này chỉ xem. Đăng nhập tài khoản có quyền '
                               'developer để chỉnh dữ liệu fine-tune.',
                     style: const TextStyle(
-                      color: AppColors.textSecondary,
+                      color: LuxeColors.muted,
                       fontSize: 12,
                       height: 1.45,
                     ),
@@ -251,9 +247,9 @@ class _PersonalAiTrainingDataScreenState
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: CockpitColors.emerald,
+                        foregroundColor: LuxeColors.emerald,
                         side: BorderSide(
-                          color: CockpitColors.emerald.withValues(alpha: 0.4),
+                          color: LuxeColors.emerald.withValues(alpha: 0.4),
                         ),
                         padding: const EdgeInsets.symmetric(
                           vertical: 10,
@@ -294,10 +290,10 @@ class _PersonalAiTrainingDataScreenState
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: CockpitColors.emerald.withValues(alpha: 0.12),
+                    color: LuxeColors.emerald.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: CockpitColors.emerald.withValues(alpha: 0.3),
+                      color: LuxeColors.emerald.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -305,14 +301,14 @@ class _PersonalAiTrainingDataScreenState
                       const Icon(
                         Icons.check_circle_outline_rounded,
                         size: 16,
-                        color: CockpitColors.emerald,
+                        color: LuxeColors.emerald,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _dataSourceNote!,
                           style: const TextStyle(
-                            color: CockpitColors.emerald,
+                            color: LuxeColors.emerald,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
                           ),
@@ -329,7 +325,7 @@ class _PersonalAiTrainingDataScreenState
               )
             else if (_error != null)
               _MessageCard(
-                icon: Icons.shield_outlined,
+                icon: Icons.shield_rounded,
                 title: 'Truy cập dữ liệu fine-tune',
                 detail: _error!,
                 action: _load,
@@ -386,13 +382,13 @@ class _PersonalAiTrainingDataScreenState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: (excluded ? CockpitColors.amber : CockpitColors.emerald)
+              color: (excluded ? LuxeColors.champagne : LuxeColors.emerald)
                   .withValues(alpha: .12),
               borderRadius: BorderRadius.circular(13),
             ),
             child: Icon(
-              excluded ? Icons.block_rounded : Icons.analytics_outlined,
-              color: excluded ? CockpitColors.amber : CockpitColors.emerald,
+              excluded ? Icons.block_rounded : Icons.analytics_rounded,
+              color: excluded ? LuxeColors.champagne : LuxeColors.emerald,
             ),
           ),
           title: Text(
@@ -412,10 +408,7 @@ class _PersonalAiTrainingDataScreenState
             '${energyWh > 0 ? ' · ${energyWh.round()} Wh' : ''}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 11,
-            ),
+            style: const TextStyle(color: LuxeColors.muted, fontSize: 11),
           ),
           trailing: const Icon(Icons.chevron_right_rounded),
           onTap: () => _showSample(sample),
@@ -430,11 +423,9 @@ class _PersonalAiTrainingDataScreenState
       ...sample.data,
     });
     final text = const JsonEncoder.withIndent('  ').convert(normalized);
-    await showModalBottomSheet<void>(
-      context: context,
+    await showLuxeSheet<void>(
+      context,
       isScrollControlled: true,
-      showDragHandle: true,
-      backgroundColor: LuxeColors.sheet,
       builder: (sheetContext) => SafeArea(
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * .78,
@@ -506,11 +497,9 @@ class _PersonalAiTrainingDataScreenState
     );
     var excluded = sample.data['trainingExcluded'] == true;
     try {
-      final saved = await showModalBottomSheet<bool>(
-        context: context,
+      final saved = await showLuxeSheet<bool>(
+        context,
         isScrollControlled: true,
-        showDragHandle: true,
-        backgroundColor: LuxeColors.sheet,
         builder: (sheetContext) => StatefulBuilder(
           builder: (context, setSheetState) => Padding(
             padding: EdgeInsets.fromLTRB(
@@ -532,10 +521,7 @@ class _PersonalAiTrainingDataScreenState
                   const Text(
                     'Override chỉ ảnh hưởng dữ liệu đưa vào lần train tiếp theo. '
                     'Số đo gốc của phiên sạc không bị thay đổi.',
-                    style: TextStyle(
-                      color: AppColors.textSecondary,
-                      height: 1.4,
-                    ),
+                    style: TextStyle(color: LuxeColors.muted, height: 1.4),
                   ),
                   const SizedBox(height: 16),
                   SwitchListTile.adaptive(
@@ -679,7 +665,7 @@ class _MessageCard extends StatelessWidget {
   Widget build(BuildContext context) => CockpitSurface(
     child: Column(
       children: [
-        Icon(icon, size: 34, color: CockpitColors.emerald),
+        Icon(icon, size: 34, color: LuxeColors.emerald),
         const SizedBox(height: 10),
         Text(
           title,
@@ -690,7 +676,7 @@ class _MessageCard extends StatelessWidget {
         Text(
           detail,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: AppColors.textSecondary),
+          style: const TextStyle(color: LuxeColors.muted),
         ),
         if (action != null || secondaryAction != null) ...[
           const SizedBox(height: 14),
@@ -702,9 +688,9 @@ class _MessageCard extends StatelessWidget {
               if (action != null)
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: CockpitColors.emerald,
+                    foregroundColor: LuxeColors.emerald,
                     side: BorderSide(
-                      color: CockpitColors.emerald.withValues(alpha: 0.5),
+                      color: LuxeColors.emerald.withValues(alpha: 0.5),
                     ),
                   ),
                   onPressed: action,
@@ -713,7 +699,7 @@ class _MessageCard extends StatelessWidget {
               if (secondaryAction != null)
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: CockpitColors.emerald,
+                    backgroundColor: LuxeColors.emerald,
                     foregroundColor: Colors.black,
                   ),
                   onPressed: secondaryAction,

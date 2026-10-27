@@ -208,14 +208,15 @@ void main() {
     );
   });
 
-  test('only charger commands show the bolt icon', () {
+  test('only starting a charge shows the bolt icon', () {
     expect(
       ActionConfirmationCard.pendingIcon('start_timed_charging'),
       Icons.bolt_rounded,
     );
+    // QA 139: stopping has its own power icon.
     expect(
       ActionConfirmationCard.pendingIcon('stop_charging'),
-      Icons.bolt_rounded,
+      Icons.power_settings_new_rounded,
     );
     expect(
       ActionConfirmationCard.pendingIcon('create_reminder'),

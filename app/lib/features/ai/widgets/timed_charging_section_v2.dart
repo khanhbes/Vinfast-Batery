@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/widgets/app_popup.dart';
 
 /// Timed charging: six duration presets on glass and a platinum power
 /// button with an emerald core. Every choice arms the Shelly hardware timer.
@@ -132,12 +133,9 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
       );
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Không gửi được lệnh sạc. Kiểm tra kết nối và thử lại.',
-            ),
-          ),
+        AppPopup.showMessage(
+          'Không gửi được lệnh sạc. Kiểm tra kết nối và thử lại.',
+          kind: AppNoticeKind.error,
         );
       }
     } finally {
@@ -388,7 +386,7 @@ class _PowerFace extends StatelessWidget {
       ),
       boxShadow: [
         BoxShadow(
-          color: enabled ? const Color(0x5534D399) : const Color(0x00000000),
+          color: enabled ? LuxeColors.emeraldGlow : const Color(0x00000000),
           blurRadius: 30,
         ),
         const BoxShadow(
@@ -409,7 +407,11 @@ class _PowerFace extends StatelessWidget {
                   LuxeColors.emeraldDeep,
                   Color(0xFF065F46),
                 ]
-              : const [Color(0xFF2A2C30), Color(0xFF17181B), Color(0xFF0E0F11)],
+              : const [
+                  Color(0xFF2A2C30),
+                  LuxeColors.raised,
+                  LuxeColors.surface,
+                ],
           stops: const [0.0, 0.55, 1.0],
         ),
       ),

@@ -272,7 +272,7 @@ class LuxeSwitch extends StatelessWidget {
                 borderRadius: BorderRadius.circular(99),
                 color: value
                     ? LuxeColors.emerald.withValues(alpha: 0.28)
-                    : const Color(0xFF17181B),
+                    : LuxeColors.raised,
                 border: Border.all(
                   color: value
                       ? LuxeColors.emerald.withValues(alpha: 0.7)
@@ -355,7 +355,7 @@ Future<bool?> showLuxeConfirm(
   builder: (ctx) => Theme(
     data: LuxeTheme.of(ctx),
     child: AlertDialog(
-      backgroundColor: const Color(0xFF121315),
+      backgroundColor: LuxeColors.sheet,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
         side: const BorderSide(color: LuxeColors.hairline),

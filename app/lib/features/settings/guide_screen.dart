@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../navigation/app_navigation.dart';
@@ -192,7 +193,7 @@ class _TourBanner extends StatelessWidget {
         Row(
           children: [
             const LuxeMedallion(
-              icon: Icons.explore_outlined,
+              icon: Icons.explore_rounded,
               accent: LuxeColors.emerald,
               size: 46,
             ),
@@ -309,11 +310,7 @@ class _GuideSection extends StatelessWidget {
               ),
             ),
           ),
-          AnimatedSize(
-            duration: reduced
-                ? Duration.zero
-                : const Duration(milliseconds: 320),
-            curve: LuxeMotion.enter,
+          LuxeFold(
             alignment: Alignment.topCenter,
             child: !expanded
                 ? const SizedBox(width: double.infinity)

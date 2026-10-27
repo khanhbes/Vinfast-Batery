@@ -125,7 +125,7 @@ class HomeScreen extends ConsumerWidget {
                   constraints: const BoxConstraints(maxWidth: 720),
                   child: RefreshIndicator(
                     color: LuxeColors.emerald,
-                    backgroundColor: const Color(0xFF17181B),
+                    backgroundColor: LuxeColors.raised,
                     onRefresh: () async {
                       // Single pull-to-refresh for Overview (Task 125).
                       ref.invalidate(chargeLogsProvider);
@@ -347,35 +347,16 @@ class HomeScreen extends ConsumerWidget {
         );
 
       case DashboardWidgetId.batteryHealth:
+        // QA 139: the estimated capacity left (Pro), not a typed SoH.
         return SliverToBoxAdapter(
           key: const ValueKey('widget_battery_health'),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-            child: vehicleAsync.when(
-              data: (vehicle) => LuxeReveal(
-                index: 3,
-                child: LuxeBatteryHealthCard(
-                  key: GuideRegistry.keyBatteryHealthCard,
-                  soh: vehicle?.hasSohData == true
-                      ? vehicle?.stateOfHealth
-                      : null,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BatteryMonitorScreen(),
-                    ),
-                  ),
-                ),
-              ),
-              loading: () => const _LuxeSkeleton(height: 116),
-              error: (_, _) => LuxeBatteryHealthCard(
-                soh: null,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const BatteryMonitorScreen(),
-                  ),
-                ),
+            child: LuxeReveal(
+              index: 3,
+              child: LuxeBatteryCapacityCard(
+                key: GuideRegistry.keyBatteryHealthCard,
+                vehicleId: vehicleId.isEmpty ? null : vehicleId,
               ),
             ),
           ),

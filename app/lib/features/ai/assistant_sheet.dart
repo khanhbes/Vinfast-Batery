@@ -28,7 +28,6 @@ import 'services/local_chat_engine.dart';
 import 'services/chat_history_storage.dart';
 import 'services/suggestion_service.dart';
 import 'services/voice_input_service.dart';
-import 'widgets/animated_voice_waveform.dart';
 import 'widgets/battery_reading_sheet.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/quick_reply_chips.dart';
@@ -36,6 +35,7 @@ import '../../core/services/guide_registry.dart';
 import '../../core/services/screen_tour.dart';
 import '../premium/plan_tag.dart';
 import '../../core/providers/entitlement_provider.dart';
+import '../../core/widgets/luxe_kit.dart';
 
 /// Bottom Sheet trò chuyện cùng trợ lý ảo BatteryBot với AI Streaming & Lịch sử
 class InteractiveAssistantSheet extends ConsumerStatefulWidget {
@@ -55,7 +55,7 @@ class InteractiveAssistantSheet extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
+      barrierColor: luxeSheetBarrier,
       builder: (ctx) => InteractiveAssistantSheet(initialQuery: initialQuery),
     );
   }
@@ -89,7 +89,6 @@ class _InteractiveAssistantSheetState
   ProactiveSuggestion? _activeSuggestion;
   VoiceInputService? _voiceService;
   bool _isListeningVoice = false;
-  double _voiceSoundLevel = 0.5;
 
   @override
   void initState() {
@@ -303,12 +302,9 @@ class _InteractiveAssistantSheetState
       setState(() {
         _actionLoadingMap.remove(action.callId);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Chưa thực hiện được. Hãy kiểm tra tại màn hình Sạc pin.',
-          ),
-        ),
+      AppPopup.showMessage(
+        'Chưa thực hiện được. Hãy kiểm tra tại màn hình Sạc pin.',
+        kind: AppNoticeKind.error,
       );
     }
   }
@@ -361,7 +357,6 @@ class _InteractiveAssistantSheetState
       if (!mounted) return;
       setState(() {
         _isListeningVoice = false;
-        _voiceSoundLevel = 0.0;
       });
       if (text.trim().isNotEmpty) {
         _inputController.text = text;
@@ -377,17 +372,10 @@ class _InteractiveAssistantSheetState
             _inputController.text = text;
           });
         },
-        onSoundLevel: (level) {
-          if (!mounted) return;
-          setState(() {
-            _voiceSoundLevel = level;
-          });
-        },
         onDone: () {
           if (!mounted) return;
           setState(() {
             _isListeningVoice = false;
-            _voiceSoundLevel = 0.0;
           });
         },
       );
@@ -457,10 +445,9 @@ class _InteractiveAssistantSheetState
     } catch (_) {
       if (!mounted || !_isCurrent(generation)) return;
       setState(() => _isTyping = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chưa mở được cuộc trò chuyện. Hãy thử lại.'),
-        ),
+      AppPopup.showMessage(
+        'Chưa mở được cuộc trò chuyện. Hãy thử lại.',
+        kind: AppNoticeKind.error,
       );
       return;
     }
@@ -496,27 +483,18 @@ class _InteractiveAssistantSheetState
       sessions = await storage.listSessions();
     } catch (_) {
       if (!mounted || !_isCurrent(generation)) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Chưa tải được lịch sử trò chuyện.'),
-          action: SnackBarAction(
-            label: 'Thử lại',
-            onPressed: _showHistoryModal,
-          ),
-        ),
+      AppPopup.showMessage(
+        'Chưa tải được lịch sử trò chuyện.',
+        kind: AppNoticeKind.error,
+        action: _showHistoryModal,
       );
       return;
     }
     if (!mounted || !_isCurrent(generation)) return;
 
     const uiColors = _LuxePalette();
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: const Color(0xFF0C0D0F),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        side: BorderSide(color: LuxeColors.hairline),
-      ),
+    await showLuxeSheet<void>(
+      context,
       builder: (modalCtx) {
         _historyModalContext = modalCtx;
         return StatefulBuilder(
@@ -556,10 +534,7 @@ class _InteractiveAssistantSheetState
                           ],
                         ),
                         TextButton.icon(
-                          icon: const Icon(
-                            Icons.add_comment_outlined,
-                            size: 16,
-                          ),
+                          icon: const Icon(Icons.add_comment_rounded, size: 16),
                           label: const Text('Đoạn chat mới'),
                           onPressed: () {
                             Navigator.of(modalCtx).pop();
@@ -610,8 +585,8 @@ class _InteractiveAssistantSheetState
                                     : uiColors.background,
                                 child: Icon(
                                   isCurrent
-                                      ? Icons.chat_bubble
-                                      : Icons.chat_bubble_outline,
+                                      ? Icons.chat_bubble_rounded
+                                      : Icons.chat_bubble_outline_rounded,
                                   color: isCurrent
                                       ? uiColors.primary
                                       : uiColors.muted,
@@ -638,7 +613,7 @@ class _InteractiveAssistantSheetState
                               trailing: IconButton(
                                 tooltip: 'Xóa cuộc trò chuyện trên máy này',
                                 icon: Icon(
-                                  Icons.delete_outline,
+                                  Icons.delete_outline_rounded,
                                   size: 18,
                                   color: uiColors.muted,
                                 ),
@@ -651,12 +626,9 @@ class _InteractiveAssistantSheetState
                                         !_isCurrent(generation)) {
                                       return;
                                     }
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Chưa xóa được lịch sử trên máy này. Hãy thử lại.',
-                                        ),
-                                      ),
+                                    AppPopup.showMessage(
+                                      'Chưa xóa được lịch sử trên máy này. Hãy thử lại.',
+                                      kind: AppNoticeKind.error,
                                     );
                                     return;
                                   }
@@ -961,10 +933,9 @@ class _InteractiveAssistantSheetState
     if (!_isCurrent(generation) || index >= _messages.length) return;
     if (!accepted) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chưa gửi được đánh giá. Bạn hãy thử lại.'),
-        ),
+      AppPopup.showMessage(
+        'Chưa gửi được đánh giá. Bạn hãy thử lại.',
+        kind: AppNoticeKind.error,
       );
       return;
     }
@@ -1018,7 +989,7 @@ class _InteractiveAssistantSheetState
           Icon(
             isHigh
                 ? Icons.warning_amber_rounded
-                : Icons.tips_and_updates_outlined,
+                : Icons.tips_and_updates_rounded,
             color: accent,
             size: 20,
           ),
@@ -1311,7 +1282,7 @@ class _InteractiveAssistantSheetState
                                   tooltip: 'Đoạn chat mới',
                                   style: _glassIcon,
                                   icon: const Icon(
-                                    Icons.add_comment_outlined,
+                                    Icons.add_comment_rounded,
                                     size: 20,
                                   ),
                                   onPressed: () => _startNewChat(),
@@ -1462,20 +1433,14 @@ class _InteractiveAssistantSheetState
                                               _voiceService?.cancelListening();
                                               setState(() {
                                                 _isListeningVoice = false;
-                                                _voiceSoundLevel = 0.0;
                                               });
                                             },
                                           ),
-                                          Expanded(
-                                            child: AnimatedVoiceWaveform(
-                                              isListening: true,
-                                              soundLevel: _voiceSoundLevel,
-                                              height: 24,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
+                                          // QA 139: no waveform (voice input is
+                                          // off; it looped without real audio).
+                                          const Spacer(),
                                           const Text(
-                                            'Đang nghe...',
+                                            'Đang nghe…',
                                             style: TextStyle(
                                               fontSize: 12.5,
                                               fontWeight: FontWeight.w600,
@@ -1497,7 +1462,7 @@ class _InteractiveAssistantSheetState
                                       ),
                                       decoration: const InputDecoration(
                                         hintText:
-                                            'Hỏi Pinova Bot về pin, sạc, xe...',
+                                            'Hỏi Pinova Bot về pin, sạc, xe…',
                                         hintMaxLines: 1,
                                         hintStyle: TextStyle(
                                           fontSize: 14,
@@ -1521,7 +1486,7 @@ class _InteractiveAssistantSheetState
                                 key: GuideRegistry.keyBotScan,
                                 tooltip: 'Quét đồng hồ xe để đọc % pin và ODO',
                                 icon: const Icon(
-                                  Icons.photo_camera_outlined,
+                                  Icons.photo_camera_rounded,
                                   color: LuxeColors.platinumMid,
                                 ),
                                 onPressed: _isTyping || _readingDashboard
@@ -1563,7 +1528,7 @@ class _InteractiveAssistantSheetState
                                         ? LuxeColors.platinumHi
                                         : const Color(0xFF232427),
                                     foregroundColor: ready
-                                        ? const Color(0xFF0B0C0E)
+                                        ? LuxeColors.shell
                                         : LuxeColors.dim,
                                   ),
                                   icon: const Icon(
@@ -1755,7 +1720,7 @@ class _TypingDotState extends State<_TypingDot>
 class _LuxePalette {
   const _LuxePalette();
   Color get surface => const Color(0xFF0C0D0F);
-  Color get background => const Color(0xFF17181B);
+  Color get background => LuxeColors.raised;
   Color get primary => LuxeColors.emerald;
   Color get text => LuxeColors.text;
   Color get muted => LuxeColors.muted;

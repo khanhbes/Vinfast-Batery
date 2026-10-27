@@ -279,8 +279,13 @@ class LuxeSheetHeader extends StatelessWidget {
   );
 }
 
+/// The dim behind every sheet (QA 139: sheets used 54, 72 and 75 %).
+const luxeSheetBarrier = Color(0xB8000000);
+
 /// Opens a LUXE modal bottom sheet: dark glass body, hairline top rim and a
 /// platinum handle. [builder] supplies the content below the handle.
+/// Sheets that draw their own frame use [LuxeColors.sheet], a 28 radius and
+/// [luxeSheetBarrier] too (QA 139).
 Future<T?> showLuxeSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
@@ -289,14 +294,17 @@ Future<T?> showLuxeSheet<T>(
   bool isDismissible = true,
   bool enableDrag = true,
   bool useRootNavigator = false,
+  Clip? clipBehavior,
 }) => showModalBottomSheet<T>(
   context: context,
+  clipBehavior: clipBehavior,
   isScrollControlled: isScrollControlled,
   useSafeArea: useSafeArea,
   isDismissible: isDismissible,
   enableDrag: enableDrag,
   useRootNavigator: useRootNavigator,
   showDragHandle: false,
+  barrierColor: luxeSheetBarrier,
   backgroundColor: LuxeColors.sheet,
   shape: const RoundedRectangleBorder(
     borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -791,6 +799,32 @@ class _OrbitPainter extends CustomPainter {
 /// Brushed-platinum sweep over placeholder shapes while content loads. The
 /// loop is tied to the loading state, pauses with [TickerMode] and is static
 /// under reduced motion.
+/// A fold that grows and shrinks on the luxe curve; under "reduce motion"
+/// it shows its child directly. Never `AnimatedSize(duration: zero)`: that
+/// asserts "mutated in its own performLayout" (QA 138, QA 139).
+class LuxeFold extends StatelessWidget {
+  const LuxeFold({
+    super.key,
+    required this.child,
+    this.duration = const Duration(milliseconds: 320),
+    this.alignment = Alignment.center,
+  });
+
+  final Widget child;
+  final Duration duration;
+  final AlignmentGeometry alignment;
+
+  @override
+  Widget build(BuildContext context) => MediaQuery.disableAnimationsOf(context)
+      ? child
+      : AnimatedSize(
+          duration: duration,
+          curve: LuxeMotion.enter,
+          alignment: alignment,
+          child: child,
+        );
+}
+
 class LuxeShimmer extends StatefulWidget {
   const LuxeShimmer({super.key, required this.child});
   final Widget child;
@@ -835,9 +869,9 @@ class _LuxeShimmerState extends State<LuxeShimmer>
           begin: Alignment(x - 0.6, -0.3),
           end: Alignment(x + 0.6, 0.3),
           colors: const [
-            Color(0xFF17181B),
+            LuxeColors.raised,
             Color(0xFF2A2C30),
-            Color(0xFF17181B),
+            LuxeColors.raised,
           ],
           stops: const [0.2, 0.5, 0.8],
         ).createShader(bounds);

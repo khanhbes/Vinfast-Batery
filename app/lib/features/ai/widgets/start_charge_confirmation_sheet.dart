@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 import '../../../core/widgets/charge_confirm_control.dart';
 import 'history_luxe_widgets.dart';
+import '../../../core/widgets/luxe_kit.dart';
 
 /// Luxe sheet confirming a charge start. The relay is only requested after
 /// the estimated-SOC acknowledgement AND a full slide of the platinum knob.
@@ -45,7 +47,7 @@ class StartChargeConfirmationSheet extends StatefulWidget {
     context: context,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
-    barrierColor: Colors.black.withValues(alpha: .72),
+    barrierColor: luxeSheetBarrier,
     builder: (_) => StartChargeConfirmationSheet(
       currentSoc: currentSoc,
       targetSoc: targetSoc,
@@ -143,7 +145,7 @@ class _StartChargeConfirmationSheetState
                   if (_targetMode) ...[
                     const Divider(height: 1),
                     LuxeInfoRow(
-                      icon: Icons.shield_outlined,
+                      icon: Icons.shield_rounded,
                       label: 'Giới hạn an toàn',
                       value: 'Shelly tự tắt muộn nhất ${widget.safetyCeiling}',
                     ),
@@ -222,14 +224,15 @@ class LuxeSheetFrame extends StatelessWidget {
     constraints: BoxConstraints(
       maxHeight: MediaQuery.sizeOf(context).height * .92,
     ),
+    // QA 139: the same sheet surface as showLuxeSheet.
     decoration: const BoxDecoration(
-      color: Color(0xFF0C0D0F),
+      color: LuxeColors.sheet,
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       border: Border(top: BorderSide(color: LuxeColors.hairlineStrong)),
       gradient: RadialGradient(
         center: Alignment(0, -1.2),
         radius: 1.2,
-        colors: [Color(0xFF1A1C1F), Color(0xFF0C0D0F)],
+        colors: [LuxeColors.raisedHigh, LuxeColors.sheet],
       ),
     ),
     child: SafeArea(
@@ -345,14 +348,15 @@ class _ModeMedallion extends StatelessWidget {
         end: Alignment.bottomRight,
         colors: [Color(0xFF26282C), Color(0xFF101113)],
       ),
-      border: Border.all(color: LuxeColors.emerald.withValues(alpha: 0.55)),
+      // Platinum: the mode is a choice, not a verified state (QA 139).
+      border: Border.all(color: LuxeColors.platinum.withValues(alpha: 0.55)),
       boxShadow: const [
-        BoxShadow(color: Color(0x3334D399), blurRadius: 16, spreadRadius: -4),
+        BoxShadow(color: Color(0x22FFFFFF), blurRadius: 16, spreadRadius: -4),
       ],
     ),
     child: Icon(
       isAi ? Icons.auto_awesome_rounded : Icons.schedule_rounded,
-      color: LuxeColors.emerald,
+      color: LuxeColors.platinumHi,
       size: 22,
     ),
   );
@@ -422,6 +426,8 @@ class _SocJourney extends StatelessWidget {
           start: from.toDouble(),
           end: to.toDouble(),
           showLabel: false,
+          // A plan, not a verified charge: the plan's accent (QA 139).
+          color: PlanStyle.of(context).accent,
         ),
       ],
     ),

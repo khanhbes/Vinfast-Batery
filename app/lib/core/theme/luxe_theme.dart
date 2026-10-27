@@ -12,6 +12,9 @@ import 'plan_style.dart';
 abstract final class LuxeColors {
   static const background = BootstrapSplash.background;
   static const ambient = Color(0xFF16181B);
+
+  /// Bar and shell surface just above the background (QA 139).
+  static const shell = Color(0xFF0B0C0E);
   static const glass = Color(0x0FFFFFFF);
   static const glassStrong = Color(0x17FFFFFF);
   static const hairline = Color(0x1FFFFFFF);
@@ -30,6 +33,9 @@ abstract final class LuxeColors {
   static const emerald = Color(0xFF34D399);
   static const emeraldDeep = Color(0xFF10B981);
   static const emeraldGlow = Color(0x5534D399);
+  // QA 139: tints that older screens wrote as hex (Cockpit, AppColors).
+  static const emeraldSoft = Color(0x3334D399);
+  static const emeraldTint = Color(0x1A34D399);
   static const danger = Color(0xFFF59E9E);
 
   /// Champagne gold: estimated values and cautions (never verified state).
@@ -278,8 +284,9 @@ abstract final class LuxeTheme {
         fillColor: LuxeColors.glass,
         labelStyle: const TextStyle(color: LuxeColors.muted),
         floatingLabelStyle: TextStyle(color: accent),
-        hintStyle: const TextStyle(color: LuxeColors.dim),
-        helperStyle: const TextStyle(color: LuxeColors.dim),
+        // QA 139: muted, dim was 3.8–4.4:1 on the field fill.
+        hintStyle: const TextStyle(color: LuxeColors.muted),
+        helperStyle: const TextStyle(color: LuxeColors.muted),
         prefixIconColor: LuxeColors.platinumMid,
         suffixIconColor: LuxeColors.platinumMid,
         border: fieldBorder,

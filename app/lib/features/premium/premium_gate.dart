@@ -118,9 +118,14 @@ class PremiumBadge extends StatelessWidget {
   Widget build(BuildContext context) => PlanTag(tier: tier);
 }
 
-/// An entry to a feature outside the plan (QA 136): drawn faded, does not
+/// An entry to a feature outside the plan (QA 136): drawn in grey, does not
 /// react to taps, and only its plan tag is tappable (opens Pinova Premium
 /// at that feature). Inside the plan it is just [child].
+///
+/// QA 139: grey and a little darker instead of 38 % opacity, so the text
+/// that sells the feature stays readable (secondary text about 4.8:1)
+/// while icons and accents lose their colour; it fills its parent like the
+/// child would (a locked grid tile used to shrink to half width).
 class PremiumLocked extends ConsumerWidget {
   const PremiumLocked({
     super.key,
@@ -144,7 +149,24 @@ class PremiumLocked extends ConsumerWidget {
   final AlignmentGeometry tagAlignment;
   final EdgeInsetsGeometry tagPadding;
 
-  static const fadedOpacity = 0.38;
+  /// Brightness kept after the grey filter.
+  static const lockedBrightness = 0.8;
+
+  static const _lum = [0.2126, 0.7152, 0.0722];
+
+  /// Luminance grey scaled by [lockedBrightness]; alpha unchanged.
+  static final ColorFilter lockedFilter = ColorFilter.matrix([
+    for (var row = 0; row < 3; row++) ...[
+      for (final w in _lum) w * lockedBrightness,
+      0,
+      0,
+    ],
+    0,
+    0,
+    0,
+    1,
+    0,
+  ]);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -161,14 +183,15 @@ class PremiumLocked extends ConsumerWidget {
     final stacked = reserveTagSpace && scaler.scale(1) > 1.3;
     return Stack(
       key: ValueKey('premium-locked-${feature.id}'),
+      fit: StackFit.passthrough,
       children: [
         Semantics(
           label: '${feature.label}, cần gói ${tier.label}',
           enabled: false,
           excludeSemantics: true,
           child: IgnorePointer(
-            child: Opacity(
-              opacity: fadedOpacity,
+            child: ColorFiltered(
+              colorFilter: lockedFilter,
               child: !reserveTagSpace
                   ? child
                   : Padding(

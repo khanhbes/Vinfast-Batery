@@ -186,10 +186,13 @@ abstract final class CockpitElevation {
   ];
 }
 
+/// QA 139: defaults follow LuxeText (semibold titles, light numbers on
+/// LUXE screens use explicit weights) so the older Shelly setup screens read
+/// like the rest of the app.
 abstract final class CockpitTypography {
   static TextStyle numbers({
     double? fontSize,
-    FontWeight fontWeight = FontWeight.w700,
+    FontWeight fontWeight = FontWeight.w600,
     Color color = CockpitColors.text,
     double? letterSpacing,
   }) => TextStyle(
@@ -202,14 +205,14 @@ abstract final class CockpitTypography {
 
   static TextStyle heading({
     double? fontSize,
-    FontWeight fontWeight = FontWeight.w700,
+    FontWeight fontWeight = FontWeight.w600,
     Color color = CockpitColors.text,
     double? letterSpacing,
   }) => TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
-    letterSpacing: letterSpacing,
+    letterSpacing: letterSpacing ?? -0.2,
   );
 
   static TextStyle body({
@@ -228,14 +231,14 @@ abstract final class CockpitTypography {
 
   static TextStyle label({
     double? fontSize,
-    FontWeight fontWeight = FontWeight.w600,
+    FontWeight fontWeight = FontWeight.w500,
     Color color = CockpitColors.muted,
     double? letterSpacing,
   }) => TextStyle(
     fontSize: fontSize,
     fontWeight: fontWeight,
     color: color,
-    letterSpacing: letterSpacing,
+    letterSpacing: letterSpacing ?? 0.4,
   );
 }
 

@@ -61,7 +61,8 @@ class PlanStyle extends ThemeExtension<PlanStyle> {
 
   static const free = PlanStyle._(
     tier: PlanTier.free,
-    accent: LuxeColors.emerald,
+    // QA 139: platinum, so emerald means "verified" only.
+    accent: LuxeColors.platinumHi,
     accentColors: [
       LuxeColors.platinumHi,
       LuxeColors.platinum,
