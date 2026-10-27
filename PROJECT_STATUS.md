@@ -12,6 +12,17 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 139. Task Completion Log — Rà soát giao diện: UI/UX, đồng bộ, màu sắc, animation (26–27/10/2026) — Báo cáo xong, chưa sửa code giao diện
+
+**Yêu cầu:** rà soát chi tiết UI/UX, thiết kế, đồng bộ, màu sắc, animation; báo cáo có ảnh, sửa sau khi chủ app duyệt. Chi tiết: `docs/qa_evidence/qa139-giao-dien-2026-10-26.md` và bản web "Giao diện Pinova 26/10" (https://claude.ai/artifact/5zxDND1khTnj4dr131tN6Y).
+
+**Cách làm:** kiểm kê token trong `app/lib` (485 màu hex ngoài theme, 121 trùng token; 665 cỡ chữ viết cứng, 39 giá trị, 369 ngoài thang LuxeText; Cockpit/AppUiColors/AppColors/AppMotion còn dùng); bộ ảnh `app/test/visual/qa139_gallery_test.dart` (chưa commit; chỉ chạy khi có `QA139_OUT` và `QA139_FONTS`, nạp Roboto) — 343 ảnh, 28 màn/sheet × Free/Pro/Ultra × 320/412 dp × chữ ×1/×1.3/×2; đo tương phản 4 828 ô chữ từ ảnh; trên Xiaomi 1.3.3+206 (Ultra dùng thử) chụp Sạc pin, Lịch sử, Premium và đo nhịp khung qua `dumpsys SurfaceFlinger --latency` (gfxinfo không thấy khung Flutter): Lịch sử 0.3% khung giật, Tổng quan 1.7% ở 120 Hz; lượt đo dừng giữa chừng theo yêu cầu.
+
+**19 phát hiện mới (UX-01…19):** 1 cao — UX-01 ô Lộ trình bị khóa ở Tổng quan (Free) co còn nửa (`PremiumLocked` Stack loose); trung bình — UX-02 emerald làm màu nhấn/viết cứng ở tab Sạc (chủ app chọn đổi sang platinum), UX-03 giá trên ô Ultra 3.85:1, UX-04 toast lỗi champagne/cảnh báo cam ngoài bảng, UX-05 5 kiểu sheet, UX-06 toast và SnackBar song song, UX-07 ba hệ token; thấp/gợi ý — cỡ chữ, chuyển trang, icon outlined/rounded, icon Dừng sạc, nhãn gói 10 px, hàng bị khóa 38% (chủ app chọn chữ rõ, icon mờ), thời lượng/đơn vị ở Lịch sử, chữ gợi ý ô nhập 3.75–4.4:1, nút nổi che nội dung ở Xe của tôi (320 dp ×2), dấu ba chấm, widget cũ, màu nhấn Pro. Còn tồn: QA-13, 14, 15, 19, 20.
+
+**Chưa kiểm tra:** chữ to/TalkBack trên máy (cần đổi cài đặt hệ thống), màn cần Firebase thật ngoài 5 màn đã xem, luồng cài mới; OnePlus (1.3.0+203) đang ở màn hình chính nên không thao tác. **Còn lại:** chủ app duyệt danh sách, chọn màu toast lỗi (UX-04), đồng ý xóa widget cũ (UX-15); deploy nhóm Trung bình QA 138 + 1.3.4+207 để sau.
+
+
 ## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong; đã sửa QA-01…05 (+ QA-10, QA-21, một phần QA-20); đã deploy API + worker, APK 1.3.3+206 đã cài Xiaomi; nhóm Trung bình (QA-06…09, QA-11) đã sửa, chưa deploy
 
 **Yêu cầu:** kiểm tra tổng thể logic, UI/UX, nội dung, hiển thị, animation, hiệu năng, tiếp cận, an toàn; chỉ báo cáo, sửa sau khi duyệt. Chi tiết: `docs/qa_evidence/qa138-ra-soat-2026-10-26.md` (chủ app yêu cầu file .md riêng cho ngày này) và bản web "Rà soát Pinova 26/10" (https://claude.ai/artifact/2Du2n6ifaR6idC9ysv3nxd).
