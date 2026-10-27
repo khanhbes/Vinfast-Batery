@@ -198,6 +198,16 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Không hiển thị dữ liệu giả; không in lỗi thô (`$e`) ra UI.
   - Giữ `ValueKey`/`GuideRegistry` và cổng an toàn sạc.
   - Task 125: `LuxeText.eyebrow` là platinum (emerald chỉ cho trạng thái đã xác minh); mascot/avatar/nút bot nổi/chấm trạng thái chỉ chuyển động khi có hoạt động thật; thẻ xác nhận BatteryBot: champagne chờ, rose không thực hiện, emerald đã xác minh.
+- **QA 139 (27/10/2026, rà soát giao diện, chủ app duyệt):**
+  - Màu nhấn gói Free là platinum (`PlanStyle.free.accent`); vòng chọn % lấy `PlanStyle.accentColors` (núm hiện tại than chì, núm mục tiêu màu nhấn). Emerald chỉ cho đã xác minh/đang sạc thật.
+  - Ước tính (dung lượng pin, mục tiêu) là champagne hoặc màu nhấn, không emerald.
+  - Toast: lỗi rose (chỉ viền và icon), cảnh báo champagne, không màu ngoài bảng.
+  - `PremiumLocked`: lọc xám, sáng 80% (`lockedFilter`, chữ phụ khoảng 4.8:1) thay cho mờ 38%; `StackFit.passthrough` để ô bị khóa giãn như ô thường.
+  - Thông báo ngắn chỉ qua `AppPopup` (`showMessage` cho câu do app viết, vẫn chặn ID/URL/email/IP), không `SnackBar`.
+  - Sheet qua `showLuxeSheet` (nền phía sau `luxeSheetBarrier`). Sheet tự vẽ khung dùng `LuxeColors.sheet`, bo 28. Mục gập dùng `LuxeFold`.
+  - Icon chỉ Material Rounded. Lịch sử luôn kWh 2 số lẻ, thời lượng viết đủ ("12 giờ 18 phút"). Không "≈", không "...", % liền số.
+  - Tổng quan: thẻ "Dung lượng pin · ước tính" lấy `/api/learning/<vid>/health` cho Pro/Ultra, Free thấy khóa PRO; ô thứ ba của dải số liệu hiện dung lượng hoặc "SoH bạn nhập".
+  - Luật nguồn kiểm tra tự động trong `test/widget/qa139_ui_fixes_test.dart`: không icon outlined, không CockpitColors/AppColors ngoài theme, màu hex ≤ 300, không vòng lặp ngoài danh sách hoạt động thật, không `AnimatedSize` thời lượng 0.
 
 ### 3.7. BatteryBot (trợ lý AI)
 
