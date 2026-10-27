@@ -29,6 +29,8 @@
 
 **Làm nốt (27/10, chủ app yêu cầu chưa chạy test/build):** UX-08 — cỡ chữ lệch ≤ 1 px gom về bậc gần nhất (291 chỗ, 37 → 28 cỡ), thang ghi thành `LuxeText.scale`, thêm luật nguồn trong `qa139_ui_fixes_test.dart`; UX-07 phần còn lại — khoảng 140 chỗ `AppUiColors` đọc màu cố định → `LuxeColors` (37 chỗ theo theme giữ nguyên). **Chưa chạy** `flutter analyze`/`flutter test` cho phần này; chưa build (bản kế tiếp 1.3.5+208, gồm nút "Thử lại" ở lịch sử bot).
 
+**APK 1.3.5+208 (27/10, chủ app yêu cầu):** profile, SHA-256 `a0df146a…658f8ace`, build 4 phút 28 giây không lỗi biên dịch; cài OnePlus 9 Pro bằng `adb install -r` (versionCode 208; không có READ_PHONE_STATE/RECORD_AUDIO/REQUEST_INSTALL_PACKAGES). Gồm UX-08, phần còn lại UX-07 và nút "Thử lại" ở lịch sử Pinova Bot. Chưa chạy `flutter test`/`analyze` cho hai phần cuối; chưa xem trên máy.
+
 ## 138. Task Completion Log — Rà soát tổng thể trước phát hành (26/10/2026) — Báo cáo xong; đã sửa QA-01…05 (+ QA-10, QA-21, một phần QA-20); đã deploy API + worker, APK 1.3.3+206 đã cài Xiaomi; nhóm Trung bình (QA-06…09, QA-11) đã sửa, chưa deploy
 
 **Yêu cầu:** kiểm tra tổng thể logic, UI/UX, nội dung, hiển thị, animation, hiệu năng, tiếp cận, an toàn; chỉ báo cáo, sửa sau khi duyệt. Chi tiết: `docs/qa_evidence/qa138-ra-soat-2026-10-26.md` (chủ app yêu cầu file .md riêng cho ngày này) và bản web "Rà soát Pinova 26/10" (https://claude.ai/artifact/2Du2n6ifaR6idC9ysv3nxd).
