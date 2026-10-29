@@ -8,7 +8,7 @@ import time
 import uuid
 import math
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from .models import (
     ChargePreview,
@@ -588,22 +588,37 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         """Only with the real datastore; in-memory tests stay synchronous."""
         return bool(getattr(self.repository, "db", None))
 
-    def _anchor_stop_to_device_timer(self, session: ChargingSession, status, *, manual: bool = False) -> None:
+    def _device_stop_at(self, session: ChargingSession, status, duration_seconds: int | None):
+        """When the Shelly timer really ends (QA 140).
+
+        Best: the device's own timer start + duration (``timer_ends_at``),
+        true however old the Cloud snapshot is. Else: when the Cloud accepted
+        ON plus the timer length sent. A "seconds left" read from a snapshot
+        that can be 30-40 s old is no longer used: it made the app count past
+        the moment the outlet switched off.
+        """
+        ends_at = getattr(status, "timer_ends_at", None)
+        if ends_at:
+            return datetime.fromtimestamp(float(ends_at), timezone.utc)
+        if session.relay_on_at is not None and duration_seconds:
+            return session.relay_on_at + timedelta(seconds=int(duration_seconds))
+        return None
+
+    def _anchor_stop_to_device_timer(self, session: ChargingSession, status, *, duration_seconds: int | None,
+                                     manual: bool = False) -> None:
         """Planned stop = when the verified Shelly timer actually ends.
 
-        The session is created before the Cloud ON round trips, so a stop time
-        taken from creation fired a backup OFF (and an "interrupted" label)
-        seconds before the hardware timer would. Only ever moves later, never
-        past the absolute safety deadline.
+        The session is created before the Cloud ON round trips, so its first
+        stop time is a little early; this moves it to the device's end, in
+        either direction, never past the absolute safety deadline.
         """
-        remaining = int(status.timer_remaining or 0)
-        if remaining <= 0:
+        device_stop = self._device_stop_at(session, status, duration_seconds)
+        if device_stop is None or device_stop <= self.clock():
             return
-        device_stop = min(self.clock() + timedelta(seconds=remaining), session.absolute_safety_stop_at)
-        if device_stop > session.effective_stop_at:
-            session.effective_stop_at = device_stop
-            if manual:
-                session.ai_stop_at = device_stop
+        device_stop = min(device_stop, session.absolute_safety_stop_at)
+        session.effective_stop_at = device_stop
+        if manual:
+            session.ai_stop_at = device_stop
 
     def _relay_off_outcome(self, session: ChargingSession, now) -> tuple[str, str]:
         """Timer completion vs. an OFF that came before the plan."""
@@ -1006,6 +1021,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         self.repository.save_session(uid, session)
         try:
             self._send_on(binding, duration, on_context)
+            session.relay_on_at = self.clock()
             verified = self._read_until(
                 binding,
                 lambda current: (self._status_matches_device(current, binding.device_id)
@@ -1020,7 +1036,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
 
             if not verified:
                 raise ProviderError("timerNotArmed", "Không xác minh được timer trên Shelly")
-            self._anchor_stop_to_device_timer(session, verified)
+            self._anchor_stop_to_device_timer(session, verified, duration_seconds=duration)
             session.state = "active"
             session.relay_verified = True
             session.timer_verified = True
@@ -1106,11 +1122,20 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                                              verify_live=False)
         except Exception:
             capabilities = None  # live status stays usable; app keeps its last capabilities
+        # QA 140: count down to an instant, not to "seconds left" in a status
+        # that may be old; serverTime lets the app correct its own clock.
+        timer_ends_at = None
+        if session is not None and session.state == "active":
+            timer_ends_at = session.effective_stop_at
+        elif getattr(status, "relay", False) and getattr(status, "timer_ends_at", None):
+            timer_ends_at = datetime.fromtimestamp(float(status.timer_ends_at), timezone.utc)
         return {
             "status": {**(status.to_dict() if hasattr(status, "to_dict") else status),
                        "codeRefreshRequired": self._code_refresh_required(uid, binding.device_id)},
             "session": session.to_dict() if session else None,
             "active": bool(session and session.state in NONTERMINAL_SESSION_STATES),
+            "timerEndsAt": timer_ends_at.isoformat() if timer_ends_at else None,
+            "serverTime": self.clock().isoformat(),
             "capabilities": capabilities,
             "binding": {"deviceId": binding.device_id, "connectionMode": binding.connection_mode,
                         "provider": binding.provider, "displayName": binding.display_name},
@@ -1451,6 +1476,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                                            "Bộ sạc này chưa hỗ trợ nâng mục tiêu khi đang sạc.", 409)
                 try:
                     extender(binding, int(ceiling))
+                    rearmed_at = self.clock()
                     verified = self._read_until(
                         binding,
                         lambda s: (self._status_matches_device(s, binding.device_id) and s.relay is True
@@ -1475,8 +1501,10 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                         "timerNotExtended",
                         f"Chưa xác nhận được giới hạn an toàn mới của ổ sạc; mục tiêu giữ nguyên {round(old)}%.",
                         503, True)
-                session.effective_stop_at = min(now + timedelta(seconds=int(verified.timer_remaining)),
-                                                session.absolute_safety_stop_at)
+                ends_at = getattr(verified, "timer_ends_at", None)
+                device_stop = (datetime.fromtimestamp(float(ends_at), timezone.utc) if ends_at
+                               else rearmed_at + timedelta(seconds=int(ceiling)))
+                session.effective_stop_at = min(device_stop, session.absolute_safety_stop_at)
                 session.hardware_timeout_seconds = int(
                     (session.effective_stop_at - session.created_at).total_seconds())
                 extended = binding
@@ -1999,6 +2027,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         timer.mark("claim")
         try:
             self._send_on(binding, duration_seconds, on_context)
+            session.relay_on_at = self.clock()
             timer.mark("on")
             # The dispatch gate already spaces the readback >=1.1s after ON.
             # Cloud status from East Asia can lag a few seconds: read again
@@ -2012,7 +2041,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             if status is None:
                 raise ProviderError("timerNotArmed", "Không xác minh được safety timer")
             timer.mark("readback")
-            self._anchor_stop_to_device_timer(session, status, manual=True)
+            self._anchor_stop_to_device_timer(session, status, duration_seconds=duration_seconds, manual=True)
             session.state = "active"
             session.relay_verified = True
             session.timer_verified = True

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 
 import '../../core/constants/app_constants.dart';
@@ -483,7 +484,8 @@ class ServerSmartChargerService {
         _request(
           'GET',
           '/api/smart-charging/live${vehicleId == null || vehicleId.isEmpty ? '' : '?vehicleId=${Uri.encodeQueryComponent(vehicleId)}'}',
-        ).then((data) {
+        ).then((raw) {
+          final data = withLocalTimerEnd(raw, DateTime.now());
           if (generation == _liveGeneration) {
             _liveRecent[key] = (
               DateTime.now(),
@@ -497,6 +499,28 @@ class ServerSmartChargerService {
       if (identical(_liveInFlight[key], request)) _liveInFlight.remove(key);
     }).ignore();
     return request;
+  }
+
+  /// QA 140: `timerEndsAt` (server clock) moved onto this phone's clock
+  /// and put into the status as `timer_ends_at_local`, so every screen and
+  /// the background monitor count down to the outlet's real cutoff.
+  @visibleForTesting
+  static Map<String, dynamic> withLocalTimerEnd(
+    Map<String, dynamic> data,
+    DateTime receivedAt,
+  ) {
+    final ends = DateTime.tryParse(data['timerEndsAt']?.toString() ?? '');
+    final server = DateTime.tryParse(data['serverTime']?.toString() ?? '');
+    final status = data['status'];
+    if (ends == null || server == null || status is! Map) return data;
+    final local = ends.add(receivedAt.difference(server));
+    return {
+      ...data,
+      'status': {
+        ...Map<String, dynamic>.from(status),
+        'timer_ends_at_local': local.toUtc().toIso8601String(),
+      },
+    };
   }
 
   Future<SmartChargingPlanPreview> createPreview(

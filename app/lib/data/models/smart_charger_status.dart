@@ -23,6 +23,7 @@ class SmartChargerStatus {
     double? shellyTemperatureC,
     this.batteryTemperatureC,
     this.readAt,
+    this.timerEndsAt,
   }) : shellyTemperatureC = shellyTemperatureC ?? temperatureC;
 
   final bool online;
@@ -45,8 +46,20 @@ class SmartChargerStatus {
   /// that instant; screens count it down with [timerRemainingAt] (Task 125).
   final DateTime? readAt;
 
-  /// Hardware timer left at [now]: the readback minus its age, never < 0.
+  /// When the hardware timer ends, on this phone's clock (QA 140): the
+  /// server's instant shifted by the server/phone clock difference. A
+  /// "seconds left" taken from a Cloud snapshot could be 30-40 s old, so the
+  /// app counted past the moment the outlet switched off.
+  final DateTime? timerEndsAt;
+
+  /// Hardware timer left at [now]: to [timerEndsAt] when the server sent
+  /// it, else the readback minus its age; never < 0.
   Duration? timerRemainingAt(DateTime now) {
+    final ends = timerEndsAt;
+    if (ends != null && relay) {
+      final left = ends.difference(now);
+      return left.isNegative ? Duration.zero : left;
+    }
     final timer = timerRemaining;
     if (timer == null) return null;
     final at = readAt;
@@ -79,6 +92,8 @@ class SmartChargerStatus {
         batteryTemperatureC: batteryTemperatureC,
         // A verified command's timer is as of now.
         readAt: on && timerRemaining != null ? DateTime.now() : readAt,
+        // The next /live brings the device's end instant again.
+        timerEndsAt: on && timerRemaining == null ? timerEndsAt : null,
       );
 
   /// Same wire shape as the server `/live` status (round-trips via fromJson).
@@ -100,6 +115,8 @@ class SmartChargerStatus {
     if (deviceId != null) 'device_id': deviceId,
     if (codeRefreshRequired != null) 'codeRefreshRequired': codeRefreshRequired,
     if (readAt != null) 'read_at': readAt!.toUtc().toIso8601String(),
+    if (timerEndsAt != null)
+      'timer_ends_at_local': timerEndsAt!.toUtc().toIso8601String(),
   };
 
   factory SmartChargerStatus.fromJson(Map<String, dynamic> json) {
@@ -151,6 +168,9 @@ class SmartChargerStatus {
       readAt:
           DateTime.tryParse(json['read_at']?.toString() ?? '')?.toLocal() ??
           DateTime.now(),
+      timerEndsAt: DateTime.tryParse(
+        json['timer_ends_at_local']?.toString() ?? '',
+      )?.toLocal(),
     );
   }
 }

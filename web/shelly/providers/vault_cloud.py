@@ -287,6 +287,7 @@ class VaultCloudControlProvider:
             online=True,
             relay=switch["output"],
             timer_remaining=timer,
+            timer_ends_at=self._timer_ends_at(switch, timer),
             power_w=meter(switch["apower"], "W"),
             voltage_v=meter(switch["voltage"], "V"),
             current_a=meter(switch["current"], "A"),
@@ -294,6 +295,20 @@ class VaultCloudControlProvider:
             energy_wh=meter(energy["total"], "Wh"),
             device_id=binding.device_id,
         )
+
+    def _timer_ends_at(self, switch: dict, remaining: int) -> float | None:
+        """Absolute end of a running timer (QA 140), only from the device's
+        own start + duration: that instant stays true however old the Cloud
+        snapshot is. None when the device does not report it."""
+        if switch.get("output") is not True or remaining <= 0:
+            return None
+        started, duration = switch.get("timer_started_at"), switch.get("timer_duration")
+        if not all(not isinstance(v, bool) and isinstance(v, (int, float)) and math.isfinite(v)
+                   for v in (started, duration)):
+            return None
+        if started < 1577836800 or not 0 < duration <= 36000:
+            return None
+        return float(started) + float(duration)
 
     def _timer_remaining(self, snapshot: dict, switch: dict) -> int:
         # Gen2+ RPC reports an actual triggered timer using its UTC start and

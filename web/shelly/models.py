@@ -31,6 +31,10 @@ class DeviceStatus:
     energy_wh: float = 0
     device_id: str = ""
     error: str | None = None
+    # QA 140: when the hardware timer ends (unix seconds), from the device's
+    # own timer start + duration. A Cloud snapshot can be tens of seconds
+    # old, so "seconds left" read from it ran long; this instant does not.
+    timer_ends_at: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -412,6 +416,8 @@ class ChargingSession:
     full_detected_at: datetime | None = None
     # Where the end % came from: estimate | taper_full | user.
     end_soc_source: str = "estimate"
+    # QA 140: when the Cloud accepted ON (the device starts its timer then).
+    relay_on_at: datetime | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -508,4 +514,5 @@ class ChargingSession:
             "tail_entry_w": self.tail_entry_w,
             "full_detected_at": iso(self.full_detected_at),
             "end_soc_source": self.end_soc_source,
+            "relay_on_at": iso(self.relay_on_at),
         }

@@ -2605,6 +2605,7 @@ def _session(data: dict) -> ChargingSession:
         tail_entry_w=_opt_float(data.get("tail_entry_w")),
         full_detected_at=_date(data.get("full_detected_at")),
         end_soc_source=str(data.get("end_soc_source") or "estimate"),
+        relay_on_at=_date(data.get("relay_on_at")),
     )
 
 
