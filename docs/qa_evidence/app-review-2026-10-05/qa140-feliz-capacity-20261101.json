@@ -1,0 +1,26 @@
+{
+  "approvedBy": "owner (01/11/2026, 'Ghi catalog, xe để tôi sửa')",
+  "ranIn": "vinfast-api container (revision vinfast-api--api106-1031200212) via az containerapp exec; credentials stayed in the container",
+  "dryRun": {
+    "catalog": {
+      "battery.grossCapacityWh": 2400.0,
+      "battery.calculationCapacityWh": 2400.0,
+      "battery.capacityAh": 50.0,
+      "appDefaults.calculationCapacityWh": 2400.0
+    },
+    "legacy": {
+      "nominalCapacityWh": 2400.0,
+      "nominalCapacityAh": 50.0
+    },
+    "vehiclesMatched": 0
+  },
+  "apply": {
+    "at": "2026-10-31T20:24:58Z",
+    "writes": 3
+  },
+  "verify": {
+    "at": "2026-10-31T20:25:33Z",
+    "writes": 0
+  },
+  "vehicles": "No Vehicles document has vinfastModelId/catalogId feliz_2025; the owner sets 2400 Wh on their vehicle in the app."
+}
