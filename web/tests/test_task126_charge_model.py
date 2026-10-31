@@ -326,7 +326,7 @@ def test_read_only_charge_estimate_for_batterybot():
     assert repo._previews.get("owner", {}) == {}
 
 
-def test_worker_pushes_progress_every_two_minutes_only():
+def test_worker_pushes_progress_every_minute_only():  # QA 140: was 2 min
     import threading
     service, _repo, provider, clock = _service()
     sent, ready = [], threading.Event()
@@ -351,10 +351,10 @@ def test_worker_pushes_progress_every_two_minutes_only():
     # 40 -> 80 % x 26 Wh / 440 W = 2.36 h.
     assert int(payload["remainingSeconds"]) == 8509
     ready.clear()
-    clock.advance(seconds=60)
+    clock.advance(seconds=30)
     service.current("owner", vehicle_id="car")
     assert not ready.wait(0.3)  # throttled
-    clock.advance(seconds=61)
+    clock.advance(seconds=31)
     service.current("owner", vehicle_id="car")
     assert ready.wait(2) and len(sent) == 2
 

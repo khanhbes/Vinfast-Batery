@@ -83,6 +83,42 @@ class GrayImage {
     );
   }
 
+  /// This image turned by a small angle [degrees] (clockwise) about its
+  /// centre onto a canvas just big enough for all of it (a same-size turn
+  /// cut the corners, where the % and the ODO sit), bilinear so LCD
+  /// segments keep their edges; the new corners are dark (unlit). QA 140:
+  /// a phone held a few degrees off level slopes the digit rows and the %
+  /// or ODO went unread.
+  GrayImage rotatedBy(double degrees) {
+    if (degrees == 0) return this;
+    final rad = degrees * math.pi / 180;
+    final cosA = math.cos(rad), sinA = math.sin(rad);
+    final outW = (width * cosA.abs() + height * sinA.abs()).ceil();
+    final outH = (width * sinA.abs() + height * cosA.abs()).ceil();
+    final cx = (width - 1) / 2, cy = (height - 1) / 2;
+    final ox = (outW - 1) / 2, oy = (outH - 1) / 2;
+    final out = Uint8List(outW * outH);
+    for (var y = 0; y < outH; y++) {
+      final dy = y - oy;
+      for (var x = 0; x < outW; x++) {
+        final dx = x - ox;
+        // Source point: the output rotated back by -degrees.
+        final sx = cosA * dx + sinA * dy + cx;
+        final sy = -sinA * dx + cosA * dy + cy;
+        final x0 = sx.floor(), y0 = sy.floor();
+        if (x0 < 0 || y0 < 0 || x0 >= width - 1 || y0 >= height - 1) continue;
+        final fx = sx - x0, fy = sy - y0;
+        final i = y0 * width + x0;
+        final top = pixels[i] + (pixels[i + 1] - pixels[i]) * fx;
+        final bottom =
+            pixels[i + width] +
+            (pixels[i + width + 1] - pixels[i + width]) * fx;
+        out[y * outW + x] = (top + (bottom - top) * fy).round();
+      }
+    }
+    return GrayImage(outW, outH, out);
+  }
+
   /// This image turned by [degrees] clockwise (a photo whose orientation
   /// is unknown is tried every way round).
   GrayImage rotated(int degrees) => degrees % 360 == 0
@@ -221,10 +257,84 @@ abstract final class SevenSegmentReader {
   static DashboardLayoutReading readDashboard(
     GrayImage image, {
     double? lastOdoKm,
-  }) => DashboardLayoutParser.combine([
-    for (final pass in readPasses(image))
-      DashboardLayoutParser.parse(pass, lastOdoKm: lastOdoKm),
-  ]);
+  }) {
+    final passes = [
+      for (final pass in readPasses(image))
+        DashboardLayoutParser.parse(pass, lastOdoKm: lastOdoKm),
+    ];
+    final straight = DashboardLayoutParser.combine(passes);
+    // A one-digit % is rare and is what a tilted "12" or "100" loses down
+    // to: let the turned copies vote on it too.
+    final shortSoc = straight.soc != null && straight.soc! < 10;
+    if (_score(straight) >= _complete && !shortSoc) return straight;
+    // QA 140: the phone a little off level. Turned copies vote with the
+    // level passes (a level pass of a tilted "12" read a confident "1";
+    // the longer number wins the vote, as between thresholds).
+    final turned = <(double, DashboardLayoutReading)>[];
+    for (final angle in tiltAngles) {
+      final copy = image.rotatedBy(angle);
+      for (final pass in readPasses(copy)) {
+        turned.add((
+          angle,
+          _unrotated(
+            DashboardLayoutParser.parse(pass, lastOdoKm: lastOdoKm),
+            angle,
+            image,
+            copy,
+          ),
+        ));
+      }
+    }
+    return DashboardLayoutParser.combine([
+      ...passes,
+      for (final (_, reading) in turned) reading,
+    ]);
+  }
+
+  /// Tried in order when the level image misses the % or the ODO.
+  static const tiltAngles = <double>[-6, 6, -12, 12];
+
+  /// Both numbers found and confident.
+  static const _complete = 4;
+
+  /// Found % and ODO count 1 each, a confident one 2.
+  static int _score(DashboardLayoutReading r) =>
+      (r.soc == null ? 0 : (r.socConfident ? 2 : 1)) +
+      (r.odoKm == null ? 0 : (r.odoConfident ? 2 : 1));
+
+  /// Boxes found on the turned image moved back onto the camera frame.
+  static DashboardLayoutReading _unrotated(
+    DashboardLayoutReading r,
+    double degrees,
+    GrayImage source,
+    GrayImage turned,
+  ) {
+    Rect? back(Rect? box) {
+      if (box == null) return null;
+      final rad = degrees * math.pi / 180;
+      final cx = (source.width - 1) / 2, cy = (source.height - 1) / 2;
+      final dx = box.center.dx - (turned.width - 1) / 2;
+      final dy = box.center.dy - (turned.height - 1) / 2;
+      final x = math.cos(rad) * dx + math.sin(rad) * dy + cx;
+      final y = -math.sin(rad) * dx + math.cos(rad) * dy + cy;
+      return Rect.fromCenter(
+        center: Offset(x, y),
+        width: box.width,
+        height: box.height,
+      );
+    }
+
+    return DashboardLayoutReading(
+      soc: r.soc,
+      odoKm: r.odoKm,
+      socBox: back(r.socBox),
+      odoBox: back(r.odoBox),
+      socConfident: r.socConfident,
+      odoConfident: r.odoConfident,
+      socCandidates: r.socCandidates,
+      odoCandidates: r.odoCandidates,
+    );
+  }
 
   /// The same image read with several thresholds (QA 135). One threshold
   /// never suits every frame: glare merges the "6" of "68" into its

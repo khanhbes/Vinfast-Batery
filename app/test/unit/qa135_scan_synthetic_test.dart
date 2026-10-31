@@ -266,6 +266,46 @@ void main() {
     expect(odoOk / total, greaterThanOrEqualTo(0.95));
   });
 
+  // QA 140: the phone held 10–12° off level; readDashboard tries turned
+  // copies when the level image misses the % or ODO. Scale 0.7 keeps the
+  // synthetic cluster inside its own frame (at 14° the generator cut the
+  // ODO's first digit off the corner before any reading).
+  test('a phone held 10–12° off level still reads', () {
+    var total = 0, ok = 0, levelOnly = 0;
+    final misses = <String>[];
+    for (final degrees in const [-12.0, -10.0, 10.0, 12.0]) {
+      for (final soc in const [12, 68, 100]) {
+        for (final odo in const [4818, 25031]) {
+          total++;
+          final image = _cluster(
+            soc,
+            odo,
+            degrees: degrees,
+            scale: 0.7,
+            seed: total,
+          );
+          final level = _readCombined(image);
+          if (level.soc == soc && level.odoKm == odo.toDouble()) levelOnly++;
+          final r = SevenSegmentReader.readDashboard(image);
+          if (r.soc == soc && r.odoKm == odo.toDouble()) {
+            ok++;
+          } else {
+            misses.add('$soc/$odo @$degrees° → ${r.soc}/${r.odoKm}');
+          }
+        }
+      }
+    }
+    // ignore: avoid_print
+    print('tilted: $ok/$total (level only $levelOnly)\n${misses.join('\n')}');
+    expect(ok, greaterThanOrEqualTo(levelOnly));
+    expect(ok / total, greaterThanOrEqualTo(0.9));
+  });
+
+  test('turning by 0° is the same image', () {
+    final image = _cluster(68, 4818);
+    expect(identical(image.rotatedBy(0), image), isTrue);
+  });
+
   test('frames vote a short misread into the longer number', () {
     final vote = DashboardScanVote();
     for (final soc in [8, 8, 68, 68, 68]) {

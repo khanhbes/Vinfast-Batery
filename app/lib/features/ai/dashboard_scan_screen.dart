@@ -7,10 +7,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/number_text.dart';
 import '../../core/widgets/luxe_kit.dart';
@@ -25,15 +27,44 @@ import '../../core/services/screen_tour.dart';
 /// Reads the dashboard the quickest way (QA 131): the live scanner, which
 /// can hand over to a gallery photo. `null` when the owner cancelled or
 /// chose to type. [lastOdoKm] (last known ODO) rules out misreads.
+///
+/// QA 140: every scanner (Tổng quan, % after a charge, Lịch sử, Lộ trình,
+/// Sạc đêm, Pinova Bot) uses the same baseline: the selected vehicle's
+/// latest ODO, or [lastOdoKm] if that is higher. Callers that passed none
+/// (the % after a charge) or an old one (a trip's start) read ODO worse.
 Future<DashboardReading?> scanDashboard(
   BuildContext context, {
   double? lastOdoKm,
 }) async {
-  final prior = lastOdoKm != null && lastOdoKm > 0 ? lastOdoKm : null;
+  final prior = odoBaseline(lastOdoKm, _vehicleOdo(context));
   final scan = await DashboardScanScreen.open(context, lastOdoKm: prior);
   if (scan == null) return null;
   if (!scan.wantsGallery) return scan.reading;
   return DashboardReader().read(camera: false, lastOdoKm: prior);
+}
+
+/// The higher known ODO (it only goes up), or null when neither is known.
+@visibleForTesting
+double? odoBaseline(double? passed, double? vehicle) {
+  final known = [
+    for (final v in [passed, vehicle])
+      if (v != null && v.isFinite && v > 0) v,
+  ];
+  return known.isEmpty ? null : known.reduce(math.max);
+}
+
+double? _vehicleOdo(BuildContext context) {
+  try {
+    final vehicle = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(vehicleContextProvider).vehicle;
+    return vehicle != null && vehicle.hasOdoData
+        ? vehicle.currentOdo.toDouble()
+        : null;
+  } on Object {
+    return null; // no ProviderScope (widget tests)
+  }
 }
 
 /// What the scanner hands back to the reading sheet.
