@@ -206,13 +206,11 @@ class AppAssistantActionHost implements AssistantActionHost {
                   currentOdoKm: vehicle.currentOdo.toDouble(),
                 ),
               ),
+      // QA 140: every plan sees the estimate; the screen locks the rest.
       'battery_health' =>
         vehicle == null
             ? null
-            : _gated(
-                PremiumFeature.batteryHealth,
-                BatteryHealthScreen(vehicleId: vehicle.vehicleId),
-              ),
+            : BatteryHealthScreen(vehicleId: vehicle.vehicleId),
       _ => null,
     };
     if (page == null) return false;

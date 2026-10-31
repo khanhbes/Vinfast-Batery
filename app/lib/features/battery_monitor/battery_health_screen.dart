@@ -8,6 +8,7 @@ import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
+import 'charge_habits_screen.dart';
 import '../../core/theme/plan_style.dart';
 
 /// What `/api/learning/<vehicle>/health` returns (QA 135).
@@ -19,6 +20,7 @@ class BatteryHealth {
     this.trend = const [],
     this.vehicleSohPct,
     this.testMaxStartPct = 30,
+    this.full = true,
   });
 
   final double? nominalCapacityWh;
@@ -27,6 +29,9 @@ class BatteryHealth {
   final List<(DateTime?, double)> trend;
   final double? vehicleSohPct;
   final double testMaxStartPct;
+
+  /// Trend and guided test included (Pro/Ultra; QA 140).
+  final bool full;
 
   static BatteryHealth fromMap(Map<String, dynamic> map) => BatteryHealth(
     nominalCapacityWh: (map['nominalCapacityWh'] as num?)?.toDouble(),
@@ -42,6 +47,7 @@ class BatteryHealth {
     ],
     vehicleSohPct: (map['vehicleSohPct'] as num?)?.toDouble(),
     testMaxStartPct: (map['testMaxStartPct'] as num?)?.toDouble() ?? 30,
+    full: map['full'] != false,
   );
 }
 
@@ -104,9 +110,8 @@ class BatteryHealthScreen extends ConsumerWidget {
     WidgetRef ref,
     String vehicleId,
   ) async {
-    if (!PremiumGate.check(context, ref, PremiumFeature.batteryHealth)) {
-      return;
-    }
+    // QA 140: open on every plan (the estimate); the trend and the guided
+    // test are locked inside for Free.
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => BatteryHealthScreen(vehicleId: vehicleId),
@@ -115,12 +120,7 @@ class BatteryHealthScreen extends ConsumerWidget {
   }
 
   @override
-  // QA 136: however this screen is reached (a tile, Pinova Bot, a
-  // notification), outside the plan it shows Pinova Premium instead.
-  Widget build(BuildContext context, WidgetRef ref) => PremiumRequired(
-    feature: PremiumFeature.batteryHealth,
-    child: Consumer(builder: (context, ref, _) => _screen(context, ref)),
-  );
+  Widget build(BuildContext context, WidgetRef ref) => _screen(context, ref);
 
   Widget _screen(BuildContext context, WidgetRef ref) {
     final async = ref.watch(batteryHealthProvider(vehicleId));
@@ -148,7 +148,7 @@ class BatteryHealthScreen extends ConsumerWidget {
                     ? error.message!
                     : 'Chưa tải được dữ liệu pin. Kéo xuống để thử lại.',
               ),
-              data: (health) => _Body(health: health),
+              data: (health) => _Body(health: health, vehicleId: vehicleId),
             ),
           ],
         ),
@@ -158,8 +158,9 @@ class BatteryHealthScreen extends ConsumerWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.health});
+  const _Body({required this.health, required this.vehicleId});
   final BatteryHealth health;
+  final String vehicleId;
 
   @override
   Widget build(BuildContext context) {
@@ -178,7 +179,26 @@ class _Body extends StatelessWidget {
           ),
         ],
         const LuxeSectionLabel('Bài kiểm tra pin'),
-        _TestCard(health: health),
+        if (health.full)
+          _TestCard(health: health)
+        else
+          PremiumLocked(
+            feature: PremiumFeature.batteryHealth,
+            child: const LuxeNotice(
+              icon: Icons.science_rounded,
+              message:
+                  'Theo dõi dung lượng qua từng lần sạc và bài kiểm tra pin '
+                  'một lần sạc.',
+            ),
+          ),
+        const SizedBox(height: 12),
+        // QA 140: the overall assessment of the owner's charging habits.
+        FilledButton.icon(
+          key: const ValueKey('health-assessment'),
+          onPressed: () => ChargeHabitsScreen.open(context, vehicleId),
+          icon: const Icon(Icons.insights_rounded, size: 18),
+          label: const Text('Đánh giá tổng quát cách sạc'),
+        ),
         const SizedBox(height: 16),
         const LuxeNotice(
           message:

@@ -12,6 +12,7 @@ import '../achievements/achievements_screen.dart';
 import '../achievements/controllers/achievements_controller.dart';
 import '../achievements/models/achievement.dart';
 import '../battery_monitor/battery_health_screen.dart';
+import '../battery_monitor/charge_habits_screen.dart';
 import '../maintenance/maintenance_screen.dart';
 import '../more/widgets/luxe_tile_grid.dart';
 import '../settings/personal_ai_settings_screen.dart';
@@ -60,12 +61,21 @@ class UtilitiesScreen extends ConsumerWidget {
                       icon: Icons.battery_charging_full_rounded,
                       title: 'Sức khỏe pin',
                       value: 'Dung lượng còn lại và dấu hiệu chai',
-                      lockedBy: PremiumFeature.batteryHealth,
                       onTap: () {
                         final id = vehicleId();
                         if (id != null) {
                           BatteryHealthScreen.open(context, ref, id);
                         }
+                      },
+                    ),
+                    LuxeTile(
+                      key: const ValueKey('utilities-habits'),
+                      icon: Icons.insights_rounded,
+                      title: 'Thói quen sạc',
+                      value: 'Đánh giá cách sạc, biểu đồ và lịch gợi ý',
+                      onTap: () {
+                        final id = vehicleId();
+                        if (id != null) ChargeHabitsScreen.open(context, id);
                       },
                     ),
                     LuxeTile(

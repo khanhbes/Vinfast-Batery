@@ -215,6 +215,9 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Màu: chỉ trạng thái thật dùng emerald (đã xác minh, đang sạc, đã kết nối, hoàn thành, đã lưu); mọi màu nhấn khác là `context.planAccent` (painter nhận `accent`). Luật nguồn `test/widget/qa140_plan_colors_test.dart` (danh sách file được dùng emerald). Thông báo Android tô theo gói (`NotificationAccent`).
   - Sạc theo giờ: chọn giờ ngắt (`stopAt`, 5 phút – 10 giờ), máy chủ tính thời lượng ngay trước ON; đổi giờ khi đang sạc qua `PATCH .../sessions/<id>/stop-at` (đọc lại trong khe lệnh, phiên kết thúc giữa chừng thì tắt ổ). Muộn hơn phải xác nhận như bật sạc.
   - Đếm ngược sạc theo giờ ngắt tuyệt đối của ổ (`timerEndsAt` + `serverTime` từ `/live`), không theo "giây còn lại" của snapshot Cloud.
+  - Sức khỏe pin mở cho mọi gói (ước tính); xu hướng, bài kiểm tra, biểu đồ thói quen và lịch gợi ý là Pro/Ultra (`battery_health`, cờ `full` từ máy chủ). Đánh giá thói quen (`shelly/habits.py`, `/api/learning/<vid>/assessment`) chỉ viết nhận xét từ số đã tính, không bịa.
+  - Thông báo sạc: nút Dừng chạy được khi app đã tắt (`ChargeStopAction`, isolate nền); mọi nơi khởi tạo plugin thông báo dùng chung `NotificationService.onResponse`. Kênh sạc mức DEFAULT, không âm thanh (để hiện màn khóa).
+  - Quét đồng hồ: mốc ODO luôn là số lớn hơn giữa số truyền vào và ODO mới nhất của xe; `readDashboard` thử bản xoay ±6°/±12° khi thiếu số.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

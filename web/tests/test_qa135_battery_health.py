@@ -3,7 +3,6 @@ import pytest
 
 from billing.entitlements import EntitlementService
 from shelly import charge_model
-from shelly.service import SmartChargeError
 from tests.test_task126_charge_model import _service, _start_target
 
 
@@ -45,7 +44,7 @@ def test_guided_test_needs_a_low_start_and_the_full_battery_signal():
     assert charge_model.battery_health([high_start, user_read], 2340)["test"] is None
 
 
-def test_service_uses_the_owners_confirmed_charges_and_is_pro():
+def test_service_uses_the_owners_confirmed_charges_and_free_gets_the_basics():
     service, _repo, provider, clock = _service()
     _preview, session = _start_target(service)
     provider.status.power_w = 440
@@ -57,7 +56,10 @@ def test_service_uses_the_owners_confirmed_charges_and_is_pro():
     assert health["estimate"]["samples"] == 1 and health["estimate"]["confidence"] == "low"
     assert health["nominalCapacityWh"] == 2340
     assert health["testMaxStartPct"] == 30
+    assert health["full"] is True
+    # QA 140 (owner's choice): Free sees the estimate; trend and the guided
+    # test are Pro/Ultra.
     service.entitlements = EntitlementService(enforced=True)
-    with pytest.raises(SmartChargeError) as caught:
-        service.battery_health("owner", "car")
-    assert caught.value.code == "premiumRequired"
+    free = service.battery_health("owner", "car")
+    assert free["full"] is False and free["estimate"]["samples"] == 1
+    assert free["trend"] == [] and free["test"] is None

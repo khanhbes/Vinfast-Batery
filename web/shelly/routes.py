@@ -807,6 +807,11 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     def battery_health(uid, vehicle_id):
         return execute(lambda: ok(service.battery_health(uid, vehicle_id)))
 
+    @bp.get("/api/learning/<vehicle_id>/assessment")
+    @authenticated
+    def charge_assessment(uid, vehicle_id):
+        return execute(lambda: ok(service.charge_assessment(uid, vehicle_id)))
+
     @bp.post("/api/learning/<vehicle_id>/train")
     @authenticated
     def learning_train(uid, vehicle_id):

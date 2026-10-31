@@ -394,6 +394,51 @@ class NotificationService {
     return 2100 + hash % 800;
   }
 
+  /// QA 140: the owner applied the habit schedule. One daily nudge at
+  /// [at] (inexact is fine, no permission prompt here); it only reminds,
+  /// switching on still goes through the app's confirmation.
+  static const chargeHabitReminderId = 1020;
+
+  Future<bool> scheduleChargeHabitReminder(
+    TimeOfDay at, {
+    required int targetPct,
+  }) async {
+    await initialize();
+    if (!await _hasNotificationPermission()) return false;
+    final zone = tz.getLocation('Asia/Ho_Chi_Minh');
+    final now = tz.TZDateTime.now(zone);
+    var when = tz.TZDateTime(
+      zone,
+      now.year,
+      now.month,
+      now.day,
+      at.hour,
+      at.minute,
+    );
+    if (!when.isAfter(now)) when = when.add(const Duration(days: 1));
+    await _plugin.zonedSchedule(
+      chargeHabitReminderId,
+      'Đến giờ sạc xe',
+      'Theo thói quen của bạn: sạc tới $targetPct% là đủ và tốt cho pin.',
+      when,
+      NotificationDetails(
+        iOS: _iosDetails(),
+        android: AndroidNotificationDetails(
+          channelCharge,
+          'Sạc pin',
+          icon: '@drawable/ic_stat_pinova',
+          color: NotificationAccent.current,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+      matchDateTimeComponents: DateTimeComponents.time,
+      payload: 'smart_charge/current',
+    );
+    return true;
+  }
+
   /// Date reminders are intentionally inexact; no permission prompt here.
   Future<bool> scheduleAccountReminder(
     int id,

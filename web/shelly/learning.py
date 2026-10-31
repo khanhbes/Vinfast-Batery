@@ -22,6 +22,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from . import charge_model
+from .habits import charge_habits
 
 
 class _LazyTripModel:
@@ -307,10 +308,13 @@ class VehicleLearningMixin:
                 "charge": charge, "trip": trip}
 
     def battery_health(self, uid: str, vehicle_id: str) -> dict:
-        """% pin chai (QA 135, Pro): from the confirmed charges, plus the
-        owner's guided test (charge from ≤ 30 % until the battery is full)."""
+        """% pin chai (QA 135): from the confirmed charges, plus the owner's
+        guided test (charge from ≤ 30 % until the battery is full). QA 140:
+        every plan sees the estimate; the per-charge trend and the guided
+        test stay Pro/Ultra (``full``), as the owner chose."""
         vehicle = self._owned_vehicle(uid, vehicle_id)
-        self.require_feature(uid, "battery_health")
+        entitlements = getattr(self, "entitlements", None)
+        full = entitlements is None or entitlements.allows(uid, "battery_health")
         profile = self.repository.get_personal_profile(uid, vehicle_id)
         learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
         nominal = _float(vehicle.get("nominalCapacityWh"), 1, 1e6)
@@ -320,7 +324,36 @@ class VehicleLearningMixin:
             "vehicleSohPct": _float(vehicle.get("stateOfHealth"), 1, 120),
             "consentEnabled": profile.consent_enabled if profile else True,
             "testMaxStartPct": charge_model.HEALTH_TEST_MAX_START_PCT,
+            "full": full,
         })
+        if not full:
+            result["trend"] = []
+            result["test"] = None
+        return result
+
+    def charge_assessment(self, uid: str, vehicle_id: str) -> dict:
+        """Đánh giá tổng quát (QA 140): charging habits of the last 60 days,
+        a score with comments built only from those numbers, charts and a
+        suggested schedule. Every plan sees the score and its main comment;
+        the charts, all comments and the schedule come with battery health
+        (Pro and Ultra), as the owner chose."""
+        vehicle = self._owned_vehicle(uid, vehicle_id)
+        sessions = [s for s in self.repository.history(uid, limit=200)
+                    if s.vehicle_id == vehicle_id]
+        profile = self.repository.get_personal_profile(uid, vehicle_id)
+        learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
+        powers = [float(s.average_power_w) for s in sessions if s.average_power_w]
+        power = learned.power_w or (sorted(powers)[len(powers) // 2] if powers else None)
+        wh = learned.wh_per_pct or self._charge_base(vehicle)
+        result = charge_habits(sessions, now=self.clock(), wh_per_pct=wh, power_w=power)
+        entitlements = getattr(self, "entitlements", None)
+        full = entitlements is None or entitlements.allows(uid, "battery_health")
+        result.update({"vehicleId": vehicle_id, "full": full})
+        if not full:
+            result["comments"] = result["comments"][:1]
+            result["suggestions"] = result["suggestions"][:1]
+            result["charts"] = None
+            result["schedule"] = None
         return result
 
     def train_model(self, uid: str, vehicle_id: str, model: str, mode: str = "finetune") -> dict:

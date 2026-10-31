@@ -32,7 +32,11 @@ enum PremiumFeature {
   targetCharging('target_charging', PlanTier.pro, 'Sạc đến % tự ngắt'),
   targetEdit('target_edit', PlanTier.pro, 'Sửa mục tiêu khi đang sạc'),
   progressPush('progress_push', PlanTier.pro, 'Thông báo tiến độ sạc'),
-  batteryHealth('battery_health', PlanTier.pro, '% pin chai'),
+  batteryHealth(
+    'battery_health',
+    PlanTier.pro,
+    'Sức khỏe pin đầy đủ, biểu đồ thói quen sạc',
+  ),
   appearance('appearance', PlanTier.pro, 'Giao diện tùy chọn'),
   historyExport('history_export', PlanTier.pro, 'Xuất lịch sử CSV'),
   widget('widget', PlanTier.pro, 'Widget màn hình chính'),

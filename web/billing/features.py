@@ -27,7 +27,7 @@ FEATURES = {
     "target_charging": "pro",      # charge to a % with automatic cut-off
     "target_edit": "pro",          # change the target while charging
     "progress_push": "pro",        # realtime "charging now" notifications
-    "battery_health": "pro",       # % degradation estimate + guided test
+    "battery_health": "pro",       # QA 140: trend, guided test, habit charts + schedule (estimate is free)
     "appearance": "pro",           # dashboard / charge tab styles
     "history_export": "pro",       # CSV export
     "widget": "pro",
