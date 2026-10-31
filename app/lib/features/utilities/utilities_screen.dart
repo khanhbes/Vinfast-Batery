@@ -63,8 +63,9 @@ class UtilitiesScreen extends ConsumerWidget {
                       lockedBy: PremiumFeature.batteryHealth,
                       onTap: () {
                         final id = vehicleId();
-                        if (id != null)
+                        if (id != null) {
                           BatteryHealthScreen.open(context, ref, id);
+                        }
                       },
                     ),
                     LuxeTile(

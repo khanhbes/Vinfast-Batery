@@ -1,12 +1,15 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'notification_accent.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
+
+import 'charge_stop_action.dart';
+import 'notification_accent.dart';
 
 /// Service quản lý Local Notifications
 /// - Thông báo sạc pin 80%, 100%
@@ -75,7 +78,8 @@ class NotificationService {
 
     await _plugin.initialize(
       initSettings,
-      onDidReceiveNotificationResponse: _onNotificationTap,
+      onDidReceiveNotificationResponse: onResponse,
+      onDidReceiveBackgroundNotificationResponse: chargeStopFromNotification,
     );
     final launchDetails = await _plugin.getNotificationAppLaunchDetails();
     final launchPayload = launchDetails?.notificationResponse?.payload;
@@ -222,6 +226,16 @@ class NotificationService {
     if (!Platform.isAndroid) return true;
     final status = await Permission.notification.status;
     return status.isGranted;
+  }
+
+  /// Every notification response while the app runs; also registered by
+  /// ChargeProgressNotification so a second initialize keeps it (QA 140).
+  static void onResponse(NotificationResponse response) {
+    if (response.actionId == ChargeStopAction.actionId) {
+      unawaited(ChargeStopAction.run());
+      return;
+    }
+    _instance._onNotificationTap(response);
   }
 
   void _onNotificationTap(NotificationResponse response) {

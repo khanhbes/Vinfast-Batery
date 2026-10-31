@@ -36,12 +36,18 @@ class SmartChargeTelemetryForegroundService {
     FlutterForegroundTask.initCommunicationPort();
     FlutterForegroundTask.addTaskDataCallback(_receiveTaskData);
     FlutterForegroundTask.init(
+      // QA 140: v2 shows on the lock screen (not "silent"), never sounds.
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'smart_charge_monitoring_v1',
-        channelName: 'Theo dõi phiên sạc',
+        channelId: 'smart_charge_monitoring_v2',
+        channelName: 'Đang sạc',
         channelDescription:
-            'Hiển thị khi ứng dụng đang ghi dữ liệu sạc từ Shelly.',
+            '% pin, công suất, thời gian còn lại và nút Dừng sạc khi đang sạc.',
+        channelImportance: NotificationChannelImportance.DEFAULT,
+        priority: NotificationPriority.DEFAULT,
+        playSound: false,
+        enableVibration: false,
         onlyAlertOnce: true,
+        visibility: NotificationVisibility.VISIBILITY_PUBLIC,
       ),
       iosNotificationOptions: const IOSNotificationOptions(
         showNotification: false,
@@ -51,7 +57,10 @@ class SmartChargeTelemetryForegroundService {
         eventAction: ForegroundTaskEventAction.repeat(5000),
         autoRunOnBoot: false,
         autoRunOnMyPackageReplaced: false,
-        allowAutoRestart: false,
+        // Xiaomi/OnePlus may kill the service to save battery: Android
+        // starts it again and it reads /live (it stops itself once the
+        // session has ended).
+        allowAutoRestart: true,
         allowWakeLock: true,
         allowWifiLock: true,
       ),
@@ -230,7 +239,9 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
                 : 'còn khoảng $minutes phút')
           : 'đang sạc';
 
-      final socText = estimate.available ? 'khoảng ${estimate.soc!.round()}%' : '—';
+      final socText = estimate.available
+          ? 'khoảng ${estimate.soc!.round()}%'
+          : '—';
 
       await FlutterForegroundTask.updateService(
         notificationTitle: 'Đang sạc $socText · $power W',

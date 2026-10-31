@@ -79,7 +79,8 @@ TARGET_LEAD_SECONDS = 20
 LINK_RIDE_THROUGH_CODES = TRANSIENT_READ_CODES | frozenset(
     {"deviceOffline", "providerRejected", "malformedProviderResponse", "cloudQueueBusy"})
 LINK_ALERT_SECONDS = 300
-PROGRESS_PUSH_SECONDS = 120
+# QA 140: every minute (was 2), so the closed-app notification stays live.
+PROGRESS_PUSH_SECONDS = 60
 CONFIRMATION_WINDOW_DAYS = 7
 
 
@@ -713,7 +714,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         return remaining if remaining > 0 else None
 
     def _maybe_push_progress(self, uid: str, session: ChargingSession, status, now) -> None:
-        """Every ~2 min from the worker only: the phone keeps its "charging
+        """Every minute from the worker only: the phone keeps its "charging
         now" notification fresh even when Android has killed the app."""
         notifier = self.progress_notifier
         if notifier is None or getattr(self, "_worker_lease_guard", None) is None:

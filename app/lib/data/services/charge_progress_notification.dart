@@ -1,23 +1,30 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart'
+    show FlutterForegroundTask;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'charge_estimator.dart';
+import 'charge_stop_action.dart';
 import 'notification_accent.dart';
+import 'notification_service.dart';
 
 /// "Charging now" notification kept alive by server pushes (Task 126).
 ///
 /// When Android has killed the app, the live monitor ([ServerChargeMonitor])
 /// is gone; the worker then sends a data-only `smart_charge_progress` push
-/// about every 2 minutes and this shows/refreshes one ongoing notification.
+/// every minute and this shows/refreshes one ongoing notification.
 /// Between pushes the system chronometer keeps counting down by itself. The
 /// notification expires on its own ([expiry]) if pushes stop, so a lost
-/// terminal push can never leave a stale "charging" behind. Display only:
+/// terminal push can never leave a stale "charging" behind. QA 140: a push
+/// a minute, a "Dừng sạc" action (works with the app closed) and a channel
+/// that shows on the lock screen. Display only:
 /// the server and the Shelly timer own the cutoff.
 abstract final class ChargeProgressNotification {
   /// Same id as the legacy ongoing-charge slot in NotificationService.
   static const int id = 1003;
-  static const String channelId = 'smart_charge_progress_v1';
+  // QA 140: v2 is not "silent" (Android 12+ hides silent notifications on
+  // the lock screen); it still never sounds or vibrates.
+  static const String channelId = 'smart_charge_progress_v2';
   static const String channelName = 'Đang sạc (cập nhật từ máy chủ)';
   static const Duration expiry = Duration(minutes: 6);
   static const String payload = 'smart_charge/current';
@@ -30,10 +37,14 @@ abstract final class ChargeProgressNotification {
     final existing = _plugin;
     if (existing != null) return existing;
     final plugin = FlutterLocalNotificationsPlugin();
+    // Same callbacks as NotificationService: a second initialize replaces
+    // them for the whole app (taps were lost after an in-app push).
     await plugin.initialize(
       const InitializationSettings(
         android: AndroidInitializationSettings('@drawable/ic_stat_pinova'),
       ),
+      onDidReceiveNotificationResponse: NotificationService.onResponse,
+      onDidReceiveBackgroundNotificationResponse: chargeStopFromNotification,
     );
     await plugin
         .resolvePlatformSpecificImplementation<
@@ -44,7 +55,7 @@ abstract final class ChargeProgressNotification {
             channelId,
             channelName,
             description: 'Tiến độ phiên sạc khi ứng dụng đang đóng',
-            importance: Importance.low,
+            importance: Importance.defaultImportance,
             playSound: false,
             enableVibration: false,
             showBadge: false,
@@ -63,6 +74,10 @@ abstract final class ChargeProgressNotification {
         if (await _monitorRunning()) return;
         final content = ChargeProgressContent.from(data, DateTime.now());
         if (content == null) return;
+        await ChargeStopAction.remember(
+          data['sessionId']?.toString(),
+          data['vehicleId']?.toString(),
+        );
         await show(content);
       } else if (event == 'smart_charge_link') {
         if (data['state'] == 'lost') {
@@ -104,13 +119,22 @@ abstract final class ChargeProgressNotification {
         android: AndroidNotificationDetails(
           channelId,
           channelName,
-          importance: Importance.low,
-          priority: Priority.low,
+          importance: Importance.defaultImportance,
+          priority: Priority.defaultPriority,
           ongoing: true,
           autoCancel: false,
           onlyAlertOnce: true,
           silent: true,
+          visibility: NotificationVisibility.public,
           category: AndroidNotificationCategory.progress,
+          // QA 140: stop from the shade or the lock screen, app closed too.
+          actions: const [
+            AndroidNotificationAction(
+              ChargeStopAction.actionId,
+              'Dừng sạc',
+              cancelNotification: false,
+            ),
+          ],
           showProgress: content.progress != null,
           maxProgress: 100,
           progress: content.progress ?? 0,
@@ -124,6 +148,59 @@ abstract final class ChargeProgressNotification {
       ),
       payload: payload,
     );
+  }
+
+  /// "Dừng sạc" pressed: the OFF is on its way (no second tap needed).
+  static Future<void> showStopping() => _status(
+    'Đang dừng sạc',
+    'Đã gửi lệnh tắt, chờ ổ Shelly xác nhận…',
+    ongoing: true,
+  );
+
+  static Future<void> showStopped() =>
+      _status('Đã dừng sạc', 'Ổ Shelly đã tắt.', ongoing: false);
+
+  static Future<void> showStopFailed() => _status(
+    'Chưa dừng được sạc',
+    'Mở Pinova để dừng sạc. Ổ Shelly vẫn tự tắt theo hẹn giờ.',
+    ongoing: false,
+  );
+
+  static Future<void> _status(
+    String title,
+    String body, {
+    required bool ongoing,
+  }) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final plugin = await _ready();
+      await plugin.show(
+        id,
+        title,
+        body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            channelName,
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+            ongoing: ongoing,
+            autoCancel: !ongoing,
+            onlyAlertOnce: true,
+            silent: true,
+            visibility: NotificationVisibility.public,
+            category: AndroidNotificationCategory.status,
+            timeoutAfter: ongoing
+                ? const Duration(minutes: 2).inMilliseconds
+                : const Duration(minutes: 10).inMilliseconds,
+            color: NotificationAccent.current,
+          ),
+        ),
+        payload: payload,
+      );
+    } on Object {
+      // Display only; the server owns the session.
+    }
   }
 
   static const int linkAlertId = 1012;
