@@ -418,7 +418,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                         opacity: enabled ? 1.0 : 0.4,
                         child: Semantics(
                           label: _submitting
-                              ? 'Đang gửi lệnh sạc'
+                              ? 'Đang bật sạc'
                               : 'Sạc đến $clock. $_buttonLabel',
                           child: _PowerFace(
                             enabled: enabled,
@@ -435,7 +435,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
         ),
         const SizedBox(height: 10),
         Text(
-          _submitting ? 'Đang gửi lệnh sạc…' : _buttonLabel,
+          _submitting ? 'Đang bật sạc…' : _buttonLabel,
           key: const ValueKey('timed-charge-label'),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,

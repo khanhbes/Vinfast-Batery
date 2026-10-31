@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -32,6 +33,7 @@ class ActiveChargingCardV2 extends StatefulWidget {
     this.stopAwaitingReadback = false,
     this.countdownLabel = 'Shelly tự ngắt sau · lúc',
     this.socCaption,
+    this.endsOnTimer = false,
     this.style = ChargeStyle.dial,
   });
 
@@ -68,6 +70,11 @@ class ActiveChargingCardV2 extends StatefulWidget {
   /// target (QA 130 showed "mục tiêu 100%" for 30 minutes).
   final String? socCaption;
 
+  /// The countdown is the outlet's own timer (a timed charge): at zero the
+  /// outlet is switching off, so the card says so until the server closes
+  /// the session (QA 140: it said "Đang sạc" at 0:00, then "đã sạc xong").
+  final bool endsOnTimer;
+
   @override
   State<ActiveChargingCardV2> createState() => _ActiveChargingCardV2State();
 }
@@ -84,6 +91,20 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
   );
   // The countdown interpolates between server updates.
   late DateTime _anchor = DateTime.now();
+
+  /// Rebuilds the status once the countdown reaches zero.
+  Timer? _endTimer;
+
+  void _armEndTimer() {
+    _endTimer?.cancel();
+    final left = _left;
+    if (widget.endsOnTimer && left > Duration.zero) {
+      _endTimer = Timer(left, () {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
   bool _reduced = false;
   bool _started = false;
 
@@ -107,10 +128,18 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
   void didUpdateWidget(ActiveChargingCardV2 old) {
     super.didUpdateWidget(old);
     if (old.remaining != widget.remaining) _anchor = DateTime.now();
+    _armEndTimer();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _armEndTimer();
   }
 
   @override
   void dispose() {
+    _endTimer?.cancel();
     _flow.dispose();
     _enter.dispose();
     super.dispose();
@@ -136,7 +165,12 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
   Widget build(BuildContext context) {
     final current = widget.currentPercent.round().clamp(0, 100);
     final target = widget.targetPercent.round().clamp(0, 100);
-    final transitional = widget.isStopping || widget.isStarting;
+    final ending =
+        widget.endsOnTimer &&
+        !widget.isStarting &&
+        widget.timerVerified &&
+        _left == Duration.zero;
+    final transitional = widget.isStopping || widget.isStarting || ending;
     final statusColor = transitional
         ? LuxeColors.champagne
         : LuxeColors.emerald;
@@ -145,7 +179,9 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
         : widget.isStopping
         ? 'ĐANG TẮT…'
         : widget.isStarting
-        ? 'ĐANG XÁC NHẬN…'
+        ? 'ĐANG BẬT…'
+        : ending
+        ? 'HẾT GIỜ · ĐANG NGẮT…'
         : 'ĐANG SẠC';
 
     return LuxeGlass(

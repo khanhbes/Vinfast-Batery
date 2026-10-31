@@ -117,10 +117,10 @@ void main() {
       await tester.pump();
       await tester.tap(button);
       expect(calls, 1);
-      expect(find.text('Đang gửi lệnh sạc…'), findsOneWidget);
+      expect(find.text('Đang bật sạc…'), findsOneWidget);
       pending.complete();
       await tester.pumpAndSettle();
-      expect(find.text('Đang gửi lệnh sạc…'), findsNothing);
+      expect(find.text('Đang bật sạc…'), findsNothing);
       expect(tester.takeException(), isNull);
     },
   );

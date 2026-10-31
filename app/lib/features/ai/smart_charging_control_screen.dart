@@ -899,6 +899,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 : 'Đạt $targetSoc% sau · khoảng')
           : 'Shelly tự ngắt sau · lúc',
       socCaption: targetMode ? null : 'ước tính · sạc hẹn giờ',
+      endsOnTimer: !targetMode,
       sessionEnergyWh: session?.energyUsedWh ?? 0,
       powerW: status?.powerW ?? 0,
       voltageV: status?.voltageV ?? 0,
