@@ -420,7 +420,7 @@ class CockpitSettingsRow extends StatelessWidget {
                           : 'Đã khóa',
                       style: TextStyle(
                         color: AppUiColors.of(context).muted,
-                        fontSize: 10,
+                        fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
                     ),

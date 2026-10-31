@@ -415,7 +415,7 @@ abstract final class LuxeTheme {
         ),
         titleTextStyle: const TextStyle(
           color: LuxeColors.text,
-          fontSize: 18,
+          fontSize: 19,
           fontWeight: FontWeight.w600,
         ),
         contentTextStyle: const TextStyle(
@@ -549,7 +549,7 @@ abstract final class LuxeTheme {
         color: LuxeColors.raised,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        textStyle: const TextStyle(color: LuxeColors.text, fontSize: 14.5),
+        textStyle: const TextStyle(color: LuxeColors.text, fontSize: 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: LuxeColors.hairlineStrong),

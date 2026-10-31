@@ -73,10 +73,12 @@ void main() {
     final seen = <PlanTier, Color>{};
     for (final tier in PlanTier.values) {
       late Color accent;
+      // Theme, not MaterialApp.theme: the app animates a theme change, and
+      // the first frame would still show the previous plan.
       await tester.pumpWidget(
-        MaterialApp(
-          theme: LuxeTheme.data(tier: tier),
-          home: Builder(
+        Theme(
+          data: LuxeTheme.data(tier: tier),
+          child: Builder(
             builder: (context) {
               accent = context.planAccent;
               return const SizedBox();

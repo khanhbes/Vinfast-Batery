@@ -687,45 +687,63 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
       ),
       body: _loading
           ? Center(child: CircularProgressIndicator(color: _ui.primary))
-          : Column(
-              children: [
-                _buildServerStatusHeader(),
-                if (_errorMessage != null)
-                  Container(
-                    width: double.infinity,
-                    padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    color: LuxeColors.champagne.withValues(alpha: 0.15),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline_rounded,
-                          size: 16,
-                          color: LuxeColors.champagne,
-                        ),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: TextStyle(
-                              color: LuxeColors.champagne,
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
+          : LayoutBuilder(
+              // At large text the status header alone was taller than the
+              // body (320 dp, x2): it scrolls within half the height.
+              builder: (context, box) => Column(
+                children: [
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: box.maxHeight * 0.5),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          _buildServerStatusHeader(),
+                          if (_errorMessage != null)
+                            Container(
+                              width: double.infinity,
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              color: LuxeColors.champagne.withValues(
+                                alpha: 0.15,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 16,
+                                    color: LuxeColors.champagne,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _errorMessage!,
+                                      style: TextStyle(
+                                        color: LuxeColors.champagne,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        SettingsReveal(child: _buildDatasetTab()),
+                        SettingsReveal(child: _buildFineTuneTab()),
                       ],
                     ),
                   ),
-                Expanded(
-                  child: TabBarView(
-                    controller: _tabController,
-                    children: [
-                      SettingsReveal(child: _buildDatasetTab()),
-                      SettingsReveal(child: _buildFineTuneTab()),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
     );
   }

@@ -49,8 +49,8 @@ class FakeShellyProvider:
         self.command_count += 1
         self.status.relay = True
         self.status.timer_remaining = duration_seconds
-        # A device that reports its timer start (Gen2+): tests set the clock.
-        clock = getattr(self, "clock", None)
+        # A device that reports its timer start (Gen2+): tests set timer_clock.
+        clock = getattr(self, "timer_clock", None)
         self.status.timer_ends_at = (clock() + duration_seconds) if clock else None
 
     def extend_timer(self, binding: DeviceBinding, duration_seconds: int) -> None:
@@ -62,7 +62,7 @@ class FakeShellyProvider:
         self.extend_calls = getattr(self, "extend_calls", 0) + 1
         if not getattr(self, "fail_extend", False):
             self.status.timer_remaining = duration_seconds
-            clock = getattr(self, "clock", None)
+            clock = getattr(self, "timer_clock", None)
             self.status.timer_ends_at = (clock() + duration_seconds) if clock else None
 
     def verify_control_readiness(self, binding: DeviceBinding) -> None:
