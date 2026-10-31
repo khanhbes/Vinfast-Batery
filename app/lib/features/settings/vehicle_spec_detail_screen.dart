@@ -8,6 +8,7 @@ import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../core/widgets/vehicle_photo.dart';
+import '../../core/theme/plan_style.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
 
 /// Vehicle Spec Detail Screen — PLAN #5
@@ -147,7 +148,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                       setState(() => _isEditing = true);
                     }
                   },
-            style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
+            style: TextButton.styleFrom(foregroundColor: context.planAccent),
             child: _isSaving
                 ? const SizedBox(
                     width: 18,
@@ -312,7 +313,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 ? LuxeColors.danger
                 : (soh ?? 0) < 90
                 ? LuxeColors.champagne
-                : LuxeColors.emerald,
+                : context.planAccent,
             semanticLabel: 'Sức khỏe pin ${_sohCtrl.text} phần trăm',
             child: ExcludeSemantics(
               child: Padding(
@@ -371,7 +372,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
             LuxeMedallion(
               icon: row.icon,
               size: 36,
-              accent: row.isEditing ? LuxeColors.emerald : null,
+              accent: row.isEditing ? context.planAccent : null,
             ),
             const SizedBox(width: 14),
             Expanded(

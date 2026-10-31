@@ -9,6 +9,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_settings.dart';
 import '../../../core/widgets/app_popup.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// LUXE sheet (Task 118) cho phép người dùng:
 /// - Kéo thả đổi thứ tự 6 widget nội dung (thẻ được "nhấc" lên khi kéo)
@@ -60,7 +61,7 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                     offset: Offset(0, 10 * t),
                   ),
                   BoxShadow(
-                    color: LuxeColors.emerald.withValues(alpha: 0.18 * t),
+                    color: context.planAccent.withValues(alpha: 0.18 * t),
                     blurRadius: 18,
                     spreadRadius: -4,
                   ),
@@ -108,7 +109,7 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                 icon: const Icon(Icons.restore_rounded, size: 16),
                 label: Text(isEn ? 'Reset' : 'Mặc định'),
                 style: TextButton.styleFrom(
-                  foregroundColor: LuxeColors.emerald,
+                  foregroundColor: context.planAccent,
                 ),
               ),
             ),
@@ -149,7 +150,7 @@ class DashboardCustomizationSheet extends ConsumerWidget {
                           LuxeMedallion(
                             icon: _getWidgetIcon(id),
                             accent: isVisible
-                                ? LuxeColors.emerald
+                                ? context.planAccent
                                 : LuxeColors.platinumLow,
                             size: 40,
                           ),

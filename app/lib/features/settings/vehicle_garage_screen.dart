@@ -19,6 +19,7 @@ import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
 import 'vehicle_spec_detail_screen.dart';
 import '../../core/widgets/vehicle_photo.dart';
 import '../premium/premium_gate.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Vehicle Garage Screen — LUXE (Task 119)
 /// - List user vehicles (active / archived)
@@ -326,7 +327,7 @@ class _VehicleCard extends StatelessWidget {
         ? LuxeColors.danger
         : soh! < 90
         ? LuxeColors.champagne
-        : LuxeColors.emerald;
+        : context.planAccent;
 
     return Semantics(
       button: !isArchived,
@@ -374,9 +375,9 @@ class _VehicleCard extends StatelessWidget {
                           AnimatedSwitcher(
                             duration: luxeDuration(context, 260),
                             child: isSelected
-                                ? const LuxeTag(
+                                ? LuxeTag(
                                     'Đang dùng',
-                                    color: LuxeColors.emerald,
+                                    color: context.planAccent,
                                   )
                                 : const SizedBox.shrink(),
                           ),
@@ -447,7 +448,7 @@ class _VehicleCard extends StatelessWidget {
                               : Icons.archive_rounded,
                           tooltip: isArchived ? 'Khôi phục xe' : 'Lưu trữ xe',
                           color: isArchived
-                              ? LuxeColors.emerald
+                              ? context.planAccent
                               : LuxeColors.danger,
                           onPressed: onDelete,
                         ),
@@ -655,8 +656,8 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(99),
-                      borderSide: const BorderSide(
-                        color: LuxeColors.emerald,
+                      borderSide: BorderSide(
+                        color: context.planAccent,
                         width: 1.4,
                       ),
                     ),
@@ -947,7 +948,7 @@ class _SpecCard extends StatelessWidget {
                   if (spec.rangeKm != null)
                     LuxeTag(
                       'Tầm ${spec.rangeKm!.toInt()} km',
-                      color: LuxeColors.emerald,
+                      color: context.planAccent,
                     ),
                 ],
               ),
@@ -1071,8 +1072,9 @@ class _SuccessOverlayState extends State<_SuccessOverlay> {
                   tween: Tween(begin: 0, end: 1),
                   duration: luxeDuration(context, 760),
                   curve: LuxeMotion.enter,
-                  builder: (context, t, _) =>
-                      CustomPaint(painter: _CheckBurstPainter(t)),
+                  builder: (context, t, _) => CustomPaint(
+                    painter: _CheckBurstPainter(t, context.planAccent),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -1088,7 +1090,10 @@ class _SuccessOverlayState extends State<_SuccessOverlay> {
 }
 
 class _CheckBurstPainter extends CustomPainter {
-  _CheckBurstPainter(this.t);
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _CheckBurstPainter(this.t, this.accent);
   final double t;
 
   @override
@@ -1104,12 +1109,12 @@ class _CheckBurstPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
         ..strokeCap = StrokeCap.round
-        ..color = LuxeColors.emerald,
+        ..color = accent,
     );
     canvas.drawCircle(
       rect.center,
       rect.width * 0.38,
-      Paint()..color = LuxeColors.emerald.withValues(alpha: 0.10 * ringT),
+      Paint()..color = accent.withValues(alpha: 0.10 * ringT),
     );
     final checkT = ((t - 0.4) / 0.6).clamp(0.0, 1.0);
     if (checkT <= 0) return;
@@ -1125,13 +1130,14 @@ class _CheckBurstPainter extends CustomPainter {
           ..strokeWidth = 3
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
-          ..color = LuxeColors.emerald,
+          ..color = accent,
       );
     }
   }
 
   @override
-  bool shouldRepaint(_CheckBurstPainter old) => old.t != t;
+  bool shouldRepaint(_CheckBurstPainter old) =>
+      old.t != t || old.accent != accent;
 }
 
 // ============================================================================
@@ -1149,9 +1155,9 @@ class _SpecPreviewDialog extends StatelessWidget {
     return AlertDialog(
       title: Row(
         children: [
-          const LuxeMedallion(
+          LuxeMedallion(
             icon: Icons.electric_moped_rounded,
-            accent: LuxeColors.emerald,
+            accent: context.planAccent,
           ),
           const SizedBox(width: 12),
           Expanded(

@@ -23,6 +23,7 @@ import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../../core/widgets/vehicle_photo.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Onboarding keeps the existing draft/validation contract in a calm step UI.
 class OnboardingChatScreen extends ConsumerStatefulWidget {
@@ -970,11 +971,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              const Icon(
-                Icons.schedule_rounded,
-                size: 18,
-                color: LuxeColors.emerald,
-              ),
+              Icon(Icons.schedule_rounded, size: 18, color: context.planAccent),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -1078,7 +1075,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           ),
           border: Border.all(
             color: active
-                ? LuxeColors.emerald.withValues(alpha: 0.6)
+                ? context.planAccent.withValues(alpha: 0.6)
                 : LuxeColors.hairlineStrong,
           ),
         ),
@@ -1086,7 +1083,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           child: Icon(
             icon,
             size: size * 0.48,
-            color: active ? LuxeColors.emerald : LuxeColors.platinum,
+            color: active ? context.planAccent : LuxeColors.platinum,
           ),
         ),
       );
@@ -1175,10 +1172,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.electric_scooter_rounded,
                   size: 16,
-                  color: LuxeColors.emerald,
+                  color: context.planAccent,
                 ),
                 const SizedBox(width: 8),
                 Flexible(
@@ -1637,7 +1634,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                       : Icons.info_outline_rounded,
                   size: 18,
                   color: _notificationOptIn!
-                      ? LuxeColors.emerald
+                      ? context.planAccent
                       : LuxeColors.muted,
                 ),
                 const SizedBox(width: 8),
@@ -1862,9 +1859,9 @@ class _LuxeCheck extends StatelessWidget {
       height: 22,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: selected ? LuxeColors.emerald : Colors.transparent,
+        color: selected ? context.planAccent : Colors.transparent,
         border: Border.all(
-          color: selected ? LuxeColors.emerald : LuxeColors.hairlineStrong,
+          color: selected ? context.planAccent : LuxeColors.hairlineStrong,
           width: 1.5,
         ),
       ),
@@ -1892,13 +1889,18 @@ class _MiniCell extends StatelessWidget {
     tween: Tween(end: level),
     duration: AppMotion.durationFor(context, const Duration(milliseconds: 420)),
     curve: LuxeMotion.enter,
-    builder: (context, v, _) =>
-        CustomPaint(size: const Size(26, 46), painter: _MiniCellPainter(v)),
+    builder: (context, v, _) => CustomPaint(
+      size: const Size(26, 46),
+      painter: _MiniCellPainter(v, context.planAccent),
+    ),
   );
 }
 
 class _MiniCellPainter extends CustomPainter {
-  _MiniCellPainter(this.level);
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _MiniCellPainter(this.level, this.accent);
   final double level;
 
   @override
@@ -1932,7 +1934,7 @@ class _MiniCellPainter extends CustomPainter {
           inner.bottom,
           const Radius.circular(3),
         ),
-        Paint()..color = low ? LuxeColors.champagne : LuxeColors.emerald,
+        Paint()..color = low ? LuxeColors.champagne : accent,
       );
     }
     canvas.drawRRect(
@@ -1945,7 +1947,8 @@ class _MiniCellPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MiniCellPainter old) => old.level != level;
+  bool shouldRepaint(_MiniCellPainter old) =>
+      old.level != level || old.accent != accent;
 }
 
 /// Content metadata only: validation and persistence stay in the screen state.
@@ -2101,7 +2104,7 @@ class OnboardingStepFrame extends StatelessWidget {
                                         style: TextStyle(
                                           color: copy.optional
                                               ? LuxeColors.muted
-                                              : LuxeColors.emerald,
+                                              : context.planAccent,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -2375,14 +2378,25 @@ class _EnergyLine extends StatelessWidget {
       height: 8,
       width: double.infinity,
       child: CustomPaint(
-        painter: _EnergyLinePainter(value: value, steps: steps),
+        painter: _EnergyLinePainter(
+          value: value,
+          steps: steps,
+          accent: context.planAccent,
+        ),
       ),
     ),
   );
 }
 
 class _EnergyLinePainter extends CustomPainter {
-  _EnergyLinePainter({required this.value, required this.steps});
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _EnergyLinePainter({
+    required this.value,
+    required this.steps,
+    required this.accent,
+  });
   final double value;
   final int steps;
 
@@ -2417,10 +2431,10 @@ class _EnergyLinePainter extends CustomPainter {
     canvas.drawRRect(
       fill,
       Paint()
-        ..shader = const LinearGradient(
+        ..shader = LinearGradient(
           colors: [
-            LuxeColors.emeraldDeep,
-            LuxeColors.emerald,
+            Color.lerp(accent, Colors.black, 0.25)!,
+            accent,
             LuxeColors.platinumHi,
           ],
           stops: [0.0, 0.85, 1.0],
@@ -2430,7 +2444,7 @@ class _EnergyLinePainter extends CustomPainter {
       Offset(w, y),
       5,
       Paint()
-        ..color = LuxeColors.emerald.withValues(alpha: 0.55)
+        ..color = accent.withValues(alpha: 0.55)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
     canvas.drawCircle(
@@ -2442,7 +2456,7 @@ class _EnergyLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_EnergyLinePainter old) =>
-      old.value != value || old.steps != steps;
+      old.value != value || old.steps != steps || old.accent != accent;
 }
 
 class OnboardingVehicleChoice extends StatelessWidget {
@@ -2465,7 +2479,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
     );
     final fallback = Icon(
       Icons.electric_scooter_rounded,
-      color: selected ? LuxeColors.emerald : LuxeColors.platinumMid,
+      color: selected ? context.planAccent : LuxeColors.platinumMid,
       size: 28,
     );
 
@@ -2521,7 +2535,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
                         duration: duration,
                         style: LuxeText.caption.copyWith(
                           color: selected
-                              ? LuxeColors.emerald
+                              ? context.planAccent
                               : LuxeColors.muted,
                         ),
                         child: Text(
@@ -2539,17 +2553,17 @@ class OnboardingVehicleChoice extends StatelessWidget {
                   height: 24,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: selected ? LuxeColors.emerald : Colors.transparent,
+                    color: selected ? context.planAccent : Colors.transparent,
                     border: Border.all(
                       color: selected
-                          ? LuxeColors.emerald
+                          ? context.planAccent
                           : LuxeColors.hairlineStrong,
                       width: 1.5,
                     ),
                     boxShadow: selected
-                        ? const [
+                        ? [
                             BoxShadow(
-                              color: LuxeColors.emeraldGlow,
+                              color: context.planAccentGlow,
                               blurRadius: 12,
                             ),
                           ]

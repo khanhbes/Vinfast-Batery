@@ -11,6 +11,7 @@ import '../../core/theme/cockpit_design_system.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../data/services/server_smart_charger_service.dart';
 import 'developer_ai_studio_screen.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Read-only developer inspector for owner/vehicle-scoped training samples.
 /// Raw measurements remain immutable in the client; corrections are performed
@@ -166,7 +167,7 @@ class _PersonalAiTrainingDataScreenState
     return LuxeScaffold(
       title: 'Dữ liệu fine-tune',
       body: RefreshIndicator(
-        color: LuxeColors.emerald,
+        color: context.planAccent,
         backgroundColor: LuxeColors.raised,
         onRefresh: _load,
         child: ListView(
@@ -177,9 +178,9 @@ class _PersonalAiTrainingDataScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.science_rounded, color: LuxeColors.emerald),
+                      Icon(Icons.science_rounded, color: context.planAccent),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -220,10 +221,10 @@ class _PersonalAiTrainingDataScreenState
                               ),
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.copy_rounded,
                             size: 18,
-                            color: LuxeColors.emerald,
+                            color: context.planAccent,
                           ),
                         ],
                       ),
@@ -247,9 +248,9 @@ class _PersonalAiTrainingDataScreenState
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: LuxeColors.emerald,
+                        foregroundColor: context.planAccent,
                         side: BorderSide(
-                          color: LuxeColors.emerald.withValues(alpha: 0.4),
+                          color: context.planAccent.withValues(alpha: 0.4),
                         ),
                         padding: const EdgeInsets.symmetric(
                           vertical: 10,
@@ -290,25 +291,25 @@ class _PersonalAiTrainingDataScreenState
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: LuxeColors.emerald.withValues(alpha: 0.12),
+                    color: context.planAccent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: LuxeColors.emerald.withValues(alpha: 0.3),
+                      color: context.planAccent.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.check_circle_outline_rounded,
                         size: 16,
-                        color: LuxeColors.emerald,
+                        color: context.planAccent,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _dataSourceNote!,
-                          style: const TextStyle(
-                            color: LuxeColors.emerald,
+                          style: TextStyle(
+                            color: context.planAccent,
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
                           ),
@@ -382,13 +383,13 @@ class _PersonalAiTrainingDataScreenState
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: (excluded ? LuxeColors.champagne : LuxeColors.emerald)
+              color: (excluded ? LuxeColors.champagne : context.planAccent)
                   .withValues(alpha: .12),
               borderRadius: BorderRadius.circular(13),
             ),
             child: Icon(
               excluded ? Icons.block_rounded : Icons.analytics_rounded,
-              color: excluded ? LuxeColors.champagne : LuxeColors.emerald,
+              color: excluded ? LuxeColors.champagne : context.planAccent,
             ),
           ),
           title: Text(
@@ -665,7 +666,7 @@ class _MessageCard extends StatelessWidget {
   Widget build(BuildContext context) => CockpitSurface(
     child: Column(
       children: [
-        Icon(icon, size: 34, color: LuxeColors.emerald),
+        Icon(icon, size: 34, color: context.planAccent),
         const SizedBox(height: 10),
         Text(
           title,
@@ -688,9 +689,9 @@ class _MessageCard extends StatelessWidget {
               if (action != null)
                 OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: LuxeColors.emerald,
+                    foregroundColor: context.planAccent,
                     side: BorderSide(
-                      color: LuxeColors.emerald.withValues(alpha: 0.5),
+                      color: context.planAccent.withValues(alpha: 0.5),
                     ),
                   ),
                   onPressed: action,
@@ -699,7 +700,7 @@ class _MessageCard extends StatelessWidget {
               if (secondaryAction != null)
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: LuxeColors.emerald,
+                    backgroundColor: context.planAccent,
                     foregroundColor: Colors.black,
                   ),
                   onPressed: secondaryAction,

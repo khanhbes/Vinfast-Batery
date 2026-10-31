@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/luxe_theme.dart';
+import '../theme/plan_style.dart';
 
 /// Luxe settings kit shared by the Settings tab, System settings, Profile and
 /// Guide: hairline glass groups, monochrome platinum medallions, a platinum
@@ -271,11 +272,11 @@ class LuxeSwitch extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(99),
                 color: value
-                    ? LuxeColors.emerald.withValues(alpha: 0.28)
+                    ? context.planAccent.withValues(alpha: 0.28)
                     : LuxeColors.raised,
                 border: Border.all(
                   color: value
-                      ? LuxeColors.emerald.withValues(alpha: 0.7)
+                      ? context.planAccent.withValues(alpha: 0.7)
                       : LuxeColors.hairlineStrong,
                 ),
               ),
@@ -299,9 +300,9 @@ class LuxeSwitch extends StatelessWidget {
                             ],
                     ),
                     boxShadow: value
-                        ? const [
+                        ? [
                             BoxShadow(
-                              color: LuxeColors.emeraldGlow,
+                              color: context.planAccentGlow,
                               blurRadius: 10,
                             ),
                           ]
@@ -370,7 +371,7 @@ Future<bool?> showLuxeConfirm(
         TextButton(
           onPressed: () => Navigator.pop(ctx, true),
           style: TextButton.styleFrom(
-            foregroundColor: danger ? LuxeColors.danger : LuxeColors.emerald,
+            foregroundColor: danger ? LuxeColors.danger : context.planAccent,
           ),
           child: Text(confirmLabel),
         ),

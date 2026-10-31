@@ -7,6 +7,7 @@ import '../providers/app_providers.dart';
 import '../services/session_service.dart';
 import '../theme/luxe_theme.dart';
 import 'vehicle_picker_sheet.dart';
+import '../theme/plan_style.dart';
 
 /// Compact, global vehicle selector used by the V4 shell.
 /// Tapping opens the premium VehiclePickerSheet bottom sheet
@@ -85,10 +86,10 @@ class VehicleSwitcher extends ConsumerWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                icon: const Icon(
+                icon: Icon(
                   Icons.electric_moped_rounded,
                   size: 16,
-                  color: LuxeColors.emerald,
+                  color: context.planAccent,
                 ),
                 label: FittedBox(
                   fit: BoxFit.scaleDown,

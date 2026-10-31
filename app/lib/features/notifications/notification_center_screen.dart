@@ -15,6 +15,7 @@ import '../../data/models/user_notification.dart';
 import '../../navigation/app_navigation.dart';
 import '../support/help_center_screen.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Provider cho stream thông báo
 final notificationsProvider = StreamProvider.autoDispose
@@ -101,7 +102,7 @@ class _NotificationCenterScreenState
             tooltip: 'Đánh dấu tất cả là đã đọc',
             onPressed: () => _markAllAsRead(),
             icon: Icons.done_all_rounded,
-            color: LuxeColors.emerald,
+            color: context.planAccent,
           ),
           _isDeletingAll
               ? const SizedBox.square(
@@ -151,7 +152,7 @@ class _NotificationCenterScreenState
           ),
           Expanded(
             child: RefreshIndicator(
-              color: LuxeColors.emerald,
+              color: context.planAccent,
               backgroundColor: LuxeColors.raised,
               onRefresh: _refresh,
               child: notificationsAsync.when(
@@ -235,7 +236,7 @@ class _NotificationCenterScreenState
           message: 'Chưa cập nhật được. Đang hiển thị dữ liệu cũ.',
           action: TextButton(
             onPressed: _refresh,
-            style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
+            style: TextButton.styleFrom(foregroundColor: context.planAccent),
             child: const Text('Thử lại'),
           ),
         ),
@@ -452,7 +453,7 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, accent, _) = _typeStyle(notification.type);
+    final (icon, accent, _) = _typeStyle(notification.type, context.planAccent);
     final unread = notification.isUnread;
 
     return Padding(
@@ -539,12 +540,12 @@ class _NotificationCard extends StatelessWidget {
                         child: Container(
                           width: 8,
                           height: 8,
-                          decoration: const BoxDecoration(
-                            color: LuxeColors.emerald,
+                          decoration: BoxDecoration(
+                            color: context.planAccent,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: LuxeColors.emeraldGlow,
+                                color: context.planAccentGlow,
                                 blurRadius: 8,
                               ),
                             ],
@@ -591,7 +592,10 @@ class _NotificationDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, accent, typeLabel) = _typeStyle(notification.type);
+    final (icon, accent, typeLabel) = _typeStyle(
+      notification.type,
+      context.planAccent,
+    );
     final metadata = _metadataRows();
 
     return SafeArea(
@@ -824,45 +828,47 @@ class _NotificationDetailSheet extends StatelessWidget {
 }
 
 /// Icon, accent and label per notification type (LUXE palette).
-(IconData, Color, String) _typeStyle(NotificationType type) => switch (type) {
-  NotificationType.modelUpdated => (
-    Icons.psychology_rounded,
-    LuxeColors.emerald,
-    'Model AI',
-  ),
-  NotificationType.modelDownloadFailed => (
-    Icons.error_outline_rounded,
-    LuxeColors.danger,
-    'Lỗi tải model',
-  ),
-  NotificationType.syncCompleted => (
-    Icons.check_circle_outline_rounded,
-    LuxeColors.emerald,
-    'Đồng bộ xong',
-  ),
-  NotificationType.syncFailed => (
-    Icons.cancel_rounded,
-    LuxeColors.danger,
-    'Lỗi đồng bộ',
-  ),
-  NotificationType.maintenanceDue => (
-    Icons.build_rounded,
-    LuxeColors.champagne,
-    'Bảo dưỡng',
-  ),
-  NotificationType.batteryAlert => (
-    Icons.battery_alert_rounded,
-    LuxeColors.danger,
-    'Cảnh báo pin',
-  ),
-  NotificationType.chargeReminder => (
-    Icons.electrical_services_rounded,
-    LuxeColors.champagne,
-    'Nhắc sạc',
-  ),
-  NotificationType.system => (
-    Icons.info_outline_rounded,
-    LuxeColors.steel,
-    'Hệ thống',
-  ),
-};
+/// [accent]: the plan's colour (QA 140); a finished sync stays emerald.
+(IconData, Color, String) _typeStyle(NotificationType type, Color accent) =>
+    switch (type) {
+      NotificationType.modelUpdated => (
+        Icons.psychology_rounded,
+        accent,
+        'Model AI',
+      ),
+      NotificationType.modelDownloadFailed => (
+        Icons.error_outline_rounded,
+        LuxeColors.danger,
+        'Lỗi tải model',
+      ),
+      NotificationType.syncCompleted => (
+        Icons.check_circle_outline_rounded,
+        LuxeColors.emerald,
+        'Đồng bộ xong',
+      ),
+      NotificationType.syncFailed => (
+        Icons.cancel_rounded,
+        LuxeColors.danger,
+        'Lỗi đồng bộ',
+      ),
+      NotificationType.maintenanceDue => (
+        Icons.build_rounded,
+        LuxeColors.champagne,
+        'Bảo dưỡng',
+      ),
+      NotificationType.batteryAlert => (
+        Icons.battery_alert_rounded,
+        LuxeColors.danger,
+        'Cảnh báo pin',
+      ),
+      NotificationType.chargeReminder => (
+        Icons.electrical_services_rounded,
+        LuxeColors.champagne,
+        'Nhắc sạc',
+      ),
+      NotificationType.system => (
+        Icons.info_outline_rounded,
+        LuxeColors.steel,
+        'Hệ thống',
+      ),
+    };

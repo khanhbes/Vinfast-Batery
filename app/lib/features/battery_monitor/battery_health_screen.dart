@@ -8,6 +8,7 @@ import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
+import '../../core/theme/plan_style.dart';
 
 /// What `/api/learning/<vehicle>/health` returns (QA 135).
 class BatteryHealth {
@@ -126,16 +127,16 @@ class BatteryHealthScreen extends ConsumerWidget {
     return LuxeScaffold(
       title: '% pin chai',
       body: RefreshIndicator(
-        color: LuxeColors.emerald,
+        color: context.planAccent,
         onRefresh: () => ref.refresh(batteryHealthProvider(vehicleId).future),
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
           children: [
             async.when(
-              loading: () => const Padding(
+              loading: () => Padding(
                 padding: EdgeInsets.all(40),
                 child: Center(
-                  child: CircularProgressIndicator(color: LuxeColors.emerald),
+                  child: CircularProgressIndicator(color: context.planAccent),
                 ),
               ),
               error: (error, _) => LuxeNotice(

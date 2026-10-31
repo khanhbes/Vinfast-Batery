@@ -42,7 +42,12 @@ void main() {
       BetaCapabilities.advancedAi ? findsOneWidget : findsNothing,
     );
     // QA 140: features moved to Tiện ích; Cài đặt keeps settings only.
-    for (final moved in ['Lộ trình', 'Bảo dưỡng xe', 'Thành tựu', 'AI cá nhân']) {
+    for (final moved in [
+      'Lộ trình',
+      'Bảo dưỡng xe',
+      'Thành tựu',
+      'AI cá nhân',
+    ]) {
       expect(find.text(moved), findsNothing, reason: moved);
     }
     expect(find.text('Cài đặt hệ thống'), findsOneWidget);

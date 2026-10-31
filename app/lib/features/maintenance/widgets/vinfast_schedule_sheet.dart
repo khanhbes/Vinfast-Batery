@@ -6,6 +6,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/maintenance_task_model.dart';
 import '../vinfast_service_catalog.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// One proposed milestone from the VinFast service book.
 class ScheduleProposal {
@@ -274,7 +275,7 @@ class _SheetState extends State<_Sheet> {
                   Text(
                     '${groupThousands(p.targetOdo)} km',
                     style: TextStyle(
-                      color: on ? LuxeColors.emerald : LuxeColors.muted,
+                      color: on ? context.planAccent : LuxeColors.muted,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                       fontFeatures: const [FontFeature.tabularFigures()],
@@ -285,7 +286,7 @@ class _SheetState extends State<_Sheet> {
                     on
                         ? Icons.check_circle_rounded
                         : Icons.radio_button_unchecked_rounded,
-                    color: on ? LuxeColors.emerald : LuxeColors.dim,
+                    color: on ? context.planAccent : LuxeColors.dim,
                     size: 22,
                   ),
                 ],

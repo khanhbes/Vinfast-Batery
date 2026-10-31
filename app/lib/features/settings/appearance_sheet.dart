@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/services/settings_service.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_settings.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Language picker. The app renders the dark LUXE language only (Task 117),
 /// so the sheet states that instead of offering light/AMOLED modes.
@@ -46,16 +47,16 @@ class AppearanceSheet extends StatelessWidget {
                     icon: icon,
                     title: title,
                     accent: settings.getLanguage() == language
-                        ? LuxeColors.emerald
+                        ? context.planAccent
                         : null,
                     trailing: AnimatedOpacity(
                       opacity: settings.getLanguage() == language ? 1 : 0,
                       duration: MediaQuery.disableAnimationsOf(context)
                           ? Duration.zero
                           : const Duration(milliseconds: 220),
-                      child: const Icon(
+                      child: Icon(
                         Icons.check_circle_rounded,
-                        color: LuxeColors.emerald,
+                        color: context.planAccent,
                       ),
                     ),
                     onTap: () => unawaited(settings.setLanguage(language)),

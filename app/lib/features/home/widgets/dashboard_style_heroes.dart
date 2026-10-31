@@ -7,6 +7,7 @@ import '../../../core/widgets/seven_segment_text.dart';
 import '../../../data/models/vehicle_model.dart';
 import '../../../data/services/range_estimator.dart';
 import '../../../data/services/trip_energy_model.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// What every Overview layout shows, from the vehicle's real data only
 /// (QA 131): a value the owner never entered stays null and shows "—".
@@ -224,11 +225,11 @@ class _BatteryBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = percent;
     final lit = p == null ? 0 : (p / 25).ceil().clamp(0, 4);
-    const colors = [
+    final colors = [
       Color(0xFFF87171), // lowest bar: red
       Color(0xFFF59E0B),
-      LuxeColors.emerald,
-      LuxeColors.emerald,
+      context.planAccent,
+      context.planAccent,
     ];
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -395,7 +396,7 @@ class MinimalHero extends StatelessWidget {
         ? LuxeColors.platinumMid
         : percent <= 20
         ? LuxeColors.danger
-        : LuxeColors.emerald;
+        : context.planAccent;
     return Column(
       key: const ValueKey('dashboard-hero-minimal'),
       crossAxisAlignment: CrossAxisAlignment.stretch,

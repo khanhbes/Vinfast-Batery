@@ -92,9 +92,7 @@ void main() {
   });
 
   // QA 140: Theo giờ picks the clock time the outlet switches off.
-  testWidgets('timed ON sends the chosen end time', (
-    tester,
-  ) async {
+  testWidgets('timed ON sends the chosen end time', (tester) async {
     tester.view.physicalSize = const Size(800, 1200);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

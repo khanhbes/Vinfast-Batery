@@ -28,6 +28,7 @@ import '../../core/widgets/debug_error_sheet.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../battery_monitor/battery_monitor_screen.dart';
 import '../ai/services/learning_flow.dart';
+import '../../core/theme/plan_style.dart';
 
 // =============================================================================
 // Home Screen V4 — Modern Dashboard Design
@@ -124,7 +125,7 @@ class HomeScreen extends ConsumerWidget {
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 720),
                   child: RefreshIndicator(
-                    color: LuxeColors.emerald,
+                    color: context.planAccent,
                     backgroundColor: LuxeColors.raised,
                     onRefresh: () async {
                       // Single pull-to-refresh for Overview (Task 125).

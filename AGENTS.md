@@ -210,6 +210,12 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Cỡ chữ: chỉ dùng các bậc trong `LuxeText.scale` (11–26 cho chữ, 28–60 cho số lớn); dưới 10 chỉ cho nhãn trong painter. `AppUiColors` chỉ còn cho màu theo theme (màu nhấn, nền); màu cố định dùng `LuxeColors`.
   - Luật nguồn kiểm tra tự động trong `test/widget/qa139_ui_fixes_test.dart`: không icon outlined, không CockpitColors/AppColors ngoài theme, màu hex ≤ 300, cỡ chữ trên thang, không vòng lặp ngoài danh sách hoạt động thật, không `AnimatedSize` thời lượng 0.
 
+- **QA 140 (29/10–01/11/2026, chủ app duyệt):**
+  - 4 tab `AppTab`: Tổng quan · Sạc pin (`chargeSectionProvider`: Sạc AI | Theo giờ | Lịch sử) · Tiện ích (`features/utilities/`, mọi chức năng: Sức khỏe pin, Sạc đêm, Lộ trình, AI cá nhân, Bảo dưỡng, Thành tựu) · Cài đặt (chỉ cài đặt). Nhảy tab bằng `openChargeControl`/`openChargeHistory`, không đặt `currentTabProvider` bằng số.
+  - Màu: chỉ trạng thái thật dùng emerald (đã xác minh, đang sạc, đã kết nối, hoàn thành, đã lưu); mọi màu nhấn khác là `context.planAccent` (painter nhận `accent`). Luật nguồn `test/widget/qa140_plan_colors_test.dart` (danh sách file được dùng emerald). Thông báo Android tô theo gói (`NotificationAccent`).
+  - Sạc theo giờ: chọn giờ ngắt (`stopAt`, 5 phút – 10 giờ), máy chủ tính thời lượng ngay trước ON; đổi giờ khi đang sạc qua `PATCH .../sessions/<id>/stop-at` (đọc lại trong khe lệnh, phiên kết thúc giữa chừng thì tắt ổ). Muộn hơn phải xác nhận như bật sạc.
+  - Đếm ngược sạc theo giờ ngắt tuyệt đối của ổ (`timerEndsAt` + `serverTime` từ `/live`), không theo "giây còn lại" của snapshot Cloud.
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

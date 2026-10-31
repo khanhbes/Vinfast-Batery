@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Primary AI action: a wide brushed-platinum pill with a slow light sweep
 /// and a sparkle that breathes. [emphasis] marks the final "start" step.
@@ -112,7 +113,7 @@ class _AIChargeButtonState extends State<AIChargeButton>
                   color: enabled ? null : LuxeColors.glass,
                   border: Border.all(
                     color: widget.emphasis && enabled
-                        ? LuxeColors.emerald
+                        ? context.planAccent
                         : enabled
                         ? const Color(0x66FFFFFF)
                         : LuxeColors.hairline,
@@ -123,7 +124,7 @@ class _AIChargeButtonState extends State<AIChargeButton>
                           BoxShadow(
                             color:
                                 (widget.emphasis
-                                        ? LuxeColors.emerald
+                                        ? context.planAccent
                                         : Colors.white)
                                     .withValues(
                                       alpha: widget.emphasis ? 0.35 : 0.16,
@@ -171,7 +172,7 @@ class _AIChargeButtonState extends State<AIChargeButton>
                           size: 20,
                           color: enabled
                               ? (widget.emphasis
-                                    ? LuxeColors.emeraldDeep
+                                    ? context.planAccentDeep
                                     : LuxeColors.raisedHigh)
                               : LuxeColors.dim,
                         ),

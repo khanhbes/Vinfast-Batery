@@ -88,7 +88,10 @@ void main() {
   test('an end time already passed today means tomorrow', () {
     final now = DateTime(2026, 10, 29, 23, 40);
     expect(
-      TimedChargingSectionV2.stopAtFor(const TimeOfDay(hour: 1, minute: 0), now),
+      TimedChargingSectionV2.stopAtFor(
+        const TimeOfDay(hour: 1, minute: 0),
+        now,
+      ),
       DateTime(2026, 10, 30, 1),
     );
     expect(

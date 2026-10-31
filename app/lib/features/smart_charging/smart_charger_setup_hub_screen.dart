@@ -27,6 +27,7 @@ import '../../data/services/smart_charge_preferences_service.dart';
 import '../../core/services/session_service.dart';
 import 'widgets/shelly_qr_scanner_dialog.dart';
 import 'shelly_connect_screen.dart';
+import '../../core/theme/plan_style.dart';
 
 class SmartChargerSetupHubScreen extends ConsumerStatefulWidget {
   const SmartChargerSetupHubScreen({super.key});
@@ -1046,7 +1047,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     child: FilledButton.icon(
                       onPressed: busy ? null : _verifyAll,
                       style: FilledButton.styleFrom(
-                        backgroundColor: LuxeColors.emerald,
+                        backgroundColor: context.planAccent,
                         foregroundColor: LuxeColors.shell,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
@@ -1087,9 +1088,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   borderRadius: BorderRadius.circular(CockpitRadius.small),
                   border: Border.all(color: LuxeColors.rule),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.bolt_rounded,
-                  color: LuxeColors.emerald,
+                  color: context.planAccent,
                   size: 20,
                 ),
               ),
@@ -1176,7 +1177,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                             style: CockpitTypography.numbers(
                               fontSize: 15.5,
                               fontWeight: FontWeight.w800,
-                              color: LuxeColors.emerald,
+                              color: context.planAccent,
                             ),
                           ),
                         ],
@@ -1250,9 +1251,9 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.wifi_rounded,
-                            color: LuxeColors.emerald,
+                            color: context.planAccent,
                             size: 16,
                           ),
                           const SizedBox(width: 6),
@@ -1539,7 +1540,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     child: FilledButton.icon(
                       onPressed: busy ? null : _verifyAll,
                       style: FilledButton.styleFrom(
-                        backgroundColor: LuxeColors.emerald,
+                        backgroundColor: context.planAccent,
                         foregroundColor: LuxeColors.shell,
                         padding: const EdgeInsets.symmetric(horizontal: 14),
                         shape: RoundedRectangleBorder(
@@ -1814,10 +1815,10 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         ),
                       ),
                       onPressed: busy ? null : _runNoLoadTest,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.toggle_on_rounded,
                         size: 16,
-                        color: LuxeColors.emerald,
+                        color: context.planAccent,
                       ),
                       label: Text(
                         'Kiểm tra',
@@ -1955,7 +1956,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           height: CockpitButtonTokens.height,
           child: FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: LuxeColors.emerald,
+              backgroundColor: context.planAccent,
               foregroundColor: LuxeColors.shell,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(CockpitButtonTokens.radius),
@@ -1993,12 +1994,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: LuxeColors.emerald.withValues(alpha: 0.12),
+                          color: context.planAccent.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.bolt_rounded,
-                          color: LuxeColors.emerald,
+                          color: context.planAccent,
                           size: 18,
                         ),
                       ),
@@ -2082,14 +2083,14 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     height: 48,
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: LuxeColors.emeraldTint,
-                        foregroundColor: LuxeColors.emerald,
+                        backgroundColor: context.planAccentTint,
+                        foregroundColor: context.planAccent,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
                             CockpitRadius.small,
                           ),
                           side: BorderSide(
-                            color: LuxeColors.emerald.withValues(alpha: 0.3),
+                            color: context.planAccent.withValues(alpha: 0.3),
                           ),
                         ),
                         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2100,7 +2101,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         style: CockpitTypography.label(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w800,
-                          color: LuxeColors.emerald,
+                          color: context.planAccent,
                         ),
                       ),
                     ),
@@ -2119,13 +2120,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       child: ActionChip(
                         label: Text('$w W'),
                         backgroundColor: isSelected
-                            ? LuxeColors.emeraldTint
+                            ? context.planAccentTint
                             : LuxeColors.raised,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                           side: BorderSide(
                             color: isSelected
-                                ? LuxeColors.emerald.withValues(alpha: 0.5)
+                                ? context.planAccent.withValues(alpha: 0.5)
                                 : LuxeColors.rule,
                           ),
                         ),
@@ -2133,7 +2134,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           fontSize: 11.5,
                           fontWeight: FontWeight.w700,
                           color: isSelected
-                              ? LuxeColors.emerald
+                              ? context.planAccent
                               : LuxeColors.muted,
                         ),
                         onPressed: () {
@@ -2411,7 +2412,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
     IconData? icon,
     bool isMuted = false,
   }) {
-    final accent = isMuted ? LuxeColors.dim : LuxeColors.emerald;
+    final accent = isMuted ? LuxeColors.dim : context.planAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -2508,7 +2509,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(CockpitRadius.small),
-          borderSide: const BorderSide(color: LuxeColors.emerald),
+          borderSide: BorderSide(color: context.planAccent),
         ),
       ),
     );
@@ -2526,13 +2527,13 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         onPressed: busy ? null : onTap,
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 10),
-          foregroundColor: isPrimary ? LuxeColors.emerald : LuxeColors.text,
+          foregroundColor: isPrimary ? context.planAccent : LuxeColors.text,
           backgroundColor: isPrimary
-              ? LuxeColors.emeraldTint
+              ? context.planAccentTint
               : LuxeColors.raised,
           side: BorderSide(
             color: isPrimary
-                ? LuxeColors.emerald.withValues(alpha: 0.3)
+                ? context.planAccent.withValues(alpha: 0.3)
                 : LuxeColors.rule,
           ),
           shape: RoundedRectangleBorder(
@@ -2546,7 +2547,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           style: CockpitTypography.label(
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
-            color: isPrimary ? LuxeColors.emerald : LuxeColors.text,
+            color: isPrimary ? context.planAccent : LuxeColors.text,
           ),
         ),
       ),
@@ -2586,8 +2587,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
         ),
         Switch.adaptive(
           value: value,
-          activeThumbColor: LuxeColors.emerald,
-          activeTrackColor: LuxeColors.emeraldTint,
+          activeThumbColor: context.planAccent,
+          activeTrackColor: context.planAccentTint,
           inactiveTrackColor: LuxeColors.raised,
           onChanged: busy ? null : onChanged,
         ),
@@ -2747,12 +2748,12 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     width: 32,
                     height: 32,
                     decoration: BoxDecoration(
-                      color: LuxeColors.emerald.withValues(alpha: 0.12),
+                      color: context.planAccent.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.tune_rounded,
-                      color: LuxeColors.emerald,
+                      color: context.planAccent,
                       size: 18,
                     ),
                   ),
@@ -2826,7 +2827,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(CockpitRadius.small),
-              borderSide: const BorderSide(color: LuxeColors.emerald),
+              borderSide: BorderSide(color: context.planAccent),
             ),
           ),
         ),
@@ -2843,7 +2844,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: LuxeColors.emerald,
+              backgroundColor: context.planAccent,
               foregroundColor: LuxeColors.shell,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(CockpitRadius.small),
@@ -2910,7 +2911,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(CockpitRadius.small),
-              borderSide: const BorderSide(color: LuxeColors.emerald),
+              borderSide: BorderSide(color: context.planAccent),
             ),
           ),
         ),
@@ -2927,7 +2928,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: LuxeColors.emerald,
+              backgroundColor: context.planAccent,
               foregroundColor: LuxeColors.shell,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(CockpitRadius.small),

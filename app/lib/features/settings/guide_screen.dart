@@ -11,6 +11,7 @@ import '../../core/widgets/luxe_settings.dart';
 import '../../navigation/app_navigation.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../ai/assistant_sheet.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Luxe quick guide: a tour hero, expandable feature cards with numbered
 /// steps on a hairline rail, and a BatteryBot entry. Bilingual (vi/en).
@@ -197,9 +198,9 @@ class _TourBanner extends StatelessWidget {
       children: [
         Row(
           children: [
-            const LuxeMedallion(
+            LuxeMedallion(
               icon: Icons.explore_rounded,
-              accent: LuxeColors.emerald,
+              accent: context.planAccent,
               size: 46,
             ),
             const SizedBox(width: 14),
@@ -274,7 +275,7 @@ class _GuideSection extends StatelessWidget {
                     children: [
                       LuxeMedallion(
                         icon: item.category.icon,
-                        accent: expanded ? LuxeColors.emerald : null,
+                        accent: expanded ? context.planAccent : null,
                         size: 42,
                       ),
                       const SizedBox(width: 14),
@@ -382,15 +383,15 @@ class _Step extends StatelessWidget {
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: LuxeColors.emerald.withValues(alpha: 0.12),
+                  color: context.planAccent.withValues(alpha: 0.12),
                   border: Border.all(
-                    color: LuxeColors.emerald.withValues(alpha: 0.6),
+                    color: context.planAccent.withValues(alpha: 0.6),
                   ),
                 ),
                 child: Text(
                   '$number',
-                  style: const TextStyle(
-                    color: LuxeColors.emerald,
+                  style: TextStyle(
+                    color: context.planAccent,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                   ),

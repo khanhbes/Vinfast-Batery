@@ -1,10 +1,9 @@
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import 'charge_estimator.dart';
-import '../../core/theme/luxe_theme.dart';
+import 'notification_accent.dart';
 
 /// "Charging now" notification kept alive by server pushes (Task 126).
 ///
@@ -26,6 +25,8 @@ abstract final class ChargeProgressNotification {
   static FlutterLocalNotificationsPlugin? _plugin;
 
   static Future<FlutterLocalNotificationsPlugin> _ready() async {
+    // A push handled in the background reads the plan's tint first.
+    await NotificationAccent.color();
     final existing = _plugin;
     if (existing != null) return existing;
     final plugin = FlutterLocalNotificationsPlugin();
@@ -118,7 +119,7 @@ abstract final class ChargeProgressNotification {
           usesChronometer: finish != null,
           chronometerCountDown: finish != null,
           timeoutAfter: expiry.inMilliseconds,
-          color: LuxeColors.steel,
+          color: NotificationAccent.current,
         ),
       ),
       payload: payload,
@@ -153,7 +154,7 @@ abstract final class ChargeProgressNotification {
           'Xe vẫn sạc theo hẹn giờ trên ổ'
           '${ceiling == null ? '' : ', tự tắt muộn nhất ${formatClock(ceiling)}'}. '
           'Kiểm tra Wi-Fi nhà và đèn trên ổ.',
-      const NotificationDetails(
+      NotificationDetails(
         android: AndroidNotificationDetails(
           alertChannelId,
           'Mất kết nối khi đang sạc',
@@ -161,6 +162,7 @@ abstract final class ChargeProgressNotification {
           priority: Priority.high,
           onlyAlertOnce: true,
           category: AndroidNotificationCategory.status,
+          color: NotificationAccent.current,
         ),
       ),
       payload: payload,

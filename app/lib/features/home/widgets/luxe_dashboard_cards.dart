@@ -14,6 +14,7 @@ import '../../../data/models/entitlement.dart';
 import '../../../core/providers/entitlement_provider.dart';
 import '../../battery_monitor/battery_health_screen.dart';
 import '../../premium/premium_gate.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Tinted glass orb for accented dashboard actions. Neutral icon wells use
 /// the metal [LuxeMedallion] from `core/widgets/luxe_settings.dart`.
@@ -705,11 +706,7 @@ class LuxeShellyPrompt extends StatelessWidget {
     padding: const EdgeInsets.all(14),
     child: Row(
       children: [
-        const LuxeOrb(
-          icon: Icons.power_rounded,
-          color: LuxeColors.emerald,
-          size: 40,
-        ),
+        LuxeOrb(icon: Icons.power_rounded, color: context.planAccent, size: 40),
         const SizedBox(width: 12),
         const Expanded(
           child: Column(
@@ -734,7 +731,7 @@ class LuxeShellyPrompt extends StatelessWidget {
         const SizedBox(width: 8),
         TextButton(
           onPressed: onSetup,
-          style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
+          style: TextButton.styleFrom(foregroundColor: context.planAccent),
           child: const Text('Thiết lập'),
         ),
       ],

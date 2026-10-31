@@ -35,6 +35,7 @@ import 'widgets/luxe_tile_grid.dart';
 import '../settings/assistant_memory_screen.dart';
 import '../../core/services/guide_registry.dart';
 import '../premium/plan_tag.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Tab Cài đặt (luxe): profile card ringed by the achievement rank, live
 /// tiles for the vehicle and Shelly, and quiet glass lists for system and
@@ -456,10 +457,10 @@ class _ProfileCard extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(18, 12, 14, 14),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.two_wheeler_rounded,
                         size: 18,
-                        color: LuxeColors.emerald,
+                        color: context.planAccent,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -623,7 +624,7 @@ class _MiniBattery extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(1.5),
-            color: percent < 20 ? LuxeColors.danger : LuxeColors.emerald,
+            color: percent < 20 ? LuxeColors.danger : context.planAccent,
           ),
         ),
       ),
@@ -641,8 +642,8 @@ class _CountBadge extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(99),
-      gradient: const LinearGradient(
-        colors: [LuxeColors.emerald, LuxeColors.emeraldDeep],
+      gradient: LinearGradient(
+        colors: [context.planAccent, context.planAccentDeep],
       ),
     ),
     child: Text(

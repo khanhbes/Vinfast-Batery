@@ -795,7 +795,7 @@ class LuxeGlass extends StatelessWidget {
         ),
         border: Border.all(
           color: selected
-              ? LuxeColors.emerald.withValues(alpha: 0.75)
+              ? context.planAccent.withValues(alpha: 0.75)
               : plan.glassBorder,
           width: selected ? 1.3 : 1,
         ),

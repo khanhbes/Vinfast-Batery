@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/luxe_theme.dart';
 import 'luxe_kit.dart';
+import '../theme/plan_style.dart';
 
 /// Empty state — LUXE (Task 117): a one-shot orbit emblem, quiet copy and an
 /// optional outlined platinum action.
@@ -59,7 +60,7 @@ class EmptyState extends StatelessWidget {
                 label: Text(actionLabel!),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: LuxeColors.text,
-                  iconColor: LuxeColors.emerald,
+                  iconColor: context.planAccent,
                   side: const BorderSide(color: LuxeColors.hairlineStrong),
                   minimumSize: const Size(48, 48),
                 ),

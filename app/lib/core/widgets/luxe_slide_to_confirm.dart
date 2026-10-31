@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/luxe_theme.dart';
+import '../theme/plan_style.dart';
 
 /// Slide-to-confirm for energizing actions: the platinum knob must travel the
 /// whole track, so a stray tap can never switch a relay ON. Releasing early
@@ -128,7 +129,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                       color: enabled
                           ? Color.lerp(
                               LuxeColors.hairlineStrong,
-                              LuxeColors.emerald,
+                              context.planAccent,
                               t,
                             )!
                           : LuxeColors.hairline,
@@ -147,8 +148,8 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                             borderRadius: BorderRadius.circular(knob / 2),
                             gradient: LinearGradient(
                               colors: [
-                                LuxeColors.emerald.withValues(alpha: 0.0),
-                                LuxeColors.emerald.withValues(
+                                context.planAccent.withValues(alpha: 0.0),
+                                context.planAccent.withValues(
                                   alpha: 0.28 * t + 0.04,
                                 ),
                               ],
@@ -220,7 +221,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                             boxShadow: enabled
                                 ? [
                                     BoxShadow(
-                                      color: LuxeColors.emerald.withValues(
+                                      color: context.planAccent.withValues(
                                         alpha: 0.15 + 0.35 * t,
                                       ),
                                       blurRadius: 14 + 10 * t,
@@ -234,7 +235,7 @@ class _LuxeSlideToConfirmState extends State<LuxeSlideToConfirm>
                             color: enabled
                                 ? Color.lerp(
                                     LuxeColors.shell,
-                                    LuxeColors.emeraldDeep,
+                                    context.planAccentDeep,
                                     t,
                                   )
                                 : LuxeColors.dim,

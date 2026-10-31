@@ -16,6 +16,7 @@ import '../../core/widgets/vehicle_picker_sheet.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'app_diagnostics.dart';
 import 'support_repository.dart';
+import '../../core/theme/plan_style.dart';
 
 final appDiagnosticsProvider = Provider<AppDiagnostics>(
   (ref) => const AppDiagnostics(),
@@ -159,7 +160,7 @@ class _HelpCenterScreenState extends ConsumerState<HelpCenterScreen>
     return LuxeScaffold(
       title: 'Trợ giúp',
       body: RefreshIndicator(
-        color: LuxeColors.emerald,
+        color: context.planAccent,
         onRefresh: () async {
           ref.invalidate(supportTicketsProvider);
           await _check();
@@ -219,15 +220,12 @@ class _HelpCenterScreenState extends ConsumerState<HelpCenterScreen>
                                 icon: t.status == 'answered'
                                     ? Icons.mark_chat_read_rounded
                                     : Icons.chat_bubble_outline_rounded,
-                                accent: t.unread ? LuxeColors.emerald : null,
+                                accent: t.unread ? context.planAccent : null,
                                 title: t.subject,
                                 subtitle:
                                     '${t.category.label} · ${t.statusLabel}',
                                 badge: t.unread
-                                    ? const LuxeTag(
-                                        'Mới',
-                                        color: LuxeColors.emerald,
-                                      )
+                                    ? LuxeTag('Mới', color: context.planAccent)
                                     : null,
                                 onTap: () async {
                                   await SupportTicketScreen.open(context, t.id);
@@ -316,13 +314,13 @@ class _Summary extends StatelessWidget {
             ),
           ),
           checking
-              ? const SizedBox.square(
+              ? SizedBox.square(
                   dimension: 48,
                   child: Padding(
                     padding: EdgeInsets.all(14),
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: LuxeColors.emerald,
+                      color: context.planAccent,
                     ),
                   ),
                 )
@@ -706,7 +704,7 @@ class _SupportTicketScreenState extends ConsumerState<SupportTicketScreen> {
       body: ticket == null
           ? Center(
               child: _error == null
-                  ? const CircularProgressIndicator(color: LuxeColors.emerald)
+                  ? CircularProgressIndicator(color: context.planAccent)
                   : Padding(
                       padding: const EdgeInsets.all(24),
                       child: LuxeNotice(
@@ -801,11 +799,11 @@ class _Bubble extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(18),
           color: fromAdmin
-              ? LuxeColors.emerald.withValues(alpha: 0.08)
+              ? context.planAccent.withValues(alpha: 0.08)
               : LuxeColors.glassStrong,
           border: Border.all(
             color: fromAdmin
-                ? LuxeColors.emerald.withValues(alpha: 0.3)
+                ? context.planAccent.withValues(alpha: 0.3)
                 : LuxeColors.hairline,
           ),
         ),
@@ -816,7 +814,7 @@ class _Bubble extends StatelessWidget {
               '${fromAdmin ? 'Đội Pinova' : 'Bạn'}$when',
               style: LuxeText.caption.copyWith(
                 fontSize: 11.5,
-                color: fromAdmin ? LuxeColors.emerald : LuxeColors.muted,
+                color: fromAdmin ? context.planAccent : LuxeColors.muted,
               ),
             ),
             const SizedBox(height: 4),

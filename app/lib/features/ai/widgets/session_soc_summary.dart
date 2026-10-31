@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Session SOC as a 240° platinum arc: start → end lit emerald, the preset
 /// target as a notch. Adapts to compact phones and large text.
@@ -92,18 +93,18 @@ class SessionSocSummary extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: LuxeColors.emerald.withValues(alpha: 0.12),
+                    color: context.planAccent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                      color: LuxeColors.emerald.withValues(alpha: 0.35),
+                      color: context.planAccent.withValues(alpha: 0.35),
                     ),
                   ),
                   child: Text(
                     '+${gain.round()}% pin',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
-                      color: LuxeColors.emerald,
+                      color: context.planAccent,
                     ),
                   ),
                 ),
@@ -127,6 +128,7 @@ class SessionSocSummary extends StatelessWidget {
                       end: endSoc == null ? null : endSoc / 100,
                       target: target == null ? null : target / 100,
                       reveal: t,
+                      accent: context.planAccent,
                     ),
                     child: child,
                   ),
@@ -159,8 +161,8 @@ class SessionSocSummary extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             endLabel,
-                            style: const TextStyle(
-                              color: LuxeColors.emerald,
+                            style: TextStyle(
+                              color: context.planAccent,
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 0.4,
@@ -248,11 +250,15 @@ class _Legend extends StatelessWidget {
 }
 
 class _SocArcPainter extends CustomPainter {
+  /// The plan's colour (QA 140).
+  final Color accent;
+
   _SocArcPainter({
     required this.start,
     required this.end,
     required this.target,
     required this.reveal,
+    required this.accent,
   });
 
   final double start;
@@ -306,7 +312,7 @@ class _SocArcPainter extends CustomPainter {
           ..shader = SweepGradient(
             startAngle: angle(lo),
             endAngle: angle(lo) + math.max(0.01, _sweep * (hi - lo)),
-            colors: const [LuxeColors.emeraldDeep, LuxeColors.emerald],
+            colors: [Color.lerp(accent, Colors.black, 0.25)!, accent],
           ).createShader(rect);
         canvas.drawArc(
           rect,
@@ -317,7 +323,7 @@ class _SocArcPainter extends CustomPainter {
             ..style = PaintingStyle.stroke
             ..strokeWidth = 14
             ..strokeCap = StrokeCap.round
-            ..color = LuxeColors.emerald.withValues(alpha: 0.18)
+            ..color = accent.withValues(alpha: 0.18)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7),
         );
         canvas.drawArc(rect, angle(lo), _sweep * (hi - lo), false, arcPaint);
@@ -359,5 +365,6 @@ class _SocArcPainter extends CustomPainter {
       old.reveal != reveal ||
       old.start != start ||
       old.end != end ||
-      old.target != target;
+      old.target != target ||
+      old.accent != accent;
 }

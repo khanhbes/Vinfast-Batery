@@ -30,6 +30,7 @@ import 'widgets/confirm_actual_soc_sheet.dart';
 import 'widgets/history_luxe_widgets.dart';
 import 'widgets/session_soc_summary.dart';
 import '../../core/services/guide_registry.dart';
+import '../../core/theme/plan_style.dart';
 
 class SmartChargeHistoryScreen extends StatefulWidget {
   const SmartChargeHistoryScreen({
@@ -379,7 +380,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
             SafeArea(
               bottom: false,
               child: RefreshIndicator(
-                color: LuxeColors.emerald,
+                color: context.planAccent,
                 backgroundColor: LuxeColors.raised,
                 onRefresh: () => _load(reset: true),
                 child: CustomScrollView(
@@ -416,14 +417,14 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                         ),
                       ),
                     if (_loading && !_hasSuccessfulLoad && _items.isEmpty)
-                      const SliverFillRemaining(
+                      SliverFillRemaining(
                         hasScrollBody: false,
                         child: Center(
                           child: SizedBox.square(
                             dimension: 28,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: LuxeColors.emerald,
+                              color: context.planAccent,
                             ),
                           ),
                         ),
@@ -1028,11 +1029,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                         }
                       },
                 child: _loadingMore
-                    ? const SizedBox.square(
+                    ? SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: LuxeColors.emerald,
+                          color: context.planAccent,
                         ),
                       )
                     : const Text('TẢI THÊM'),
@@ -1845,7 +1846,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                           item.icon,
                           size: 15,
                           color: item.highlight
-                              ? LuxeColors.emerald
+                              ? context.planAccent
                               : LuxeColors.platinumMid,
                         ),
                         const SizedBox(width: 6),
@@ -1866,7 +1867,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: item.highlight
-                            ? LuxeColors.emerald
+                            ? context.planAccent
                             : LuxeColors.platinumHi,
                         fontSize: 17,
                         fontWeight: FontWeight.w500,
@@ -1927,12 +1928,12 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       );
     }
     if (_points == null) {
-      return const Center(
+      return Center(
         child: SizedBox.square(
           dimension: 26,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: LuxeColors.emerald,
+            color: context.planAccent,
           ),
         ),
       );
@@ -2044,7 +2045,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                           radius: 4.5,
                           color: LuxeColors.platinumHi,
                           strokeWidth: 3,
-                          strokeColor: LuxeColors.emerald.withValues(
+                          strokeColor: context.planAccent.withValues(
                             alpha: 0.45,
                           ),
                         ),
@@ -2073,7 +2074,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
             verticalLines: [
               VerticalLine(
                 x: 0,
-                color: LuxeColors.emerald.withValues(alpha: 0.6),
+                color: context.planAccent.withValues(alpha: 0.6),
                 strokeWidth: 1.2,
               ),
               for (final minute in rearmMarkers)
@@ -2122,8 +2123,8 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                     .toList(),
                 isCurved: true,
                 curveSmoothness: 0.25,
-                gradient: const LinearGradient(
-                  colors: [LuxeColors.platinum, LuxeColors.emerald],
+                gradient: LinearGradient(
+                  colors: [LuxeColors.platinum, context.planAccent],
                 ),
                 barWidth: 2.4,
                 isStrokeCapRound: true,
@@ -2138,8 +2139,8 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
                     colors: [
-                      LuxeColors.emerald.withValues(alpha: 0.22),
-                      LuxeColors.emerald.withValues(alpha: 0.0),
+                      context.planAccent.withValues(alpha: 0.22),
+                      context.planAccent.withValues(alpha: 0.0),
                     ],
                   ),
                 ),

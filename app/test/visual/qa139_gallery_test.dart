@@ -120,20 +120,23 @@ class _OpenerState extends State<_Opener> {
       const ColoredBox(color: LuxeColors.background, child: SizedBox.expand());
 }
 
-FunctionCallAction _action(String tool, String status, String title) =>
-    FunctionCallAction(
-      callId: 'c-$tool-$status',
-      toolName: tool,
-      args: const {},
-      status: status,
-      cardData: ActionConfirmationCardData(
-        title: title,
-        description: 'VinFast Feliz · Shelly Plug S',
-        estimatedTime: '30 phút',
-        safetyNote:
-            'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy.',
-      ),
-    );
+FunctionCallAction _action(
+  String tool,
+  String status,
+  String title,
+) => FunctionCallAction(
+  callId: 'c-$tool-$status',
+  toolName: tool,
+  args: const {},
+  status: status,
+  cardData: ActionConfirmationCardData(
+    title: title,
+    description: 'VinFast Feliz · Shelly Plug S',
+    estimatedTime: '30 phút',
+    safetyNote:
+        'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy.',
+  ),
+);
 
 Widget _botCards() => ListView(
   padding: const EdgeInsets.all(16),
@@ -154,31 +157,146 @@ Widget _botCards() => ListView(
   ],
 );
 
-typedef _Shot = ({String id, String name, PlanTier tier, Widget Function() build});
+typedef _Shot = ({
+  String id,
+  String name,
+  PlanTier tier,
+  Widget Function() build,
+});
 
 final List<_Shot> _shots = [
-  (id: 'more', name: 'Cài đặt', tier: PlanTier.free, build: () => const MoreScreen()),
-  (id: 'utilities', name: 'Tiện ích', tier: PlanTier.free, build: () => const UtilitiesScreen()),
-  (id: 'premium', name: 'Pinova Premium', tier: PlanTier.free, build: () => const PremiumScreen()),
-  (id: 'overview', name: 'Tổng quan', tier: PlanTier.free, build: () => const OverviewScreen()),
-  (id: 'garage', name: 'Xe của tôi', tier: PlanTier.free, build: () => const VehicleGarageScreen()),
-  (id: 'settings', name: 'Cài đặt hệ thống', tier: PlanTier.free, build: () => const SettingsScreen()),
-  (id: 'appearance', name: 'Giao diện', tier: PlanTier.free, build: () => const AppearanceScreen()),
-  (id: 'achievements', name: 'Thành tựu', tier: PlanTier.free, build: () => const AchievementsScreen()),
-  (id: 'help', name: 'Trợ giúp', tier: PlanTier.free, build: () => const HelpCenterScreen()),
-  (id: 'guide', name: 'Hướng dẫn sử dụng', tier: PlanTier.free, build: () => const GuideScreen()),
-  (id: 'memory', name: 'Pinova Bot nhớ gì', tier: PlanTier.free, build: () => const AssistantMemoryScreen()),
-  (id: 'monitor', name: 'Theo dõi pin', tier: PlanTier.free, build: () => BatteryMonitorScreen(vehicle: _car)),
-  (id: 'aimodels', name: 'Mô hình AI', tier: PlanTier.free, build: () => const AiModelsScreen()),
-  (id: 'shelly', name: 'Kết nối Shelly', tier: PlanTier.free, build: () => const ShellyConnectScreen()),
-  (id: 'login', name: 'Đăng nhập', tier: PlanTier.free, build: () => const LoginScreen()),
-  (id: 'register', name: 'Đăng ký', tier: PlanTier.free, build: () => const RegisterScreen()),
-  (id: 'start', name: 'Bắt đầu', tier: PlanTier.free, build: () => GettingStartedScreen(onCreateAccount: () {}, onSignIn: () {})),
-  (id: 'survey', name: 'Khảo sát', tier: PlanTier.free, build: () => const OnboardingChatScreen()),
-  (id: 'trip', name: 'Lộ trình (Pro)', tier: PlanTier.pro, build: () => TripPlannerScreen(vehicle: _car)),
-  (id: 'health', name: 'Pin chai (Pro)', tier: PlanTier.pro, build: () => const BatteryHealthScreen(vehicleId: 'car')),
-  (id: 'night', name: 'Sạc đêm (Ultra)', tier: PlanTier.ultra, build: () => const NightChargingScreen(vehicleId: 'car', currentSoc: 31)),
-  (id: 'botcards', name: 'Thẻ Pinova Bot', tier: PlanTier.free, build: _botCards),
+  (
+    id: 'more',
+    name: 'Cài đặt',
+    tier: PlanTier.free,
+    build: () => const MoreScreen(),
+  ),
+  (
+    id: 'utilities',
+    name: 'Tiện ích',
+    tier: PlanTier.free,
+    build: () => const UtilitiesScreen(),
+  ),
+  (
+    id: 'premium',
+    name: 'Pinova Premium',
+    tier: PlanTier.free,
+    build: () => const PremiumScreen(),
+  ),
+  (
+    id: 'overview',
+    name: 'Tổng quan',
+    tier: PlanTier.free,
+    build: () => const OverviewScreen(),
+  ),
+  (
+    id: 'garage',
+    name: 'Xe của tôi',
+    tier: PlanTier.free,
+    build: () => const VehicleGarageScreen(),
+  ),
+  (
+    id: 'settings',
+    name: 'Cài đặt hệ thống',
+    tier: PlanTier.free,
+    build: () => const SettingsScreen(),
+  ),
+  (
+    id: 'appearance',
+    name: 'Giao diện',
+    tier: PlanTier.free,
+    build: () => const AppearanceScreen(),
+  ),
+  (
+    id: 'achievements',
+    name: 'Thành tựu',
+    tier: PlanTier.free,
+    build: () => const AchievementsScreen(),
+  ),
+  (
+    id: 'help',
+    name: 'Trợ giúp',
+    tier: PlanTier.free,
+    build: () => const HelpCenterScreen(),
+  ),
+  (
+    id: 'guide',
+    name: 'Hướng dẫn sử dụng',
+    tier: PlanTier.free,
+    build: () => const GuideScreen(),
+  ),
+  (
+    id: 'memory',
+    name: 'Pinova Bot nhớ gì',
+    tier: PlanTier.free,
+    build: () => const AssistantMemoryScreen(),
+  ),
+  (
+    id: 'monitor',
+    name: 'Theo dõi pin',
+    tier: PlanTier.free,
+    build: () => BatteryMonitorScreen(vehicle: _car),
+  ),
+  (
+    id: 'aimodels',
+    name: 'Mô hình AI',
+    tier: PlanTier.free,
+    build: () => const AiModelsScreen(),
+  ),
+  (
+    id: 'shelly',
+    name: 'Kết nối Shelly',
+    tier: PlanTier.free,
+    build: () => const ShellyConnectScreen(),
+  ),
+  (
+    id: 'login',
+    name: 'Đăng nhập',
+    tier: PlanTier.free,
+    build: () => const LoginScreen(),
+  ),
+  (
+    id: 'register',
+    name: 'Đăng ký',
+    tier: PlanTier.free,
+    build: () => const RegisterScreen(),
+  ),
+  (
+    id: 'start',
+    name: 'Bắt đầu',
+    tier: PlanTier.free,
+    build: () => GettingStartedScreen(onCreateAccount: () {}, onSignIn: () {}),
+  ),
+  (
+    id: 'survey',
+    name: 'Khảo sát',
+    tier: PlanTier.free,
+    build: () => const OnboardingChatScreen(),
+  ),
+  (
+    id: 'trip',
+    name: 'Lộ trình (Pro)',
+    tier: PlanTier.pro,
+    build: () => TripPlannerScreen(vehicle: _car),
+  ),
+  (
+    id: 'health',
+    name: 'Pin chai (Pro)',
+    tier: PlanTier.pro,
+    build: () => const BatteryHealthScreen(vehicleId: 'car'),
+  ),
+  (
+    id: 'night',
+    name: 'Sạc đêm (Ultra)',
+    tier: PlanTier.ultra,
+    build: () => const NightChargingScreen(vehicleId: 'car', currentSoc: 31),
+  ),
+  (
+    id: 'botcards',
+    name: 'Thẻ Pinova Bot',
+    tier: PlanTier.free,
+    build: _botCards,
+  ),
   (
     id: 'sheet-start',
     name: 'Sheet bắt đầu sạc',
@@ -246,9 +364,8 @@ final List<_Shot> _shots = [
     id: 'sheet-upgrade',
     name: 'Sheet nâng cấp',
     tier: PlanTier.free,
-    build: () => _Opener(
-      (c) => PremiumGate.showUpgrade(c, PremiumFeature.values.first),
-    ),
+    build: () =>
+        _Opener((c) => PremiumGate.showUpgrade(c, PremiumFeature.values.first)),
   ),
   (
     id: 'sheet-delete',
@@ -260,17 +377,65 @@ final List<_Shot> _shots = [
   ),
 ];
 
-typedef _Variant = ({String id, PlanTier? tier, Size size, double scale, bool motion});
+typedef _Variant = ({
+  String id,
+  PlanTier? tier,
+  Size size,
+  double scale,
+  bool motion,
+});
 
 /// Free at every size and text scale; Pro and Ultra at the common phone.
 const List<_Variant> _variants = [
-  (id: 'f412x1', tier: PlanTier.free, size: Size(412, 915), scale: 1, motion: false),
-  (id: 'p412x1', tier: PlanTier.pro, size: Size(412, 915), scale: 1, motion: false),
-  (id: 'u412x1', tier: PlanTier.ultra, size: Size(412, 915), scale: 1, motion: false),
-  (id: 'f412x1.3', tier: PlanTier.free, size: Size(412, 915), scale: 1.3, motion: false),
-  (id: 'f412x2', tier: PlanTier.free, size: Size(412, 915), scale: 2, motion: false),
-  (id: 'f320x1', tier: PlanTier.free, size: Size(320, 640), scale: 1, motion: false),
-  (id: 'f320x2', tier: PlanTier.free, size: Size(320, 640), scale: 2, motion: false),
+  (
+    id: 'f412x1',
+    tier: PlanTier.free,
+    size: Size(412, 915),
+    scale: 1,
+    motion: false,
+  ),
+  (
+    id: 'p412x1',
+    tier: PlanTier.pro,
+    size: Size(412, 915),
+    scale: 1,
+    motion: false,
+  ),
+  (
+    id: 'u412x1',
+    tier: PlanTier.ultra,
+    size: Size(412, 915),
+    scale: 1,
+    motion: false,
+  ),
+  (
+    id: 'f412x1.3',
+    tier: PlanTier.free,
+    size: Size(412, 915),
+    scale: 1.3,
+    motion: false,
+  ),
+  (
+    id: 'f412x2',
+    tier: PlanTier.free,
+    size: Size(412, 915),
+    scale: 2,
+    motion: false,
+  ),
+  (
+    id: 'f320x1',
+    tier: PlanTier.free,
+    size: Size(320, 640),
+    scale: 1,
+    motion: false,
+  ),
+  (
+    id: 'f320x2',
+    tier: PlanTier.free,
+    size: Size(320, 640),
+    scale: 2,
+    motion: false,
+  ),
 ];
 
 const _dpr = 2.0;
@@ -279,9 +444,8 @@ final _boundary = GlobalKey();
 /// Styles that replace (not merge into) the inherited text style have no
 /// family; a phone draws them in Roboto, the test engine in its box font.
 ThemeData _roboto(ThemeData t) {
-  TextStyle? r(TextStyle? s) => (s ?? const TextStyle()).copyWith(
-    fontFamily: 'Roboto',
-  );
+  TextStyle? r(TextStyle? s) =>
+      (s ?? const TextStyle()).copyWith(fontFamily: 'Roboto');
   ButtonStyle? b(ButtonStyle? s) => (s ?? const ButtonStyle()).copyWith(
     textStyle: WidgetStateProperty.resolveWith(
       (states) => r(s?.textStyle?.resolve(states)),
@@ -290,7 +454,9 @@ ThemeData _roboto(ThemeData t) {
   return t.copyWith(
     textTheme: t.textTheme.apply(fontFamily: 'Roboto'),
     primaryTextTheme: t.primaryTextTheme.apply(fontFamily: 'Roboto'),
-    filledButtonTheme: FilledButtonThemeData(style: b(t.filledButtonTheme.style)),
+    filledButtonTheme: FilledButtonThemeData(
+      style: b(t.filledButtonTheme.style),
+    ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: b(t.outlinedButtonTheme.style),
     ),
@@ -494,7 +660,12 @@ Future<void> _capture(WidgetTester tester, String file, Size viewport) async {
     File('$_out/png/$file.png').writeAsBytesSync(png!.buffer.asUint8List());
   });
   File('$_out/png/$file.json').writeAsStringSync(
-    jsonEncode({'dpr': _dpr, 'w': viewport.width, 'h': viewport.height, 'texts': texts}),
+    jsonEncode({
+      'dpr': _dpr,
+      'w': viewport.width,
+      'h': viewport.height,
+      'texts': texts,
+    }),
   );
 }
 
@@ -519,7 +690,9 @@ Future<void> _settle(WidgetTester tester) async {
     await tester.pump(const Duration(milliseconds: 150));
   }
   // Asset images and fonts decode on real time.
-  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 250)));
+  await tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 250)),
+  );
   for (var i = 0; i < 4; i++) {
     await tester.pump(const Duration(milliseconds: 150));
   }
@@ -552,9 +725,8 @@ void main() {
         addTearDown(tester.view.reset);
         final errors = <String>[];
         final previous = FlutterError.onError;
-        FlutterError.onError = (d) => errors.add(
-          d.exceptionAsString().split('\n').take(2).join(' | '),
-        );
+        FlutterError.onError = (d) =>
+            errors.add(d.exceptionAsString().split('\n').take(2).join(' | '));
         final frames = <String>[];
         try {
           await tester.pumpWidget(_app(shot, v));
@@ -568,7 +740,9 @@ void main() {
             if (scroll == null) break;
             final p = scroll.position;
             if (p.pixels >= p.maxScrollExtent - 1) break;
-            p.jumpTo((p.pixels + v.size.height * 0.8).clamp(0, p.maxScrollExtent));
+            p.jumpTo(
+              (p.pixels + v.size.height * 0.8).clamp(0, p.maxScrollExtent),
+            );
             await _settle(tester);
           }
         } finally {

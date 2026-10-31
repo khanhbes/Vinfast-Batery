@@ -13,6 +13,7 @@ import '../../data/models/app_appearance.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Cài đặt → Giao diện (QA 131): the Overview layout, the Charge tab layout
 /// and how the charger is switched ON. Saved per account, so every phone
@@ -140,12 +141,12 @@ class AppearanceScreen extends ConsumerWidget {
                   title: style.label,
                   subtitle: style.caption,
                   accent: appearance.confirm == style
-                      ? LuxeColors.emerald
+                      ? context.planAccent
                       : null,
                   trailing: appearance.confirm == style
-                      ? const Icon(
+                      ? Icon(
                           Icons.check_circle_rounded,
-                          color: LuxeColors.emerald,
+                          color: context.planAccent,
                         )
                       : const SizedBox(width: 24),
                   onTap: () {
@@ -255,7 +256,7 @@ class _OptionTile extends StatelessWidget {
             color: selected ? const Color(0x1434D399) : LuxeColors.glass,
             border: Border.all(
               color: selected
-                  ? LuxeColors.emerald.withValues(alpha: 0.6)
+                  ? context.planAccent.withValues(alpha: 0.6)
                   : LuxeColors.hairline,
               width: selected ? 1.5 : 1,
             ),
@@ -290,10 +291,10 @@ class _OptionTile extends StatelessWidget {
                     ),
                   ),
                   if (selected)
-                    const Icon(
+                    Icon(
                       Icons.check_circle_rounded,
                       size: 18,
-                      color: LuxeColors.emerald,
+                      color: context.planAccent,
                     ),
                 ],
               ),
@@ -453,7 +454,7 @@ class _Bar extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(5),
-              color: LuxeColors.emerald,
+              color: context.planAccent,
             ),
           ),
         ),

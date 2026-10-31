@@ -65,8 +65,7 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
   bool get _later => _stopAt.isAfter(_old);
   bool get _changed => _stopAt != _old;
 
-  DateTime get _earliest =>
-      widget.clock().add(const Duration(minutes: 2));
+  DateTime get _earliest => widget.clock().add(const Duration(minutes: 2));
   DateTime get _latest => widget.latestStopAt;
 
   @override
@@ -160,7 +159,8 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
                   label: 'Sớm hơn 15 phút',
                   onTap: locked
                       ? null
-                      : () => _set(_stopAt.subtract(const Duration(minutes: 15))),
+                      : () =>
+                            _set(_stopAt.subtract(const Duration(minutes: 15))),
                 ),
                 Expanded(
                   child: InkWell(

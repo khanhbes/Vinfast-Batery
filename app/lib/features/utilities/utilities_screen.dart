@@ -29,10 +29,8 @@ class UtilitiesScreen extends ConsumerWidget {
     final vehicleContext = ref.watch(vehicleContextProvider);
     final achievements = ref.watch(achievementsControllerProvider);
 
-    void push(Widget page) => Navigator.push(
-      context,
-      MaterialPageRoute<void>(builder: (_) => page),
-    );
+    void push(Widget page) =>
+        Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page));
 
     /// The vehicle the feature works on, or a hint to pick one.
     String? vehicleId() {
@@ -65,7 +63,8 @@ class UtilitiesScreen extends ConsumerWidget {
                       lockedBy: PremiumFeature.batteryHealth,
                       onTap: () {
                         final id = vehicleId();
-                        if (id != null) BatteryHealthScreen.open(context, ref, id);
+                        if (id != null)
+                          BatteryHealthScreen.open(context, ref, id);
                       },
                     ),
                     LuxeTile(

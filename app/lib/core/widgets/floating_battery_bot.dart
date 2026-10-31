@@ -6,6 +6,7 @@ import '../../features/ai/assistant_sheet.dart';
 import '../services/assistant_context_coordinator.dart';
 import '../theme/luxe_theme.dart';
 import 'battery_bot_mascot.dart';
+import '../theme/plan_style.dart';
 
 /// Widget Mascot nổi (Floating Action Bot) kèm bong bóng thoại chủ động (Proactive Speech Bubble)
 class FloatingBatteryBot extends ConsumerStatefulWidget {
@@ -132,7 +133,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                             20,
                           ).copyWith(bottomRight: const Radius.circular(6)),
                           border: Border.all(
-                            color: LuxeColors.emerald.withValues(alpha: 0.45),
+                            color: context.planAccent.withValues(alpha: 0.45),
                           ),
                           boxShadow: const [
                             BoxShadow(color: Color(0x2634D399), blurRadius: 18),
@@ -202,7 +203,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                     color: Colors.transparent,
                     shape: const CircleBorder(),
                     elevation: isDocked ? 2 : 6,
-                    shadowColor: LuxeColors.emerald.withValues(alpha: 0.4),
+                    shadowColor: context.planAccent.withValues(alpha: 0.4),
                     child: Tooltip(
                       message: 'Mở Pinova Bot',
                       child: Semantics(
@@ -230,15 +231,15 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                               ),
                               border: Border.all(
                                 color: isBubbleVisible
-                                    ? LuxeColors.emerald
-                                    : LuxeColors.emerald.withValues(
+                                    ? context.planAccent
+                                    : context.planAccent.withValues(
                                         alpha: 0.45,
                                       ),
                                 width: isBubbleVisible ? 2.0 : 1.3,
                               ),
-                              boxShadow: const [
+                              boxShadow: [
                                 BoxShadow(
-                                  color: LuxeColors.emeraldSoft,
+                                  color: context.planAccentSoft,
                                   blurRadius: 18,
                                 ),
                               ],

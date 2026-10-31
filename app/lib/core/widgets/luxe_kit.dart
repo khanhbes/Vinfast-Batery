@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../theme/luxe_theme.dart';
+import '../theme/plan_style.dart';
 
 /// LUXE kit (Task 117): the shared primitives every pushed screen, sheet and
 /// state view is built from, so legacy screens adopt the platinum language
@@ -466,7 +467,7 @@ class LuxeRing extends StatelessWidget {
     required this.value,
     this.size = 120,
     this.stroke = 8,
-    this.color = LuxeColors.emerald,
+    this.color,
     this.child,
     this.semanticLabel,
     this.duration = const Duration(milliseconds: 1100),
@@ -475,7 +476,9 @@ class LuxeRing extends StatelessWidget {
   final double value;
   final double size;
   final double stroke;
-  final Color color;
+
+  /// Defaults to the plan's accent (QA 140).
+  final Color? color;
   final Widget? child;
   final String? semanticLabel;
 
@@ -494,7 +497,7 @@ class LuxeRing extends StatelessWidget {
           duration: luxeReduceMotion(context) ? Duration.zero : duration,
           curve: LuxeMotion.enter,
           builder: (context, t, child) => CustomPaint(
-            painter: _RingPainter(t, stroke, color),
+            painter: _RingPainter(t, stroke, color ?? context.planAccent),
             child: child,
           ),
           child: Center(child: child),
@@ -580,7 +583,7 @@ class LuxeSparkline extends StatelessWidget {
     super.key,
     required this.points,
     this.height = 120,
-    this.color = LuxeColors.emerald,
+    this.color,
     this.minY,
     this.maxY,
     this.semanticLabel,
@@ -588,7 +591,9 @@ class LuxeSparkline extends StatelessWidget {
 
   final List<double> points;
   final double height;
-  final Color color;
+
+  /// Defaults to the plan's accent (QA 140).
+  final Color? color;
   final double? minY;
   final double? maxY;
   final String? semanticLabel;
@@ -612,7 +617,13 @@ class LuxeSparkline extends StatelessWidget {
                   duration: luxeDuration(context, 1200),
                   curve: LuxeMotion.enter,
                   builder: (context, t, _) => CustomPaint(
-                    painter: _SparkPainter(clean, t, color, minY, maxY),
+                    painter: _SparkPainter(
+                      clean,
+                      t,
+                      color ?? context.planAccent,
+                      minY,
+                      maxY,
+                    ),
                   ),
                 ),
               ),
@@ -721,7 +732,7 @@ class LuxeEmptyArt extends StatelessWidget {
         duration: luxeDuration(context, 1400),
         curve: LuxeMotion.enter,
         builder: (context, t, child) => CustomPaint(
-          painter: _OrbitPainter(t),
+          painter: _OrbitPainter(t, context.planAccent),
           child: Center(
             child: Opacity(
               opacity: (t * 2).clamp(0.0, 1.0),
@@ -749,8 +760,9 @@ class LuxeEmptyArt extends StatelessWidget {
 }
 
 class _OrbitPainter extends CustomPainter {
-  _OrbitPainter(this.t);
+  _OrbitPainter(this.t, this.accent);
   final double t;
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -782,18 +794,14 @@ class _OrbitPainter extends CustomPainter {
       spark,
       6,
       Paint()
-        ..color = LuxeColors.emerald.withValues(alpha: 0.3 * t)
+        ..color = accent.withValues(alpha: 0.3 * t)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
-    canvas.drawCircle(
-      spark,
-      2.5,
-      Paint()..color = LuxeColors.emerald.withValues(alpha: t),
-    );
+    canvas.drawCircle(spark, 2.5, Paint()..color = accent.withValues(alpha: t));
   }
 
   @override
-  bool shouldRepaint(_OrbitPainter old) => old.t != t;
+  bool shouldRepaint(_OrbitPainter old) => old.t != t || old.accent != accent;
 }
 
 /// Brushed-platinum sweep over placeholder shapes while content loads. The

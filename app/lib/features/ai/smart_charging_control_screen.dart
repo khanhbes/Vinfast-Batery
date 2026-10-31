@@ -50,6 +50,7 @@ import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
 import 'widgets/timed_charging_section_v2.dart';
 import '../../core/services/guide_registry.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Sạc pin — luxe platinum/emerald workspace.
 ///
@@ -269,7 +270,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             const LuxeBackdrop(),
             SafeArea(
               child: RefreshIndicator(
-                color: LuxeColors.emerald,
+                color: context.planAccent,
                 backgroundColor: LuxeColors.raised,
                 onRefresh: () => controller.refresh(force: true),
                 child: ListView(
@@ -1525,12 +1526,15 @@ class _TargetPresets extends StatelessWidget {
     children: [
       for (var i = 0; i < _presets.length; i++) ...[
         if (i > 0) const SizedBox(width: 8),
-        Expanded(child: _tile(_presets[i])),
+        Expanded(child: _tile(context, _presets[i])),
       ],
     ],
   );
 
-  Widget _tile(({double value, String title, bool recommended}) p) {
+  Widget _tile(
+    BuildContext context,
+    ({double value, String title, bool recommended}) p,
+  ) {
     final selected = target.round() == p.value.round();
     final available = enabled && p.value > minimum;
     return Semantics(
@@ -1561,7 +1565,7 @@ class _TargetPresets extends StatelessWidget {
                     child: Text(
                       '${p.value.round()}%',
                       style: TextStyle(
-                        color: selected ? LuxeColors.emerald : LuxeColors.text,
+                        color: selected ? context.planAccent : LuxeColors.text,
                         fontSize: 19,
                         fontWeight: FontWeight.w300,
                         fontFeatures: const [FontFeature.tabularFigures()],

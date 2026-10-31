@@ -9,6 +9,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../premium/plan_tag.dart';
 import 'delete_account_sheet.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Personal Information Screen — PLAN #3
 /// Shows user profile from Firestore registration data
@@ -157,10 +158,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Center(
+                      Center(
                         child: LuxeMedallion(
                           icon: Icons.lock_reset_rounded,
-                          accent: LuxeColors.emerald,
+                          accent: context.planAccent,
                           size: 52,
                         ),
                       ),
@@ -190,12 +191,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 20),
                       if (loading)
-                        const Center(
+                        Center(
                           child: SizedBox.square(
                             dimension: 26,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: LuxeColors.emerald,
+                              color: context.planAccent,
                             ),
                           ),
                         )
@@ -261,12 +262,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const LuxeBackdrop(),
             SafeArea(
               child: _isLoading
-                  ? const Center(
+                  ? Center(
                       child: SizedBox.square(
                         dimension: 28,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: LuxeColors.emerald,
+                          color: context.planAccent,
                         ),
                       ),
                     )
@@ -287,7 +288,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     }
                                   },
                             style: TextButton.styleFrom(
-                              foregroundColor: LuxeColors.emerald,
+                              foregroundColor: context.planAccent,
                             ),
                             icon: Icon(
                               _isEditing
@@ -361,13 +362,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           width: 108,
           height: 108,
           padding: const EdgeInsets.all(3),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: SweepGradient(
               colors: [
                 LuxeColors.platinumHi,
                 LuxeColors.platinumLow,
-                LuxeColors.emerald,
+                context.planAccent,
                 LuxeColors.platinumLow,
                 LuxeColors.platinumHi,
               ],
@@ -449,7 +450,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           LuxeMedallion(
             icon: icon,
-            accent: editing ? LuxeColors.emerald : null,
+            accent: editing ? context.planAccent : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -469,7 +470,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: LuxeColors.text,
                             fontSize: 15.5,
                           ),
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             isDense: true,
                             filled: false,
                             contentPadding: EdgeInsets.symmetric(vertical: 6),
@@ -485,7 +486,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             focusedBorder: UnderlineInputBorder(
                               borderSide: BorderSide(
-                                color: LuxeColors.emerald,
+                                color: context.planAccent,
                                 width: 1.6,
                               ),
                             ),

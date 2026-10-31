@@ -12,6 +12,7 @@ import 'services/achievement_engine.dart';
 import 'widgets/achievement_detail_sheet.dart';
 import 'widgets/achievement_medal.dart';
 import 'widgets/achievement_unlock_ceremony.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Thành tựu — the badge collection: rank medallion, up-next strip,
 /// category filter and the full medal grid.
@@ -77,7 +78,7 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
               const LuxeBackdrop(),
               SafeArea(
                 child: RefreshIndicator(
-                  color: LuxeColors.emerald,
+                  color: context.planAccent,
                   backgroundColor: LuxeColors.raised,
                   onRefresh: () => ref
                       .read(achievementsControllerProvider.notifier)
@@ -253,6 +254,7 @@ class _RankHeroState extends State<_RankHero>
                         progress: state.rankProgress,
                         color: rank.rarity.accent,
                         t: t,
+                        accent: context.planAccent,
                       ),
                     ),
                     AchievementMedal(
@@ -316,7 +318,15 @@ class _RankHeroState extends State<_RankHero>
 }
 
 class _OrbitPainter extends CustomPainter {
-  _OrbitPainter({required this.progress, required this.color, required this.t});
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _OrbitPainter({
+    required this.progress,
+    required this.color,
+    required this.t,
+    required this.accent,
+  });
   final double progress;
   final Color color;
   final double t;
@@ -347,7 +357,7 @@ class _OrbitPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..shader = ui.Gradient.sweep(
             c,
-            [LuxeColors.emeraldDeep, LuxeColors.emerald, color],
+            [Color.lerp(accent, Colors.black, 0.25)!, accent, color],
             const [0.0, 0.7, 1.0],
             TileMode.clamp,
             -math.pi / 2,
@@ -370,7 +380,10 @@ class _OrbitPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_OrbitPainter old) =>
-      old.t != t || old.progress != progress || old.color != color;
+      old.t != t ||
+      old.progress != progress ||
+      old.color != color ||
+      old.accent != accent;
 }
 
 class _StatsStrip extends StatelessWidget {

@@ -9,6 +9,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../achievements/controllers/achievements_controller.dart';
 import '../../achievements/services/achievement_engine.dart';
 import '../../../core/providers/vehicle_providers.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Last 7 days of real charging, from the on-device session ledger (the
 /// same one the achievements use — no extra reads, no placeholder data).
@@ -123,7 +124,7 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
                 TextButton(
                   onPressed: widget.onViewHistory,
                   style: TextButton.styleFrom(
-                    foregroundColor: LuxeColors.emerald,
+                    foregroundColor: context.planAccent,
                   ),
                   child: const Text('Lịch sử'),
                 ),
@@ -168,6 +169,7 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
                         values: [for (final d in week) d.kwh],
                         grow: grow,
                         selected: _selected,
+                        accent: context.planAccent,
                       ),
                     ),
                   ),
@@ -205,8 +207,8 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
                       child: Text(
                         '${selected.day.day}/${selected.day.month}: ${_kwh(selected.kwh)} kWh · ${selected.sessions} phiên',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: LuxeColors.emerald,
+                        style: TextStyle(
+                          color: context.planAccent,
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -283,10 +285,14 @@ class _EmptyWeek extends StatelessWidget {
 }
 
 class _BarsPainter extends CustomPainter {
+  /// The plan's colour (QA 140).
+  final Color accent;
+
   _BarsPainter({
     required this.values,
     required this.grow,
     required this.selected,
+    required this.accent,
   });
   final List<double> values;
   final double grow;
@@ -335,7 +341,7 @@ class _BarsPainter extends CustomPainter {
         canvas.drawRRect(
           rect.inflate(3),
           Paint()
-            ..color = LuxeColors.emerald.withValues(alpha: 0.35)
+            ..color = accent.withValues(alpha: 0.35)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
         );
       }
@@ -346,7 +352,7 @@ class _BarsPainter extends CustomPainter {
             rect.outerRect.topCenter,
             rect.outerRect.bottomCenter,
             hot
-                ? const [Color(0xFFB9F5DC), LuxeColors.emeraldDeep]
+                ? [Color(0xFFB9F5DC), Color.lerp(accent, Colors.black, 0.25)!]
                 : const [LuxeColors.platinum, Color(0xFF3A3C41)],
           ),
       );
@@ -355,5 +361,8 @@ class _BarsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_BarsPainter old) =>
-      old.grow != grow || old.selected != selected || old.values != values;
+      old.grow != grow ||
+      old.selected != selected ||
+      old.values != values ||
+      old.accent != accent;
 }

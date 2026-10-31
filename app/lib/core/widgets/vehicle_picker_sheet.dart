@@ -9,6 +9,7 @@ import 'app_popup.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
+import '../theme/plan_style.dart';
 
 class VehiclePickerSheet extends ConsumerStatefulWidget {
   const VehiclePickerSheet({super.key});
@@ -217,22 +218,19 @@ class _VehicleCard extends StatelessWidget {
                             softWrap: true,
                           ),
                           if (selected)
-                            const LuxeTag(
-                              'Đang chọn',
-                              color: LuxeColors.emerald,
-                            ),
+                            LuxeTag('Đang chọn', color: context.planAccent),
                         ],
                       ),
                     ),
                     if (selected)
                       Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(
-                          color: LuxeColors.emerald,
+                        decoration: BoxDecoration(
+                          color: context.planAccent,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: LuxeColors.emeraldGlow,
+                              color: context.planAccentGlow,
                               blurRadius: 10,
                             ),
                           ],
@@ -280,7 +278,7 @@ class _VehicleCard extends StatelessWidget {
                           capacity.isFinite && capacity > 0
                               ? '${(capacity >= 1000 ? (capacity / 1000).toStringAsFixed(1) : capacity.round())} ${capacity >= 1000 ? 'kWh' : 'Wh'}'
                               : '—',
-                          LuxeColors.emerald,
+                          context.planAccent,
                         ),
                       ),
                       Container(
@@ -313,7 +311,7 @@ class _VehicleCard extends StatelessWidget {
                             context,
                             'Loại pin',
                             batteryTypeLabel,
-                            LuxeColors.emerald,
+                            context.planAccent,
                           ),
                         ),
                       ),

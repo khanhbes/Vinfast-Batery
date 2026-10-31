@@ -4,6 +4,7 @@ import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../ai/services/assistant_api.dart';
+import '../../core/theme/plan_style.dart';
 
 /// "BatteryBot đang nhớ gì" (Task 124): what the assistant remembers about
 /// this account, a learning switch and delete controls. Synced per account.
@@ -93,7 +94,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
     return LuxeScaffold(
       appBar: const LuxeAppBar(),
       body: RefreshIndicator(
-        color: LuxeColors.emerald,
+        color: context.planAccent,
         backgroundColor: LuxeColors.raised,
         onRefresh: _load,
         child: ListView(

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/models/smart_charging_session.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Recent sessions on glass: start → end level as a small platinum/emerald
 /// bar, the state and a compact meta line.
@@ -40,7 +41,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
             ),
             TextButton(
               onPressed: onViewAll,
-              style: TextButton.styleFrom(foregroundColor: LuxeColors.emerald),
+              style: TextButton.styleFrom(foregroundColor: context.planAccent),
               child: const Text('Tất cả'),
             ),
           ],
@@ -180,8 +181,8 @@ class _SessionTile extends StatelessWidget {
                         Text(
                           '${endSoc.toStringAsFixed(0)}%'
                           '${confirmed == null ? ' ước tính' : ''}',
-                          style: const TextStyle(
-                            color: LuxeColors.emerald,
+                          style: TextStyle(
+                            color: context.planAccent,
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
                           ),
@@ -256,8 +257,8 @@ class _LevelBar extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
-                    gradient: const LinearGradient(
-                      colors: [LuxeColors.emeraldDeep, LuxeColors.emerald],
+                    gradient: LinearGradient(
+                      colors: [context.planAccentDeep, context.planAccent],
                     ),
                   ),
                 ),

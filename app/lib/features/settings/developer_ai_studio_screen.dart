@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../data/services/server_smart_charger_service.dart';
+import '../../core/theme/plan_style.dart';
 
 class DeveloperAiStudioScreen extends StatefulWidget {
   const DeveloperAiStudioScreen({super.key, this.service});
@@ -634,15 +635,15 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               controller: _tabController,
               indicatorSize: TabBarIndicatorSize.tab,
               indicator: BoxDecoration(
-                color: LuxeColors.emerald.withValues(alpha: 0.14),
+                color: context.planAccent.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(CockpitRadius.small),
                 border: Border.all(
-                  color: LuxeColors.emerald.withValues(alpha: 0.4),
+                  color: context.planAccent.withValues(alpha: 0.4),
                   width: 1.2,
                 ),
               ),
               dividerColor: Colors.transparent,
-              labelColor: LuxeColors.emeraldDeep,
+              labelColor: context.planAccentDeep,
               unselectedLabelColor: LuxeColors.muted,
               labelStyle: CockpitTypography.label(
                 fontSize: 13,

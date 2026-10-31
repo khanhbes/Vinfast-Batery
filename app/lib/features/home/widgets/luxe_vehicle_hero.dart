@@ -238,10 +238,10 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                                 ),
                               ),
                             ),
-                            const Text(
+                            Text(
                               '%',
                               style: TextStyle(
-                                color: LuxeColors.emerald,
+                                color: context.planAccent,
                                 fontSize: 19,
                                 fontWeight: FontWeight.w300,
                               ),
@@ -293,7 +293,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
 
 /// Spotlight pool and a platinum pedestal ellipse.
 class _StagePainter extends CustomPainter {
-  _StagePainter({required this.glow, this.light = LuxeColors.emerald});
+  _StagePainter({required this.glow, required this.light});
   final double glow;
   final Color light;
 
@@ -401,13 +401,24 @@ class LuxeScooterArt extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
     child: CustomPaint(
-      painter: _ScooterPainter(level: level.clamp(0.0, 1.0), spin: spin),
+      painter: _ScooterPainter(
+        level: level.clamp(0.0, 1.0),
+        spin: spin,
+        accent: context.planAccent,
+      ),
     ),
   );
 }
 
 class _ScooterPainter extends CustomPainter {
-  _ScooterPainter({required this.level, required this.spin});
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _ScooterPainter({
+    required this.level,
+    required this.spin,
+    required this.accent,
+  });
   final double level;
   final double spin;
 
@@ -491,7 +502,7 @@ class _ScooterPainter extends CustomPainter {
       canvas.drawRRect(
         fill.inflate(3),
         Paint()
-          ..color = LuxeColors.emerald.withValues(alpha: 0.35)
+          ..color = accent.withValues(alpha: 0.35)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
       );
       canvas.drawRRect(
@@ -500,7 +511,7 @@ class _ScooterPainter extends CustomPainter {
           ..shader = ui.Gradient.linear(
             fill.outerRect.topLeft,
             fill.outerRect.topRight,
-            const [LuxeColors.emeraldDeep, LuxeColors.emerald],
+            [Color.lerp(accent, Colors.black, 0.25)!, accent],
           ),
       );
     }
@@ -543,7 +554,7 @@ class _ScooterPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ScooterPainter old) =>
-      old.level != level || old.spin != spin;
+      old.level != level || old.spin != spin || old.accent != accent;
 }
 
 /// Thin capsule battery bar with an emerald fill and a glowing head.
@@ -576,10 +587,10 @@ class _ChargeBar extends StatelessWidget {
                 gradient: LinearGradient(
                   colors: v < 0.2
                       ? const [Color(0xFFB45309), LuxeColors.champagne]
-                      : const [LuxeColors.emeraldDeep, LuxeColors.emerald],
+                      : [context.planAccentDeep, context.planAccent],
                 ),
-                boxShadow: const [
-                  BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 10),
+                boxShadow: [
+                  BoxShadow(color: context.planAccentGlow, blurRadius: 10),
                 ],
               ),
             ),

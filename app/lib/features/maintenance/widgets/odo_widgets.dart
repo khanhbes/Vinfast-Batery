@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 import '../../../core/utils/number_text.dart';
 import '../../../data/models/maintenance_task_model.dart';
 
@@ -86,7 +87,7 @@ class _DigitWheel extends StatelessWidget {
         ),
         border: Border.all(
           color: lit
-              ? LuxeColors.emerald.withValues(alpha: 0.5)
+              ? context.planAccent.withValues(alpha: 0.5)
               : LuxeColors.hairlineStrong,
         ),
       ),
@@ -107,7 +108,7 @@ class _DigitWheel extends StatelessWidget {
                   child: Text(
                     '$d',
                     style: TextStyle(
-                      color: lit ? LuxeColors.emerald : LuxeColors.platinumHi,
+                      color: lit ? context.planAccent : LuxeColors.platinumHi,
                       fontSize: 24,
                       fontWeight: FontWeight.w300,
                       fontFeatures: const [ui.FontFeature.tabularFigures()],

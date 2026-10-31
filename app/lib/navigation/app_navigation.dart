@@ -27,6 +27,7 @@ import '../features/more/more_screen.dart';
 import '../features/utilities/utilities_screen.dart';
 import '../core/services/screen_tour.dart';
 import '../features/premium/plan_tag.dart';
+import '../core/theme/plan_style.dart';
 
 final guideTourCoordinatorProvider = Provider<GuideTourCoordinator>((ref) {
   final coordinator = GuideTourCoordinator();
@@ -442,7 +443,7 @@ class _RefreshableTab extends ConsumerWidget {
 
     return RefreshIndicator(
       onRefresh: () => refreshCoordinator.refreshAll(),
-      color: LuxeColors.emerald,
+      color: context.planAccent,
       backgroundColor: LuxeColors.raised,
       displacement: 60,
       child: child,
@@ -536,11 +537,11 @@ class _NotificationBell extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 3),
             constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
             decoration: BoxDecoration(
-              color: LuxeColors.emerald,
+              color: context.planAccent,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: LuxeColors.background, width: 1.5),
-              boxShadow: const [
-                BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 8),
+              boxShadow: [
+                BoxShadow(color: context.planAccentGlow, blurRadius: 8),
               ],
             ),
             child: Center(

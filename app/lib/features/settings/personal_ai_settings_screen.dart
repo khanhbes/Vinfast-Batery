@@ -21,6 +21,7 @@ import '../premium/plan_tag.dart';
 import '../premium/premium_gate.dart';
 import '../premium/premium_screen.dart';
 import 'widgets/training_result_sheet.dart';
+import '../../core/theme/plan_style.dart';
 
 /// AI cá nhân (Tasks 126–127): what each model learned, the data collected
 /// since, and the owner's "Huấn luyện" buttons. Collection is silent;
@@ -401,7 +402,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
               children: [
                 LuxeSettingsRow(
                   icon: Icons.psychology_rounded,
-                  accent: consent ? LuxeColors.emerald : null,
+                  accent: consent ? context.planAccent : null,
                   title: 'Cho phép AI học từ dữ liệu xe',
                   subtitle: 'Có thể tắt hoặc xóa dữ liệu bất cứ lúc nào.',
                   trailing: LuxeSwitch(

@@ -924,12 +924,14 @@ class HistorySocTrack extends StatelessWidget {
     super.key,
     required this.start,
     required this.end,
-    this.color = LuxeColors.emerald,
+    this.color,
     this.showLabel = true,
   });
   final double start;
   final double end;
-  final Color color;
+
+  /// Defaults to the plan's accent (QA 140).
+  final Color? color;
   final bool showLabel;
 
   @override
@@ -949,7 +951,7 @@ class HistorySocTrack extends StatelessWidget {
                 painter: _SocTrackPainter(
                   from: a,
                   to: a + (b - a) * t,
-                  color: color,
+                  color: color ?? context.planAccent,
                 ),
               ),
             ),
@@ -1078,12 +1080,12 @@ class HistoryActiveCard extends StatelessWidget {
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: LuxeColors.emerald,
+                        color: context.planAccent,
                         boxShadow: [
                           BoxShadow(
-                            color: LuxeColors.emeraldGlow,
+                            color: context.planAccentGlow,
                             blurRadius: 8,
                           ),
                         ],
@@ -1186,15 +1188,16 @@ class _HistoryEmptyArtState extends State<HistoryEmptyArt>
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (context, _) =>
-            CustomPaint(painter: _PlugPainter(_ctrl.value)),
+            CustomPaint(painter: _PlugPainter(_ctrl.value, context.planAccent)),
       ),
     ),
   );
 }
 
 class _PlugPainter extends CustomPainter {
-  _PlugPainter(this.t);
+  _PlugPainter(this.t, this.accent);
   final double t;
+  final Color accent;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1214,7 +1217,7 @@ class _PlugPainter extends CustomPainter {
           ..strokeWidth = 0.8
           ..color = Color.lerp(
             const Color(0x0DFFFFFF),
-            LuxeColors.emerald.withValues(alpha: 0.18 - i * 0.05),
+            accent.withValues(alpha: 0.18 - i * 0.05),
             glow,
           )!,
       );
@@ -1229,7 +1232,7 @@ class _PlugPainter extends CustomPainter {
       canvas.drawRRect(
         plate.inflate(4),
         Paint()
-          ..color = LuxeColors.emerald.withValues(alpha: 0.28 * glow)
+          ..color = accent.withValues(alpha: 0.28 * glow)
           ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
       );
     }
@@ -1249,7 +1252,7 @@ class _PlugPainter extends CustomPainter {
         ..strokeWidth = 1
         ..color = Color.lerp(
           LuxeColors.hairlineStrong,
-          LuxeColors.emerald.withValues(alpha: 0.8),
+          accent.withValues(alpha: 0.8),
           glow,
         )!,
     );
@@ -1270,12 +1273,7 @@ class _PlugPainter extends CustomPainter {
     canvas.drawCircle(
       socketC + const Offset(16, 0),
       3,
-      Paint()
-        ..color = Color.lerp(
-          const Color(0x33FFFFFF),
-          LuxeColors.emerald,
-          glow,
-        )!,
+      Paint()..color = Color.lerp(const Color(0x33FFFFFF), accent, glow)!,
     );
 
     // Plug body slides from the left until its prongs sit in the slots.
@@ -1350,13 +1348,13 @@ class _PlugPainter extends CustomPainter {
           pos.position,
           7,
           Paint()
-            ..color = LuxeColors.emerald.withValues(alpha: 0.45 * fade)
+            ..color = accent.withValues(alpha: 0.45 * fade)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
         );
         canvas.drawCircle(
           pos.position,
           2.6,
-          Paint()..color = LuxeColors.emerald.withValues(alpha: fade),
+          Paint()..color = accent.withValues(alpha: fade),
         );
       }
     }
@@ -1365,5 +1363,5 @@ class _PlugPainter extends CustomPainter {
   static double lerpDouble(double a, double b, double t) => a + (b - a) * t;
 
   @override
-  bool shouldRepaint(_PlugPainter old) => old.t != t;
+  bool shouldRepaint(_PlugPainter old) => old.t != t || old.accent != accent;
 }

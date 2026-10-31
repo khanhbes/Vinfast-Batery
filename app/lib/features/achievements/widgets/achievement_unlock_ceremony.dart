@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../models/achievement.dart';
 import 'achievement_medal.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Full-screen unlock ceremony. Up to four medals play one after another;
 /// a bigger batch (e.g. the first sync of an existing rider) becomes one
@@ -169,7 +170,7 @@ class _CeremonyState extends State<_Ceremony> with TickerProviderStateMixin {
                         child: CustomPaint(
                           painter: _BurstPainter(
                             t: _phase(0.38, 1.0, Curves.linear),
-                            colors: [metal[0], metal[1], LuxeColors.emerald],
+                            colors: [metal[0], metal[1], context.planAccent],
                             centre: Offset(c.maxWidth / 2, c.maxHeight * 0.36),
                             seed: _index,
                           ),
@@ -320,8 +321,8 @@ class _CeremonyState extends State<_Ceremony> with TickerProviderStateMixin {
               const SizedBox(width: 10),
               Text(
                 '+${def.points} điểm',
-                style: const TextStyle(
-                  color: LuxeColors.emerald,
+                style: TextStyle(
+                  color: context.planAccent,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),

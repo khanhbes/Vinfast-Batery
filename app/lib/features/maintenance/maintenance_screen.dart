@@ -20,6 +20,7 @@ import '../../data/repositories/maintenance_repository.dart';
 import 'vinfast_service_catalog.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/theme/plan_style.dart';
 
 // =============================================================================
 // Service / Maintenance Screen V6 — Category-first, Urgency-clear
@@ -165,7 +166,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
         final filtered = _filterTasks(tasks, _filter);
 
         return RefreshIndicator(
-          color: LuxeColors.emerald,
+          color: context.planAccent,
           backgroundColor: LuxeColors.raised,
           onRefresh: _loadCurrentOdo,
           child: CustomScrollView(
@@ -682,7 +683,6 @@ abstract final class _Lx {
   static const card = LuxeColors.sheet;
   static const surfaceVariant = LuxeColors.raised;
   static const glassBorder = LuxeColors.hairline;
-  static const primary = LuxeColors.emerald;
   static const success = LuxeColors.emerald;
   static const warning = LuxeColors.champagne;
   static const error = LuxeColors.danger;
@@ -871,7 +871,7 @@ class _TaskCard extends StatelessWidget {
                       tooltip: 'Đánh dấu hoàn thành',
                       onPressed: onComplete,
                       icon: const Icon(Icons.check_circle_outline_rounded),
-                      color: LuxeColors.emerald,
+                      color: context.planAccent,
                     ),
                   PopupMenuButton<String>(
                     tooltip: 'Tùy chọn',
@@ -1298,7 +1298,7 @@ class _UrgencyMeta {
       case MaintenanceUrgency.upcoming:
         return _UrgencyMeta(
           label: 'DỰ KIẾN',
-          barColor: _Lx.primary,
+          barColor: LuxeColors.platinum,
           textColor: _Lx.textSecondary,
           borderColor: _Lx.glassBorder,
         );
@@ -1450,7 +1450,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                 onPressed: _save,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
-                  backgroundColor: _Lx.primary,
+                  backgroundColor: context.planAccent,
                   foregroundColor: _Lx.background,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),

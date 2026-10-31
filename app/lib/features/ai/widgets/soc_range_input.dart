@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/seven_segment_text.dart';
 import '../../../data/models/app_appearance.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Battery % now → target for the Charge tab layouts other than the dial
 /// (QA 131): one horizontal bar with two thumbs — silver for the scooter's
@@ -49,7 +50,7 @@ class SocRangeInput extends StatelessWidget {
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             trackHeight: 14,
-            activeTrackColor: LuxeColors.emerald.withValues(alpha: 0.75),
+            activeTrackColor: context.planAccent.withValues(alpha: 0.75),
             inactiveTrackColor: LuxeColors.glassStrong,
             thumbColor: LuxeColors.platinumHi,
             overlayColor: LuxeColors.platinumHi.withValues(alpha: 0.12),
@@ -153,14 +154,14 @@ class _Readout extends StatelessWidget {
           SevenSegmentText(
             '$goal',
             height: 52,
-            color: LuxeColors.emerald,
+            color: context.planAccent,
             semanticsLabel: 'Mục tiêu $goal%',
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(4, 0, 0, 4),
             child: Text(
               '%',
-              style: TextStyle(color: LuxeColors.emerald, fontSize: 15.5),
+              style: TextStyle(color: context.planAccent, fontSize: 15.5),
             ),
           ),
         ],
@@ -189,8 +190,8 @@ class _Readout extends StatelessWidget {
           ),
           Text(
             '$goal%',
-            style: const TextStyle(
-              color: LuxeColors.emerald,
+            style: TextStyle(
+              color: context.planAccent,
               fontSize: 40,
               fontWeight: FontWeight.w300,
               fontFeatures: [FontFeature.tabularFigures()],

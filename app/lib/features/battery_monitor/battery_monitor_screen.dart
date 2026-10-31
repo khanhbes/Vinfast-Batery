@@ -15,6 +15,7 @@ import '../../data/services/range_estimator.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
 import 'battery_health_screen.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Battery monitor: only what the app really knows (QA 129).
 ///
@@ -61,7 +62,7 @@ class BatteryMonitorScreen extends ConsumerWidget {
         ],
       ),
       body: RefreshIndicator(
-        color: LuxeColors.emerald,
+        color: context.planAccent,
         backgroundColor: LuxeColors.raised,
         onRefresh: refresh,
         child: CustomScrollView(
@@ -214,7 +215,7 @@ class _CurrentBatteryCard extends StatelessWidget {
         ? LuxeColors.danger
         : percent < 50
         ? LuxeColors.champagne
-        : LuxeColors.emerald;
+        : context.planAccent;
     final status = !has
         ? 'Chưa có số pin'
         : percent < 20

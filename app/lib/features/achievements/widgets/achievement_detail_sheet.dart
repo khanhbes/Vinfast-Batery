@@ -7,6 +7,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../services/achievement_engine.dart';
 import 'achievement_medal.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Detail of one achievement: the medal floating with a periodic shine,
 /// rarity, points, how to unlock and the progress or unlock date.
@@ -107,7 +108,7 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
                 const SizedBox(width: 8),
                 _Pill(text: def.category.label, color: LuxeColors.platinumMid),
                 const SizedBox(width: 8),
-                _Pill(text: '${def.points} điểm', color: LuxeColors.emerald),
+                _Pill(text: '${def.points} điểm', color: context.planAccent),
               ],
             ),
             const SizedBox(height: 14),
@@ -129,16 +130,16 @@ class _SheetState extends State<_Sheet> with SingleTickerProviderStateMixin {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.verified_rounded,
                     size: 16,
-                    color: LuxeColors.emerald,
+                    color: context.planAccent,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Mở khóa ngày ${DateFormat('dd/MM/yyyy').format(p.unlockedAt!.toLocal())}',
-                    style: const TextStyle(
-                      color: LuxeColors.emerald,
+                    style: TextStyle(
+                      color: context.planAccent,
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -226,11 +227,11 @@ class LuxeProgressBar extends StatelessWidget {
               width: math.max(height, c.maxWidth * v),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(height),
-                gradient: const LinearGradient(
-                  colors: [LuxeColors.emeraldDeep, LuxeColors.emerald],
+                gradient: LinearGradient(
+                  colors: [context.planAccentDeep, context.planAccent],
                 ),
-                boxShadow: const [
-                  BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 8),
+                boxShadow: [
+                  BoxShadow(color: context.planAccentGlow, blurRadius: 8),
                 ],
               ),
             ),

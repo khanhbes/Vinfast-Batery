@@ -313,9 +313,9 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
             child: _CompareTable(),
           ),
           const SizedBox(height: 16),
-          const LuxeNotice(
+          LuxeNotice(
             icon: Icons.shield_rounded,
-            color: LuxeColors.emerald,
+            color: context.planAccent,
             message:
                 'An toàn luôn miễn phí ở mọi gói: bật/dừng sạc có xác minh, '
                 'hẹn giờ, tự ngắt khi quá tải hoặc quá nóng. Hết gói không '
@@ -853,7 +853,7 @@ class _ActionBar extends StatelessWidget {
       content = LuxeNotice(
         key: const ValueKey('premium-current'),
         icon: Icons.check_circle_outline_rounded,
-        color: LuxeColors.emerald,
+        color: context.planAccent,
         message: plan.tier == tier
             ? 'Bạn đang dùng gói này.'
             : 'Gói ${plan.tier.label} của bạn đã gồm mọi thứ của ${tier.label}.',
@@ -1036,7 +1036,7 @@ class _PromoField extends StatelessWidget {
         LuxeNotice(
           key: const ValueKey('premium-promo-applied'),
           icon: Icons.local_offer_rounded,
-          color: LuxeColors.emerald,
+          color: context.planAccent,
           message:
               'Mã ${applied!.code}: giảm ${applied!.percentOff}%'
               '${applied!.validTo != null ? ' · đến ${_date(applied!.validTo!)}' : ''}. '

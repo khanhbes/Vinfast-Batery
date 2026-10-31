@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Modal bottom sheet to let the user adjust the current battery percentage
 /// when the vehicle or BMS is not automatically synchronizing telemetry.
@@ -55,7 +56,7 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
         ? LuxeColors.danger
         : rounded < 40
         ? LuxeColors.champagne
-        : LuxeColors.emerald;
+        : context.planAccent;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
@@ -214,11 +215,11 @@ class _PresetPill extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(99),
             color: selected
-                ? LuxeColors.emerald.withValues(alpha: 0.14)
+                ? context.planAccent.withValues(alpha: 0.14)
                 : LuxeColors.glass,
             border: Border.all(
               color: selected
-                  ? LuxeColors.emerald.withValues(alpha: 0.7)
+                  ? context.planAccent.withValues(alpha: 0.7)
                   : LuxeColors.hairline,
             ),
           ),

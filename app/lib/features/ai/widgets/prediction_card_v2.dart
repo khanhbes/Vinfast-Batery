@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/services/charge_estimator.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// AI charging plan: duration as the hero figure, the automatic stop time
 /// and the model provenance. Energy/cost estimates are intentionally not
@@ -44,10 +45,10 @@ class PredictionCardV2 extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.auto_awesome_rounded,
                 size: 16,
-                color: LuxeColors.emerald,
+                color: context.planAccent,
               ),
               const SizedBox(width: 8),
               const Expanded(

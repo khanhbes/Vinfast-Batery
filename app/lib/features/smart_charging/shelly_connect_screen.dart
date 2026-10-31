@@ -20,6 +20,7 @@ import '../../data/services/shelly_connection_coordinator.dart';
 import '../../data/services/smart_charger_service.dart';
 import 'smart_charger_setup_hub_screen.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Normal Mode Shelly setup.
 /// Designed for everyday users: hides all technical secrets (Cloud keys,
@@ -482,7 +483,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                       action: TextButton(
                         onPressed: () => setState(() => _activeFlow = 3),
                         style: TextButton.styleFrom(
-                          foregroundColor: LuxeColors.emerald,
+                          foregroundColor: context.planAccent,
                         ),
                         child: const Text('Nhập mã'),
                       ),
@@ -662,7 +663,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                gradient: _glassEmerald,
+                gradient: _glassAccent(ui.primary),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: ui.primary.withValues(alpha: 0.2)),
               ),
@@ -1084,7 +1085,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
     padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(
       children: [
-        Icon(icon, size: 16, color: LuxeColors.emerald),
+        Icon(icon, size: 16, color: context.planAccent),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1226,7 +1227,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
   ) => Expanded(
     child: Column(
       children: [
-        Icon(icon, size: 18, color: LuxeColors.emerald),
+        Icon(icon, size: 18, color: context.planAccent),
         const SizedBox(height: 6),
         FittedBox(
           fit: BoxFit.scaleDown,
@@ -1256,7 +1257,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: _glassEmerald,
+          gradient: _glassAccent(ui.primary),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: ui.primary.withValues(alpha: 0.3)),
         ),
@@ -1380,9 +1381,9 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              const LuxeMedallion(
+              LuxeMedallion(
                 icon: Icons.power_rounded,
-                accent: LuxeColors.emerald,
+                accent: context.planAccent,
                 size: 46,
               ),
               const SizedBox(width: 14),
@@ -1635,8 +1636,8 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           width: 6,
           height: 6,
           margin: const EdgeInsets.only(top: 6, right: 10),
-          decoration: const BoxDecoration(
-            color: LuxeColors.emerald,
+          decoration: BoxDecoration(
+            color: context.planAccent,
             shape: BoxShape.circle,
           ),
         ),
@@ -1828,10 +1829,11 @@ const _glass = LinearGradient(
   colors: [Color(0x12FFFFFF), Color(0x06FFFFFF)],
 );
 
-const _glassEmerald = LinearGradient(
+/// Glass tinted with the plan's accent (QA 140).
+LinearGradient _glassAccent(Color accent) => LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [LuxeColors.emeraldTint, Color(0x0634D399)],
+  colors: [accent.withValues(alpha: 0.1), accent.withValues(alpha: 0.024)],
 );
 
 /// Status medallion: a metal well holding the state icon, ringed by an arc
@@ -1898,13 +1900,13 @@ class _LuxeRadarState extends State<_LuxeRadar>
         child: AnimatedBuilder(
           animation: _controller,
           builder: (context, child) => CustomPaint(
-            painter: _RadarPainter(_controller.value),
+            painter: _RadarPainter(_controller.value, context.planAccent),
             child: child,
           ),
-          child: const Center(
+          child: Center(
             child: LuxeMedallion(
               icon: Icons.wifi_tethering_rounded,
-              accent: LuxeColors.emerald,
+              accent: context.planAccent,
               size: 56,
             ),
           ),
@@ -1915,7 +1917,10 @@ class _LuxeRadarState extends State<_LuxeRadar>
 }
 
 class _RadarPainter extends CustomPainter {
-  _RadarPainter(this.t);
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _RadarPainter(this.t, this.accent);
   final double t;
 
   @override
@@ -1941,10 +1946,7 @@ class _RadarPainter extends CustomPainter {
         ..shader = SweepGradient(
           startAngle: a - 1.1,
           endAngle: a,
-          colors: [
-            LuxeColors.emerald.withValues(alpha: 0),
-            LuxeColors.emerald.withValues(alpha: 0.28),
-          ],
+          colors: [accent.withValues(alpha: 0), accent.withValues(alpha: 0.28)],
           transform: GradientRotation(0),
         ).createShader(rect),
     );
@@ -1952,7 +1954,7 @@ class _RadarPainter extends CustomPainter {
       c,
       c + Offset(math.cos(a), math.sin(a)) * r,
       Paint()
-        ..color = LuxeColors.emerald.withValues(alpha: 0.8)
+        ..color = accent.withValues(alpha: 0.8)
         ..strokeWidth = 1.4,
     );
     // Expanding pulse ring.
@@ -1963,14 +1965,12 @@ class _RadarPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2
-        ..color = LuxeColors.emerald.withValues(
-          alpha: 0.35 * (1 - ((t * 2) % 1)),
-        ),
+        ..color = accent.withValues(alpha: 0.35 * (1 - ((t * 2) % 1))),
     );
   }
 
   @override
-  bool shouldRepaint(_RadarPainter old) => old.t != t;
+  bool shouldRepaint(_RadarPainter old) => old.t != t || old.accent != accent;
 }
 
 /// Six brushed-metal slots for the admin code. One real (invisible)
@@ -2028,7 +2028,7 @@ class _EngravedCodeFieldState extends State<_EngravedCodeField> {
                           ),
                           border: Border.all(
                             color: _focus.hasFocus && i == text.length
-                                ? LuxeColors.emerald
+                                ? context.planAccent
                                 : i < text.length
                                 ? LuxeColors.hairlineStrong
                                 : LuxeColors.hairline,
@@ -2037,9 +2037,9 @@ class _EngravedCodeFieldState extends State<_EngravedCodeField> {
                                 : 1,
                           ),
                           boxShadow: _focus.hasFocus && i == text.length
-                              ? const [
+                              ? [
                                   BoxShadow(
-                                    color: LuxeColors.emeraldSoft,
+                                    color: context.planAccentSoft,
                                     blurRadius: 12,
                                   ),
                                 ]

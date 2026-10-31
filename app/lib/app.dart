@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import 'core/providers/entitlement_provider.dart';
 import 'core/theme/luxe_theme.dart';
 import 'core/theme/plan_style.dart';
 import 'core/widgets/app_popup.dart';
+import 'data/services/notification_accent.dart';
 import 'data/services/notification_service.dart';
 import 'data/services/push_notification_service.dart';
 import 'features/ai/services/learning_flow.dart';
@@ -130,6 +133,8 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
         !ready ||
         ref.watch(appearanceProvider.select((look) => look.ultraEffects));
     final theme = LuxeTheme.data(tier: tier);
+    // QA 140: Android notifications take the plan's tint too.
+    if (ready) unawaited(NotificationAccent.setTier(tier));
     return MaterialApp(
       title: 'Pinova',
       debugShowCheckedModeBanner: false,

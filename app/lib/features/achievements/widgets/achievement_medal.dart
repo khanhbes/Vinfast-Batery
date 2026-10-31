@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../models/achievement.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Minted 2D medal: coin-edged metallic rim in the rarity's metal, a sunken
 /// face with an engraved ring, the icon struck in metal. Locked medals are
@@ -50,6 +51,7 @@ class AchievementMedal extends StatelessWidget {
                   unlocked &&
                   (rarity == AchievementRarity.platinum ||
                       rarity == AchievementRarity.emerald),
+              accent: context.planAccent,
             ),
           ),
           // Struck icon: metal gradient when unlocked, faint engraving when not.
@@ -106,11 +108,15 @@ class AchievementMedal extends StatelessWidget {
 }
 
 class _MedalPainter extends CustomPainter {
+  /// The plan's colour (QA 140).
+  final Color accent;
+
   _MedalPainter({
     required this.metal,
     required this.unlocked,
     required this.progress,
     required this.laurel,
+    required this.accent,
   });
 
   final List<Color> metal;
@@ -278,7 +284,7 @@ class _MedalPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..shader = ui.Gradient.sweep(
             c,
-            const [LuxeColors.emeraldDeep, LuxeColors.emerald],
+            [Color.lerp(accent, Colors.black, 0.25)!, accent],
             null,
             TileMode.clamp,
             -math.pi / 2,
@@ -293,7 +299,8 @@ class _MedalPainter extends CustomPainter {
       old.unlocked != unlocked ||
       old.progress != progress ||
       old.metal != metal ||
-      old.laurel != laurel;
+      old.laurel != laurel ||
+      old.accent != accent;
 }
 
 class _ShinePainter extends CustomPainter {

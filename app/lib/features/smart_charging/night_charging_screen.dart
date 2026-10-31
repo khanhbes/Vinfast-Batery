@@ -11,6 +11,7 @@ import '../../data/models/entitlement.dart';
 import '../../data/services/charge_estimator.dart';
 import '../ai/dashboard_scan_screen.dart';
 import '../premium/premium_gate.dart';
+import '../../core/theme/plan_style.dart';
 
 /// A night plan as `/api/night-charging/<vehicle>` returns it (QA 135).
 class NightPlan {
@@ -265,10 +266,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
           ),
           const SizedBox(height: 16),
           if (_loading)
-            const Center(
+            Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(color: LuxeColors.emerald),
+                child: CircularProgressIndicator(color: context.planAccent),
               ),
             )
           else ...[
@@ -353,10 +354,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              const LuxeNotice(
+              LuxeNotice(
                 key: ValueKey('night-safety'),
                 icon: Icons.shield_moon_rounded,
-                color: LuxeColors.emerald,
+                color: context.planAccent,
                 message:
                     'Ban đêm ngắt ngay khi ổ trên 60 °C (ban ngày 75 °C), khi '
                     'công suất cao bất thường, hoặc khi sạc kéo dài quá dự '
@@ -374,10 +375,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
               ],
               const SizedBox(height: 16),
               if (_busy)
-                const Center(
+                Center(
                   child: Padding(
                     padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(color: LuxeColors.emerald),
+                    child: CircularProgressIndicator(color: context.planAccent),
                   ),
                 )
               else
@@ -414,7 +415,7 @@ class _PlanCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         color: LuxeColors.raised,
-        border: Border.all(color: LuxeColors.emerald.withValues(alpha: 0.4)),
+        border: Border.all(color: context.planAccent.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

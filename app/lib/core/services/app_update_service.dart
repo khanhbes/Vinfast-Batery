@@ -9,6 +9,7 @@ import 'notification_center_service.dart';
 import 'app_feature_flags.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../theme/plan_style.dart';
 
 /// Kiểm tra version mới + remote config từ /api/app/config và hiển thị
 /// dialog cập nhật (optional hoặc forced).
@@ -363,12 +364,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: LuxeColors.emerald.withAlpha(28),
+              color: context.planAccent.withAlpha(28),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.system_update_rounded,
-              color: LuxeColors.emerald,
+              color: context.planAccent,
               size: 22,
             ),
           ),
@@ -417,8 +418,8 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                   latestBuild > 0
                       ? '$latestVersion+$latestBuild'
                       : latestVersion,
-                  style: const TextStyle(
-                    color: LuxeColors.emerald,
+                  style: TextStyle(
+                    color: context.planAccent,
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                   ),
@@ -519,7 +520,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           ),
           label: Text(_downloadError == null ? 'Cập nhật' : 'Thử lại'),
           style: FilledButton.styleFrom(
-            backgroundColor: LuxeColors.emerald,
+            backgroundColor: context.planAccent,
             foregroundColor: LuxeColors.background,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -600,9 +601,9 @@ class _UpdateDialogState extends State<_UpdateDialog> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   '• ',
-                  style: TextStyle(color: LuxeColors.emerald, fontSize: 12.5),
+                  style: TextStyle(color: context.planAccent, fontSize: 12.5),
                 ),
                 Expanded(
                   child: Text(

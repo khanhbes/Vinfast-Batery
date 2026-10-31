@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'notification_accent.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -52,6 +53,7 @@ class NotificationService {
 
   Future<void> initialize() async {
     if (_initialized) return;
+    await NotificationAccent.color(); // the plan's tint (QA 140)
 
     // ── 1. Timezone (bắt buộc cho zonedSchedule) ────────────────────────
     tz_data.initializeTimeZones();
@@ -228,7 +230,7 @@ class NotificationService {
   }
 
   AndroidNotificationDetails _smartChargeDetails() =>
-      const AndroidNotificationDetails(
+      AndroidNotificationDetails(
         channelSmartCharge,
         'Cảnh báo sạc thông minh',
         channelDescription:
@@ -236,6 +238,7 @@ class NotificationService {
         importance: Importance.high,
         priority: Priority.high,
         icon: '@drawable/ic_stat_pinova',
+        color: NotificationAccent.current,
       );
 
   DarwinNotificationDetails _iosDetails({bool presentSound = true}) =>
@@ -304,11 +307,12 @@ class NotificationService {
       'Đủ dữ liệu để huấn luyện AI',
       message,
       NotificationDetails(
-        android: const AndroidNotificationDetails(
+        android: AndroidNotificationDetails(
           channelLearning,
           'AI cá nhân',
           channelDescription: 'Báo khi đủ dữ liệu để huấn luyện mô hình riêng',
           icon: '@drawable/ic_stat_pinova',
+          color: NotificationAccent.current,
         ),
         iOS: _iosDetails(presentSound: false),
       ),
@@ -333,7 +337,7 @@ class NotificationService {
       title,
       message,
       NotificationDetails(
-        android: const AndroidNotificationDetails(
+        android: AndroidNotificationDetails(
           channelUrgent,
           'Cảnh báo khẩn',
           channelDescription:
@@ -343,6 +347,7 @@ class NotificationService {
           category: AndroidNotificationCategory.alarm,
           audioAttributesUsage: AudioAttributesUsage.alarm,
           icon: '@drawable/ic_stat_pinova',
+          color: NotificationAccent.current,
         ),
         iOS: _iosDetails(),
       ),
@@ -403,6 +408,7 @@ class NotificationService {
           channelMaintenance,
           'Bảo dưỡng',
           icon: '@drawable/ic_stat_pinova',
+          color: NotificationAccent.current,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -467,6 +473,7 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@drawable/ic_stat_pinova',
+          color: NotificationAccent.current,
         ),
       ),
       androidScheduleMode: androidMode,
@@ -522,6 +529,7 @@ class NotificationService {
           importance: Importance.high,
           priority: Priority.high,
           icon: '@drawable/ic_stat_pinova',
+          color: NotificationAccent.current,
         ),
       ),
       payload: 'maintenance_$taskId',

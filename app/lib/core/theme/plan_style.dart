@@ -259,3 +259,24 @@ class _SlideGradient extends GradientTransform {
       // A mirrored gradient repeats every two widths.
       Matrix4.translationValues(bounds.width * 2 * phase, 0, 0);
 }
+
+/// QA 140: the plan's colour for everything that is not a status. Emerald
+/// stays "verified / charging", champagne an estimate, rose an error; any
+/// other highlight (selection, links, charts, buttons, loaders) follows the
+/// plan on every screen.
+extension PlanAccentContext on BuildContext {
+  PlanStyle get plan => PlanStyle.of(this);
+  Color get planAccent => plan.accent;
+  Color get planAccentDeep => plan.accentDeep;
+  Color get planAccentGlow => plan.accentGlow;
+  Color get planAccentSoft => plan.accentSoft;
+  Color get planAccentTint => plan.accentTint;
+}
+
+/// The accent's shades, for painters that receive a [PlanStyle] or colour.
+extension PlanAccentShades on PlanStyle {
+  Color get accentDeep => accentColors.last;
+  Color get accentGlow => accent.withValues(alpha: 0x55 / 255);
+  Color get accentSoft => accent.withValues(alpha: 0x33 / 255);
+  Color get accentTint => accent.withValues(alpha: 0x1A / 255);
+}

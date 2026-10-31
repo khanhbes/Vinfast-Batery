@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../data/models/vehicle_learning_status.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// "Mô hình có tốt hơn không?" (Task 127): the training verdict with numbers
 /// the owner can check — error of the model in use, the new one and a simple
@@ -151,7 +152,7 @@ class _ErrorBars extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = [
       ('Bản đang dùng', evaluation.current, LuxeColors.platinum),
-      ('Bản mới', evaluation.next, LuxeColors.emerald),
+      ('Bản mới', evaluation.next, context.planAccent),
       (evaluation.baselineLabel, evaluation.baseline, LuxeColors.dim),
     ].where((row) => row.$2.scored).toList();
     final worst = rows.fold<double>(
@@ -281,7 +282,7 @@ class _CaseTable extends StatelessWidget {
                     flex: 3,
                     child: Text(
                       _v(row.next),
-                      style: cell.copyWith(color: LuxeColors.emerald),
+                      style: cell.copyWith(color: context.planAccent),
                     ),
                   ),
                 ],

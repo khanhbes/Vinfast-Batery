@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// LUXE auth kit (Task 118): Login, Register and Password reset continue the
 /// splash → Getting started language — dark backdrop, platinum emblem, one
@@ -73,7 +74,7 @@ class LuxeAuthEmblem extends StatelessWidget {
           duration: luxeDuration(context, 1200),
           curve: LuxeMotion.enter,
           builder: (context, t, child) => CustomPaint(
-            foregroundPainter: _EmblemRimPainter(t),
+            foregroundPainter: _EmblemRimPainter(t, context.planAccent),
             child: child,
           ),
           child: Padding(
@@ -93,9 +94,9 @@ class LuxeAuthEmblem extends StatelessWidget {
                 child: Image.asset(
                   'assets/icons/app_icon.png',
                   fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => const ColoredBox(
+                  errorBuilder: (_, _, _) => ColoredBox(
                     color: LuxeColors.raised,
-                    child: Icon(Icons.bolt_rounded, color: LuxeColors.emerald),
+                    child: Icon(Icons.bolt_rounded, color: context.planAccent),
                   ),
                 ),
               ),
@@ -108,7 +109,10 @@ class LuxeAuthEmblem extends StatelessWidget {
 }
 
 class _EmblemRimPainter extends CustomPainter {
-  _EmblemRimPainter(this.t);
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _EmblemRimPainter(this.t, this.accent);
   final double t;
 
   @override
@@ -137,18 +141,15 @@ class _EmblemRimPainter extends CustomPainter {
       p,
       5,
       Paint()
-        ..color = LuxeColors.emerald.withValues(alpha: 0.35 * t)
+        ..color = accent.withValues(alpha: 0.35 * t)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
     );
-    canvas.drawCircle(
-      p,
-      2,
-      Paint()..color = LuxeColors.emerald.withValues(alpha: t),
-    );
+    canvas.drawCircle(p, 2, Paint()..color = accent.withValues(alpha: t));
   }
 
   @override
-  bool shouldRepaint(_EmblemRimPainter old) => old.t != t;
+  bool shouldRepaint(_EmblemRimPainter old) =>
+      old.t != t || old.accent != accent;
 }
 
 /// Eyebrow + platinum title + caption, revealed in sequence.
@@ -277,8 +278,8 @@ class LuxeAuthLink extends StatelessWidget {
           ),
           TextSpan(
             text: action,
-            style: const TextStyle(
-              color: LuxeColors.emerald,
+            style: TextStyle(
+              color: context.planAccent,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -330,7 +331,7 @@ class LuxePasswordStrength extends StatelessWidget {
     final color = switch (s) {
       <= 1 => LuxeColors.danger,
       2 => LuxeColors.champagne,
-      _ => LuxeColors.emerald,
+      _ => context.planAccent,
     };
     final d = luxeDuration(context, 320);
     return Semantics(

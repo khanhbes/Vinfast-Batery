@@ -7,6 +7,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
 import 'widgets/luxe_auth_widgets.dart';
+import '../../core/theme/plan_style.dart';
 
 class PasswordResetScreen extends StatefulWidget {
   const PasswordResetScreen({super.key, this.initialEmail = ''});
@@ -199,8 +200,8 @@ class _SentNotice extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        color: LuxeColors.emerald.withValues(alpha: 0.07),
-        border: Border.all(color: LuxeColors.emerald.withValues(alpha: 0.3)),
+        color: context.planAccent.withValues(alpha: 0.07),
+        border: Border.all(color: context.planAccent.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,7 +214,7 @@ class _SentNotice extends StatelessWidget {
                 duration: luxeDuration(context, 700),
                 curve: LuxeMotion.enter,
                 builder: (context, t, _) =>
-                    CustomPaint(painter: _CheckPainter(t)),
+                    CustomPaint(painter: _CheckPainter(t, context.planAccent)),
               ),
             ),
           ),
@@ -235,7 +236,10 @@ class _SentNotice extends StatelessWidget {
 }
 
 class _CheckPainter extends CustomPainter {
-  _CheckPainter(this.t);
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _CheckPainter(this.t, this.accent);
   final double t;
 
   @override
@@ -247,7 +251,7 @@ class _CheckPainter extends CustomPainter {
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.2
-        ..color = LuxeColors.emerald.withValues(alpha: 0.5 * t),
+        ..color = accent.withValues(alpha: 0.5 * t),
     );
     final path = Path()
       ..moveTo(size.width * 0.28, size.height * 0.52)
@@ -261,11 +265,11 @@ class _CheckPainter extends CustomPainter {
           ..strokeWidth = 2
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round
-          ..color = LuxeColors.emerald,
+          ..color = accent,
       );
     }
   }
 
   @override
-  bool shouldRepaint(_CheckPainter old) => old.t != t;
+  bool shouldRepaint(_CheckPainter old) => old.t != t || old.accent != accent;
 }

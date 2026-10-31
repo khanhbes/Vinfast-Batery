@@ -453,11 +453,11 @@ class _Acknowledgement extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           color: value
-              ? LuxeColors.emerald.withValues(alpha: 0.08)
+              ? context.planAccent.withValues(alpha: 0.08)
               : historyAmber.withValues(alpha: 0.06),
           border: Border.all(
             color: value
-                ? LuxeColors.emerald.withValues(alpha: 0.45)
+                ? context.planAccent.withValues(alpha: 0.45)
                 : historyAmber.withValues(alpha: 0.3),
           ),
         ),
@@ -466,7 +466,7 @@ class _Acknowledgement extends StatelessWidget {
             Checkbox(
               value: value,
               onChanged: (v) => onChanged(v == true),
-              activeColor: LuxeColors.emerald,
+              activeColor: context.planAccent,
               checkColor: const Color(0xFF04140D),
               side: const BorderSide(color: LuxeColors.platinumMid, width: 1.4),
               shape: RoundedRectangleBorder(

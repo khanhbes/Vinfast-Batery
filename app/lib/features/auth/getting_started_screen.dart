@@ -11,6 +11,7 @@ import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
+import '../../core/theme/plan_style.dart';
 
 /// First-run flag. The intro shows once per install, before sign-in.
 abstract final class GettingStartedPrefs {
@@ -378,8 +379,8 @@ class _GettingStartedScreenState extends State<GettingStartedScreen>
                                 phase(0.25, 0.65),
                                 Text(
                                   page.eyebrow,
-                                  style: const TextStyle(
-                                    color: LuxeColors.emerald,
+                                  style: TextStyle(
+                                    color: context.planAccent,
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w600,
                                     letterSpacing: 2.4,
@@ -455,13 +456,21 @@ class _GettingStartedScreenState extends State<GettingStartedScreen>
       case 0:
         return ExcludeSemantics(
           child: CustomPaint(
-            painter: _GaugePainter(enter: enter, loop: loop),
+            painter: _GaugePainter(
+              enter: enter,
+              loop: loop,
+              accent: context.planAccent,
+            ),
           ),
         );
       case 1:
         return ExcludeSemantics(
           child: CustomPaint(
-            painter: _ChargePainter(enter: enter, loop: loop),
+            painter: _ChargePainter(
+              enter: enter,
+              loop: loop,
+              accent: context.planAccent,
+            ),
           ),
         );
       default:
@@ -553,13 +562,13 @@ class _Indicator extends StatelessWidget {
                   borderRadius: BorderRadius.circular(3),
                   color: Color.lerp(
                     const Color(0x40FFFFFF),
-                    LuxeColors.emerald,
+                    context.planAccent,
                     t,
                   ),
                   boxShadow: t > 0.5
                       ? [
                           BoxShadow(
-                            color: LuxeColors.emerald.withValues(
+                            color: context.planAccent.withValues(
                               alpha: 0.4 * t,
                             ),
                             blurRadius: 10,
@@ -580,7 +589,14 @@ class _Indicator extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _GaugePainter extends CustomPainter {
-  _GaugePainter({required this.enter, required this.loop});
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _GaugePainter({
+    required this.enter,
+    required this.loop,
+    required this.accent,
+  });
   final double enter;
   final double loop;
 
@@ -607,9 +623,7 @@ class _GaugePainter extends CustomPainter {
       r * 1.25,
       Paint()
         ..shader = ui.Gradient.radial(c, r * 1.25, [
-          LuxeColors.emerald.withValues(
-            alpha: 0.10 * fill * (0.8 + 0.2 * breath),
-          ),
+          accent.withValues(alpha: 0.10 * fill * (0.8 + 0.2 * breath)),
           const Color(0x0034D399),
         ]),
     );
@@ -677,7 +691,7 @@ class _GaugePainter extends CustomPainter {
           ..strokeWidth = major ? 1.6 : 1
           ..strokeCap = StrokeCap.round
           ..color = lit
-              ? LuxeColors.emerald.withValues(alpha: major ? 0.95 : 0.6)
+              ? accent.withValues(alpha: major ? 0.95 : 0.6)
               : Color.fromRGBO(255, 255, 255, major ? 0.45 : 0.18),
       );
     }
@@ -699,7 +713,7 @@ class _GaugePainter extends CustomPainter {
     if (valueSweep > 0.001) {
       final shader = ui.Gradient.sweep(
         c,
-        const [LuxeColors.emeraldDeep, LuxeColors.emerald, Color(0xFFCFF7E6)],
+        [Color.lerp(accent, Colors.black, 0.25)!, accent, Color(0xFFCFF7E6)],
         const [0.0, 0.8, 1.0],
         TileMode.clamp,
         _start,
@@ -774,7 +788,7 @@ class _GaugePainter extends CustomPainter {
           fontSize: s * 0.034,
           letterSpacing: s * 0.006,
           fontWeight: FontWeight.w500,
-          color: LuxeColors.emerald.withValues(alpha: _phase(0.7, 1.0)),
+          color: accent.withValues(alpha: _phase(0.7, 1.0)),
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -784,7 +798,7 @@ class _GaugePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GaugePainter old) =>
-      old.enter != enter || old.loop != loop;
+      old.enter != enter || old.loop != loop || old.accent != accent;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -793,7 +807,14 @@ class _GaugePainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ChargePainter extends CustomPainter {
-  _ChargePainter({required this.enter, required this.loop});
+  /// The plan's colour (QA 140).
+  final Color accent;
+
+  _ChargePainter({
+    required this.enter,
+    required this.loop,
+    required this.accent,
+  });
   final double enter;
   final double loop;
 
@@ -852,7 +873,7 @@ class _ChargePainter extends CustomPainter {
       ledPos,
       0.02 * s,
       Paint()
-        ..color = LuxeColors.emerald.withValues(alpha: 0.6 * flow * led)
+        ..color = accent.withValues(alpha: 0.6 * flow * led)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
     );
     canvas.drawCircle(
@@ -861,7 +882,7 @@ class _ChargePainter extends CustomPainter {
       Paint()
         ..color = Color.lerp(
           LuxeColors.platinumLow,
-          LuxeColors.emerald,
+          accent,
           flow,
         )!.withValues(alpha: appear),
     );
@@ -907,7 +928,7 @@ class _ChargePainter extends CustomPainter {
           ..shader = ui.Gradient.linear(
             Offset(0, top),
             Offset(0, inner.bottom),
-            const [Color(0xFF6EE7B7), LuxeColors.emeraldDeep],
+            [Color(0xFF6EE7B7), Color.lerp(accent, Colors.black, 0.25)!],
           ),
       );
       canvas.restore();
@@ -973,7 +994,7 @@ class _ChargePainter extends CustomPainter {
           tan.position,
           0.022 * s,
           Paint()
-            ..color = LuxeColors.emerald.withValues(alpha: 0.45 * fade)
+            ..color = accent.withValues(alpha: 0.45 * fade)
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
         );
         canvas.drawCircle(
@@ -1012,7 +1033,7 @@ class _ChargePainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..strokeCap = StrokeCap.round
-          ..color = LuxeColors.emerald.withValues(alpha: timer),
+          ..color = accent.withValues(alpha: timer),
       );
       final minutes = (120 * remaining).ceil();
       final label = TextPainter(
@@ -1047,7 +1068,7 @@ class _ChargePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ChargePainter old) =>
-      old.enter != enter || old.loop != loop;
+      old.enter != enter || old.loop != loop || old.accent != accent;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1102,7 +1123,7 @@ class _BotScene extends StatelessWidget {
                           shape: BoxShape.circle,
                           gradient: RadialGradient(
                             colors: [
-                              LuxeColors.emerald.withValues(
+                              context.planAccent.withValues(
                                 alpha:
                                     0.12 + 0.05 * math.sin(loop * 2 * math.pi),
                               ),
@@ -1221,10 +1242,10 @@ class _ConfirmCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16 * scale),
         color: const Color(0xE6101113),
-        border: Border.all(color: LuxeColors.emerald.withValues(alpha: 0.5)),
+        border: Border.all(color: context.planAccent.withValues(alpha: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: LuxeColors.emerald.withValues(alpha: 0.10 + 0.08 * pulse),
+            color: context.planAccent.withValues(alpha: 0.10 + 0.08 * pulse),
             blurRadius: 24,
           ),
         ],
@@ -1238,7 +1259,7 @@ class _ConfirmCard extends StatelessWidget {
               Icon(
                 Icons.bolt_rounded,
                 size: 16 * scale,
-                color: LuxeColors.emerald,
+                color: context.planAccent,
               ),
               SizedBox(width: 6 * scale),
               Expanded(
@@ -1258,8 +1279,8 @@ class _ConfirmCard extends StatelessWidget {
             spacing: 8 * scale,
             runSpacing: 6 * scale,
             children: [
-              _chip('Hủy', scale, filled: false),
-              _chip('Xác nhận', scale, filled: true),
+              _chip(context, 'Hủy', scale, filled: false),
+              _chip(context, 'Xác nhận', scale, filled: true),
             ],
           ),
         ],
@@ -1267,11 +1288,16 @@ class _ConfirmCard extends StatelessWidget {
     );
   }
 
-  Widget _chip(String label, double scale, {required bool filled}) => Container(
+  Widget _chip(
+    BuildContext context,
+    String label,
+    double scale, {
+    required bool filled,
+  }) => Container(
     padding: EdgeInsets.symmetric(horizontal: 12 * scale, vertical: 6 * scale),
     decoration: BoxDecoration(
       borderRadius: BorderRadius.circular(99),
-      color: filled ? LuxeColors.emerald : null,
+      color: filled ? context.planAccent : null,
       border: filled ? null : Border.all(color: LuxeColors.hairlineStrong),
     ),
     child: Text(

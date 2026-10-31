@@ -6,6 +6,7 @@ import 'package:flutter/scheduler.dart';
 import '../theme/luxe_theme.dart';
 import '../utils/app_error_formatter.dart';
 import '../utils/error_mapper.dart';
+import '../theme/plan_style.dart';
 
 enum AppNoticeKind { success, error, warning, info }
 
@@ -428,7 +429,7 @@ class _NoticeOverlay extends StatelessWidget {
                             child: TextButton(
                               style: TextButton.styleFrom(
                                 minimumSize: const Size(48, 48),
-                                foregroundColor: LuxeColors.emerald,
+                                foregroundColor: context.planAccent,
                                 textStyle: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                   letterSpacing: 0.6,
