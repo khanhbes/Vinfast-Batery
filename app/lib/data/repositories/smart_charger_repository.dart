@@ -57,6 +57,12 @@ abstract interface class SmartChargerRepository {
     SmartChargingSession session,
     double targetSoc,
   );
+
+  /// QA 140: a new end time for the running timed charge (server mode).
+  Future<SmartChargingSession> updateStopAt(
+    SmartChargingSession session,
+    DateTime stopAt,
+  );
   Future<void> saveActiveSession(SmartChargingSession session);
   Future<void> flushPendingTelemetry(String sessionId);
   Future<void> hideSession(String sessionId);
@@ -70,13 +76,14 @@ abstract interface class SmartChargerRepository {
   Future<void> manualOff({String? vehicleId});
 
   /// [targetSoc] is display/estimate context only; the device timer alone
-  /// switches the relay off.
+  /// switches the relay off. [stopAt]: the clock time it ends (QA 140).
   Future<SmartChargingSession> manualOn(
     Duration duration,
     String idempotencyKey, {
     required String vehicleId,
     required double currentSoc,
     double? targetSoc,
+    DateTime? stopAt,
   });
 }
 
@@ -290,6 +297,17 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
   );
 
   @override
+  Future<SmartChargingSession> updateStopAt(
+    SmartChargingSession session,
+    DateTime stopAt,
+  ) => Future.error(
+    const SmartChargerException(
+      'Chỉ đổi được giờ ngắt khi sạc qua máy chủ Pinova.',
+      code: 'stopAtUnsupported',
+    ),
+  );
+
+  @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
     double soc, {
@@ -438,8 +456,9 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     required String vehicleId,
     required double currentSoc,
     double? targetSoc,
+    DateTime? stopAt,
   }) => service.manualOn(
-    duration,
+    stopAt == null ? duration : stopAt.difference(DateTime.now()),
     idempotencyKey: idempotencyKey,
     vehicleId: vehicleId,
     currentSoc: currentSoc,
@@ -568,6 +587,12 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
   ) => service.updateTarget(session.sessionId, targetSoc);
 
   @override
+  Future<SmartChargingSession> updateStopAt(
+    SmartChargingSession session,
+    DateTime stopAt,
+  ) => service.updateStopAt(session.sessionId, stopAt);
+
+  @override
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
     double soc, {
@@ -652,12 +677,14 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     required String vehicleId,
     required double currentSoc,
     double? targetSoc,
+    DateTime? stopAt,
   }) => service.manualOn(
     duration,
     idempotencyKey: idempotencyKey,
     vehicleId: vehicleId,
     currentSoc: currentSoc,
     targetSoc: targetSoc,
+    stopAt: stopAt,
   );
 }
 

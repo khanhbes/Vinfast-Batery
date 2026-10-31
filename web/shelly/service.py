@@ -56,6 +56,18 @@ MEMBERSHIP_CACHE_SECONDS = 60
 # A relay seen OFF this close to (or after) the planned stop is a normal
 # timer completion; earlier than that it was switched off before the plan.
 PLANNED_STOP_TOLERANCE_SECONDS = 20
+# QA 140 (charge by clock time): a phone clock this far from the server's is
+# corrected with the request's clientTime; closer, the network delay would
+# only add error.
+CLIENT_CLOCK_SKEW_SECONDS = 5
+# The shortest end time accepted while charging; sooner, Dừng sạc is the tool.
+MIN_STOP_AT_LEAD_SECONDS = 60
+# Owners read end times on Vietnam time (UTC+7, no daylight saving).
+VN_TZ = timezone(timedelta(hours=7))
+
+
+def _vn_clock(instant: datetime) -> str:
+    return instant.astimezone(VN_TZ).strftime("%H:%M")
 # Target charging (Task 126): energy delivered during this lead (worker poll
 # half-interval + Cloud OFF latency) counts as already delivered, so the
 # outlet switches off within a fraction of 1 % of the target.
@@ -1420,6 +1432,120 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         self.repository.append_audit(uid, "smart_charge_history_hidden", session_id=session_id)
         return hidden
 
+    def client_instant(self, raw, client_time=None) -> datetime | None:
+        """An instant sent by the app (ISO 8601), moved onto the server clock
+        when the phone's clock is off by more than a few seconds."""
+        def parse(value):
+            if value in (None, ""):
+                return None
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        instant = parse(raw)
+        if instant is None:
+            if raw not in (None, ""):
+                raise SmartChargeError("invalidStopAt", "Giờ ngắt không hợp lệ")
+            return None
+        sent = parse(client_time)
+        if sent is not None:
+            skew = self.clock() - sent
+            if abs(skew.total_seconds()) > CLIENT_CLOCK_SKEW_SECONDS:
+                instant += skew
+        return instant
+
+    def _seconds_until(self, instant: datetime) -> int:
+        return int(round((instant - self.clock()).total_seconds()))
+
+    def update_stop_at(self, uid: str, session_id: str, stop_at: datetime | None) -> ChargingSession:
+        """Move the end of a running timed charge (QA 140), later or sooner.
+
+        The Shelly auto-off is re-armed for the time left through the same
+        live checks as ON (``extend_timer``) and read back in the command
+        slot; only a verified readback moves the session's end. Never past
+        the session's absolute 10-hour limit; ending within a minute is a
+        Stop, not an edit.
+        """
+        if stop_at is None:
+            raise SmartChargeError("invalidStopAt", "Thiếu giờ ngắt")
+        session = self.repository.get_session(uid, session_id)
+        if session is None or session.owner_uid not in (None, uid):
+            raise SmartChargeError("sessionNotFound", "Không tìm thấy phiên sạc", 404)
+        if session.state != "active":
+            raise SmartChargeError("sessionNotActive", "Phiên sạc không còn chạy.", 409)
+        if session.strategy != "manual_timed" or session.stop_mode == "target":
+            raise SmartChargeError(
+                "notTimedSession",
+                "Chỉ đổi được giờ ngắt của phiên sạc theo giờ. Phiên sạc đến % tự ngắt theo mức pin.", 409)
+        now = self.clock()
+        if self._seconds_until(stop_at) < MIN_STOP_AT_LEAD_SECONDS:
+            raise SmartChargeError(
+                "stopAtTooSoon",
+                "Giờ ngắt phải sau bây giờ ít nhất 1 phút. Muốn tắt ngay, hãy bấm Dừng sạc.")
+        if stop_at > session.absolute_safety_stop_at:
+            raise SmartChargeError(
+                "safetyLimitReached",
+                "Một phiên sạc tối đa 10 giờ; giờ ngắt muộn nhất là "
+                f"{_vn_clock(session.absolute_safety_stop_at)}.", 409)
+        if abs((stop_at - session.effective_stop_at).total_seconds()) < 30:
+            return session
+        binding = self.session_binding(uid, session)
+        extender = getattr(self.provider, "extend_timer", None)
+        if binding is None or extender is None:
+            raise SmartChargeError("stopAtUnavailable", "Bộ sạc này chưa hỗ trợ đổi giờ ngắt khi đang sạc.", 409)
+        previous = session.effective_stop_at
+        try:
+            # Taken again right before the command: the checks above cost time.
+            seconds = max(MIN_STOP_AT_LEAD_SECONDS, self._seconds_until(stop_at))
+            extender(binding, int(seconds))
+            rearmed_at = self.clock()
+            verified = self._read_until(
+                binding,
+                lambda s: (self._status_matches_device(s, binding.device_id) and s.relay is True
+                           and abs(int(s.timer_remaining or 0) - seconds) <= 30),
+                5,
+            )
+        except ProviderError as exc:
+            self.repository.append_audit(uid, "stop_at_failed", session_id=session.session_id, error=exc.code)
+            if exc.code == "relayNotOn":
+                raise SmartChargeError(
+                    "sessionNotActive", "Phiên sạc vừa kết thúc nên không đổi được giờ ngắt.", 409) from exc
+            raise SmartChargeError(
+                "timerNotExtended",
+                f"Chưa đổi được hẹn giờ của ổ sạc; vẫn ngắt lúc {_vn_clock(previous)}.",
+                503, True) from exc
+        if verified is None:
+            self.repository.append_audit(uid, "stop_at_unverified", session_id=session.session_id)
+            raise SmartChargeError(
+                "timerNotExtended",
+                "Chưa xác nhận được hẹn giờ mới của ổ sạc. Xem giờ ngắt trên thẻ sạc.", 503, True)
+        ends_at = getattr(verified, "timer_ends_at", None)
+        device_stop = (datetime.fromtimestamp(float(ends_at), timezone.utc) if ends_at
+                       else rearmed_at + timedelta(seconds=int(seconds)))
+        session.effective_stop_at = min(device_stop, session.absolute_safety_stop_at)
+        session.ai_stop_at = session.effective_stop_at
+        started = session.relay_on_at or session.created_at
+        session.predicted_duration_seconds = int((session.effective_stop_at - started).total_seconds())
+        session.predicted_minutes = max(1, int(round(session.predicted_duration_seconds / 60)))
+        session.hardware_timeout_seconds = int((session.effective_stop_at - session.created_at).total_seconds())
+        # The session may have ended while the auto-off was re-armed (Stop on
+        # another phone): never leave that outlet ON without a session.
+        latest = self.repository.get_session(uid, session.session_id)
+        if latest is None or latest.state != "active":
+            self._settle_failed_raise(uid, session.session_id, binding, action="đổi giờ ngắt")
+        session.updated_at = now
+        session.version += 1
+        try:
+            self.repository.save_session(uid, session)
+        except RuntimeError:
+            self._settle_failed_raise(uid, session.session_id, binding, action="đổi giờ ngắt")
+            raise
+        self.repository.append_audit(uid, "stop_at_updated", session_id=session.session_id,
+                                     previous=previous.isoformat(), stop_at=session.effective_stop_at.isoformat())
+        self._emit_state_push(uid, session)
+        return session
+
     def update_target(self, uid: str, session_id: str, target_soc) -> ChargingSession:
         """Change the target of a running target charge (QA 135, Pro).
 
@@ -1529,7 +1655,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         self._emit_state_push(uid, session)
         return session
 
-    def _settle_failed_raise(self, uid: str, session_id: str, binding: DeviceBinding) -> None:
+    def _settle_failed_raise(self, uid: str, session_id: str, binding: DeviceBinding,
+                             action: str = "đổi mục tiêu") -> None:
         """QA 138: the auto-off was re-armed but the session moved on before
         the save (it ended at the old target, or Stop ran elsewhere). Never
         leave that outlet ON without a running session: switch it OFF and
@@ -1551,7 +1678,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                 "Phiên sạc đã kết thúc nhưng chưa xác minh được ổ đã tắt. Hãy bấm Dừng sạc hoặc rút phích.",
                 503, True)
         raise SmartChargeError("sessionNotActive",
-                               "Phiên sạc vừa kết thúc trước khi đổi mục tiêu; ổ sạc đã tắt.", 409)
+                               f"Phiên sạc vừa kết thúc trước khi {action}; ổ sạc đã tắt.", 409)
 
     def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float,
                            odo_km: float | None = None) -> ChargingSession:
@@ -1944,13 +2071,19 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         *,
         expected_device_id: str | None = None,
         target_soc: float | None = None,
+        stop_at: datetime | None = None,
     ) -> ChargingSession:
         """Manual ON is permitted only with a device-side safety timer.
 
         [target_soc] is display/estimate context only (Task 122): the device
-        timer alone decides when the relay switches off.
+        timer alone decides when the relay switches off. With [stop_at] (QA
+        140, "ngắt lúc 9:30") the timer length is taken from that clock time
+        right before ON, so the outlet switches off at it, not a few seconds
+        of checks later.
         """
         timer = _StageTimer()
+        if stop_at is not None:
+            duration_seconds = self._seconds_until(stop_at)
         duration_seconds = int(duration_seconds)
         if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:
             raise SmartChargeError("unsafeDuration", "Safety timer phải từ 5 giây đến 10 giờ")
@@ -1982,9 +2115,13 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if not self.provider.supports_device_timer:
             raise SmartChargeError("providerTimerUnsupported", "Provider chưa hỗ trợ timer trên thiết bị", 503)
         timer.mark("checks")
-        now = self.clock()
         before, on_context = self._prepare_energize(binding)
         timer.mark("prepare")
+        now = self.clock()
+        if stop_at is not None:
+            duration_seconds = self._seconds_until(stop_at)
+            if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:
+                raise SmartChargeError("unsafeDuration", "Giờ ngắt phải sau bây giờ và trong vòng 10 giờ")
         session = ChargingSession(
             session_id=str(uuid.uuid4()),
             device_id=binding.device_id,

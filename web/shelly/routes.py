@@ -709,6 +709,8 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
             float(body.get("currentSoc") or 0),
             expected_device_id=body.get("expectedDeviceId"),
             target_soc=body.get("targetSoc"),
+            # QA 140: "ngắt lúc HH:mm"; durationSeconds stays for old apps.
+            stop_at=service.client_instant(body.get("stopAt"), body.get("clientTime")),
         ).to_dict()))
 
     @bp.post("/api/smart-charging/session/<session_id>/stop")
@@ -748,6 +750,14 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     def update_target(uid, session_id):
         body = request.get_json(silent=True) or {}
         return execute(lambda: ok(service.update_target(uid, session_id, body.get("targetSoc")).to_dict()))
+
+    @bp.patch("/api/smart-charging/sessions/<session_id>/stop-at")
+    @authenticated
+    def update_stop_at(uid, session_id):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.update_stop_at(
+            uid, session_id, service.client_instant(body.get("stopAt"), body.get("clientTime")),
+        ).to_dict()))
 
     @bp.patch("/api/smart-charging/sessions/<session_id>/actual-soc")
     @authenticated

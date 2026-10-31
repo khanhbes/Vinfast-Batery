@@ -1892,7 +1892,13 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   /// [targetSoc] is the % shown on the timed confirmation (display only;
   /// the Shelly timer owns the cutoff). QA 135: the AI-mode draft target
   /// was sent instead, so history showed a target the user never saw.
-  Future<bool> manualOn(Duration duration, {double? targetSoc}) async {
+  /// [stopAt]: charge until this clock time (QA 140); [duration] is then
+  /// only the estimate shown until the server answers.
+  Future<bool> manualOn(
+    Duration duration, {
+    double? targetSoc,
+    DateTime? stopAt,
+  }) async {
     if (_pendingRelayCommand ||
         state.phase == SmartChargingViewPhase.starting ||
         state.phase == SmartChargingViewPhase.stopping) {
@@ -1919,6 +1925,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           vehicleId: state.draft.vehicleId,
           currentSoc: state.draft.currentSoc,
           targetSoc: targetSoc ?? state.draft.targetSoc,
+          stopAt: stopAt,
         ),
       );
       if (_disposed) return false;
@@ -1933,7 +1940,12 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
         _startConfirmationBurst();
         return false;
       }
-      _publishVerifiedRelay(true, timerRemaining: duration);
+      _publishVerifiedRelay(
+        true,
+        timerRemaining: stopAt == null
+            ? duration
+            : session.effectiveStopAt.difference(_clock()),
+      );
       final currentStatus = state.chargerStatus;
 
       state = state.copyWith(
@@ -2125,6 +2137,49 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       return error.message;
     } on Object {
       return 'Chưa đổi được mục tiêu. Mục tiêu cũ vẫn giữ nguyên.';
+    }
+  }
+
+  /// QA 140: move the end of the running timed charge. Returns the
+  /// server's message when it refused (the old end stays), else null.
+  Future<String?> updateStopAt(DateTime stopAt) async {
+    final session = state.session;
+    if (session == null || session.state.isTerminal) {
+      return 'Phiên sạc đã kết thúc.';
+    }
+    _repository ??= await SmartChargerRepositoryFactory.create();
+    try {
+      final updated = await _repository!.updateStopAt(session, stopAt);
+      if (!_disposed && state.session?.sessionId == updated.sessionId) {
+        state = state.copyWith(session: updated);
+        // The countdown follows the re-armed timer at once, not the next
+        // /live read.
+        _publishVerifiedRelay(
+          true,
+          timerRemaining: updated.effectiveStopAt.difference(_clock()),
+        );
+      }
+      unawaited(
+        _connectionCoordinator
+            .saveSnapshot(
+              ActiveChargingSnapshot(
+                sessionId: updated.sessionId,
+                vehicleId: updated.vehicleId,
+                targetSoc: updated.targetSoc,
+                effectiveStopAt: updated.effectiveStopAt,
+                lastEstimatedSoc: updated.estimatedSoc ?? updated.startSoc,
+                lastSessionEnergyWh: updated.energyUsedWh,
+                lastKnownRelay: true,
+              ),
+            )
+            .catchError((_) {}),
+      );
+      _startConfirmationBurst();
+      return null;
+    } on SmartChargerException catch (error) {
+      return error.message;
+    } on Object {
+      return 'Chưa đổi được giờ ngắt. Giờ ngắt cũ vẫn giữ nguyên.';
     }
   }
 

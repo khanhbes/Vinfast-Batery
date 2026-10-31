@@ -91,7 +91,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('manual ON offers immediate and timed safe choices', (
+  // QA 140: Theo giờ picks the clock time the outlet switches off.
+  testWidgets('timed ON sends the chosen end time', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(800, 1200);
@@ -105,18 +106,17 @@ void main() {
     await tester.tap(find.text('Sạc hẹn giờ'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Ngay lập tức'), findsOneWidget);
-    expect(find.text('10 giờ'), findsNothing);
-    expect(find.text('Sạc nhanh'), findsNothing);
-    expect(find.text('Tiêu chuẩn'), findsNothing);
-    expect(find.text('Khuyến dùng'), findsNothing);
-
-    final immediate = find.byKey(const ValueKey('timed-preset--1'));
-    await tester.ensureVisible(immediate);
+    expect(find.text('NGẮT LÚC'), findsOneWidget);
+    expect(find.text('Ngay lập tức'), findsNothing);
+    expect(find.byKey(const ValueKey('timed-end-clock')), findsOneWidget);
+    final plus = find.byKey(const ValueKey('timed-end-plus'));
+    await tester.ensureVisible(plus);
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(immediate);
+    await tester.tap(plus);
     await tester.pump();
-    expect(find.text('Bắt đầu ngay · tự ngắt sau 6 giờ'), findsOneWidget);
+    final shown = tester
+        .widget<Text>(find.byKey(const ValueKey('timed-end-clock')))
+        .data!;
 
     final manualOn = find.byKey(const ValueKey('timed-charge-start-button'));
     await tester.ensureVisible(manualOn);
@@ -127,7 +127,7 @@ void main() {
 
     expect(find.text('Xác nhận bắt đầu sạc'), findsOneWidget);
     expect(find.text('Sạc hẹn giờ'), findsWidgets);
-    expect(find.text('6 giờ 0 phút'), findsOneWidget);
+    expect(find.textContaining(shown), findsWidgets);
     expect(startSlider(tester).enabled, isFalse);
 
     final acknowledgement = find.byType(Checkbox);
@@ -137,7 +137,18 @@ void main() {
     await tester.pump();
     await slideToConfirm(tester);
     await tester.pump(const Duration(milliseconds: 300));
-    expect(controller.lastManualDuration, const Duration(hours: 6));
+    final stopAt = controller.lastManualStopAt!;
+    expect(
+      '${stopAt.hour.toString().padLeft(2, '0')}:'
+      '${stopAt.minute.toString().padLeft(2, '0')}',
+      shown,
+    );
+    expect(
+      (controller.lastManualDuration! - stopAt.difference(DateTime.now()))
+          .inSeconds
+          .abs(),
+      lessThan(5),
+    );
     // QA 135: the target sent is the % shown on this confirmation, never
     // the AI-mode draft target.
     expect(
@@ -522,11 +533,17 @@ class HarnessController extends SmartChargingController {
 
   Duration? lastManualDuration;
   double? lastManualTarget;
+  DateTime? lastManualStopAt;
 
   @override
-  Future<bool> manualOn(Duration duration, {double? targetSoc}) async {
+  Future<bool> manualOn(
+    Duration duration, {
+    double? targetSoc,
+    DateTime? stopAt,
+  }) async {
     lastManualDuration = duration;
     lastManualTarget = targetSoc;
+    lastManualStopAt = stopAt;
     return true;
   }
 

@@ -99,9 +99,10 @@ void main() {
                 child: TimedChargingSectionV2(
                   readyForControl: true,
                   onOff: () {},
-                  onStart: (duration) {
+                  clock: () => DateTime(2026, 10, 29, 7),
+                  onStart: (stopAt) {
                     calls++;
-                    expect(duration, const Duration(hours: 2));
+                    expect(stopAt, DateTime(2026, 10, 29, 9));
                     return pending.future;
                   },
                 ),

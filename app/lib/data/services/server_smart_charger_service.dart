@@ -726,6 +726,9 @@ class ServerSmartChargerService {
     return data['_null'] == true ? null : SmartChargingSession.fromJson(data);
   }
 
+  /// With [stopAt] (QA 140, "ngắt lúc 9:30") the server takes the timer
+  /// length from that clock time right before ON; [duration] stays for
+  /// servers without it.
   Future<SmartChargingSession> manualOn(
     Duration duration, {
     required String idempotencyKey,
@@ -733,6 +736,7 @@ class ServerSmartChargerService {
     required double currentSoc,
     String? expectedDeviceId,
     double? targetSoc,
+    DateTime? stopAt,
   }) async => SmartChargingSession.fromJson(
     await _request(
       'POST',
@@ -743,6 +747,10 @@ class ServerSmartChargerService {
         'currentSoc': currentSoc,
         'expectedDeviceId': ?expectedDeviceId,
         'targetSoc': ?targetSoc,
+        if (stopAt != null) ...{
+          'stopAt': stopAt.toUtc().toIso8601String(),
+          'clientTime': DateTime.now().toUtc().toIso8601String(),
+        },
       },
       headers: {'Idempotency-Key': idempotencyKey},
       timeout: controlTimeout,
@@ -892,6 +900,23 @@ class ServerSmartChargerService {
       'PATCH',
       '/api/smart-charging/sessions/${Uri.encodeComponent(sessionId)}/target',
       body: {'targetSoc': targetSoc.round()},
+      timeout: const Duration(seconds: 45),
+    ),
+  );
+
+  /// QA 140: move the end of a running timed charge, later or sooner. The
+  /// server re-arms the outlet's timer and reads it back first.
+  Future<SmartChargingSession> updateStopAt(
+    String sessionId,
+    DateTime stopAt,
+  ) async => SmartChargingSession.fromJson(
+    await _request(
+      'PATCH',
+      '/api/smart-charging/sessions/${Uri.encodeComponent(sessionId)}/stop-at',
+      body: {
+        'stopAt': stopAt.toUtc().toIso8601String(),
+        'clientTime': DateTime.now().toUtc().toIso8601String(),
+      },
       timeout: const Duration(seconds: 45),
     ),
   );

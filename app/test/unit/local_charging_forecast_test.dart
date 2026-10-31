@@ -74,6 +74,7 @@ class _Server extends ServerSmartChargerService {
     required double currentSoc,
     String? expectedDeviceId,
     double? targetSoc,
+    DateTime? stopAt,
   }) async {
     timedCalls++;
     requestedTimer = duration;

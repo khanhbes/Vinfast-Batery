@@ -42,6 +42,7 @@ import '../../core/providers/entitlement_provider.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
 import '../../data/models/app_appearance.dart';
+import 'widgets/edit_stop_at_sheet.dart';
 import 'widgets/edit_target_sheet.dart';
 import 'widgets/prediction_card_v2.dart';
 import 'widgets/recent_sessions_section_v2.dart';
@@ -771,7 +772,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
               ? 'Hãy kết nối Shelly qua Thiết lập trước khi bật sạc.'
               : null),
       readyForControl: ready,
-      onStart: (duration) => _startTimedCharge(state, controller, duration),
+      onStart: (stopAt) => _startTimedCharge(
+        state,
+        controller,
+        stopAt.difference(DateTime.now()),
+        stopAt: stopAt,
+      ),
       onOff: () => _emergencyOff(controller),
       onOpenSetup: () => _openSetup(controller),
     );
@@ -908,33 +914,40 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           session?.lastError == offPendingReadbackCode,
       onStop: () => _stopWithConfirmation(state, controller),
     );
-    // QA 135: a target charge can move its target (Pro).
+    // QA 135: a target charge can move its target (Pro); QA 140: a timed
+    // charge can move its end time, later or sooner.
     final canEdit =
-        targetMode &&
         session != null &&
         !session.state.isTerminal &&
         state.phase != SmartChargingViewPhase.stopping &&
         state.phase != SmartChargingViewPhase.starting;
-    final withEdit = !canEdit
+    final Widget? editButton = !canEdit
+        ? null
+        : targetMode
+        ? PremiumLocked(
+            feature: PremiumFeature.targetEdit,
+            tagAlignment: AlignmentDirectional.centerEnd,
+            tagPadding: const EdgeInsetsDirectional.only(end: 8),
+            child: OutlinedButton.icon(
+              key: const ValueKey('edit-target-button'),
+              onPressed: () => _editTarget(estimatedSoc, targetSoc, controller),
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              label: Text('Đổi mục tiêu ($targetSoc%)'),
+            ),
+          )
+        : session.strategy == ChargingStrategy.manualTimed
+        ? OutlinedButton.icon(
+            key: const ValueKey('edit-stop-at-button'),
+            onPressed: () => _editStopAt(stopAt, session, controller),
+            icon: const Icon(Icons.schedule_rounded, size: 18),
+            label: Text('Đổi giờ ngắt (${_time(stopAt)})'),
+          )
+        : null;
+    final withEdit = editButton == null
         ? card
         : Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              card,
-              const SizedBox(height: 10),
-              PremiumLocked(
-                feature: PremiumFeature.targetEdit,
-                tagAlignment: AlignmentDirectional.centerEnd,
-                tagPadding: const EdgeInsetsDirectional.only(end: 8),
-                child: OutlinedButton.icon(
-                  key: const ValueKey('edit-target-button'),
-                  onPressed: () =>
-                      _editTarget(estimatedSoc, targetSoc, controller),
-                  icon: const Icon(Icons.tune_rounded, size: 18),
-                  label: Text('Đổi mục tiêu ($targetSoc%)'),
-                ),
-              ),
-            ],
+            children: [card, const SizedBox(height: 10), editButton],
           );
     final lost = state.linkLostSince;
     if (lost == null) return withEdit;
@@ -973,6 +986,22 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       currentTarget: targetSoc.toDouble(),
       initialTarget: suggested,
       onSubmit: controller.updateTarget,
+    );
+    if (changed == true && mounted) {
+      unawaited(controller.refresh(force: true));
+    }
+  }
+
+  Future<void> _editStopAt(
+    DateTime currentStopAt,
+    SmartChargingSession session,
+    SmartChargingController controller,
+  ) async {
+    final changed = await EditStopAtSheet.show(
+      context,
+      currentStopAt: currentStopAt,
+      latestStopAt: session.absoluteSafetyStopAt.toLocal(),
+      onSubmit: controller.updateStopAt,
     );
     if (changed == true && mounted) {
       unawaited(controller.refresh(force: true));
@@ -1089,14 +1118,18 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     });
   }
 
+  /// [stopAt]: the clock time the owner chose (QA 140, Theo giờ); without
+  /// it (a forecast's length) the charge lasts [duration] from ON.
   Future<void> _startTimedCharge(
     SmartChargingUiState state,
     SmartChargingController controller,
-    Duration duration,
-  ) async {
+    Duration duration, {
+    DateTime? stopAt,
+  }) async {
     // state.now only ticks during a session; the sheet needs the wall
     // clock (QA 128: "Tự ngắt lúc 02:53" shown at 02:40 for 30 minutes).
-    final stopAt = DateTime.now().add(duration);
+    final chosenStop = stopAt;
+    stopAt ??= DateTime.now().add(duration);
     final endSoc = _timedEndSoc(state, duration);
     final confirmed = await StartChargeConfirmationSheet.show(
       context,
@@ -1118,15 +1151,20 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       return;
     }
 
+    // The confirmation took time: the length is taken again from the chosen
+    // clock time (the server takes it once more right before ON).
     final ok = await controller.manualOn(
-      duration,
+      chosenStop == null ? duration : chosenStop.difference(DateTime.now()),
       targetSoc: endSoc.toDouble(),
+      stopAt: chosenStop,
     );
     if (!mounted) return;
     if (ok) {
       AppPopup.showSuccess(
         'Đã bắt đầu sạc',
-        detail: 'Shelly sẽ tự ngắt sau ${_duration(duration.inMinutes)}.',
+        detail: chosenStop == null
+            ? 'Shelly sẽ tự ngắt sau ${_duration(duration.inMinutes)}.'
+            : 'Shelly sẽ tự ngắt lúc ${_time(chosenStop)}.',
       );
     }
   }

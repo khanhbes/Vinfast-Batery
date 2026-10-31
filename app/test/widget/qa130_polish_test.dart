@@ -41,22 +41,26 @@ void main() {
             onStart: (_) async {},
             onOff: () {},
             readyForControl: true,
+            clock: () => DateTime(2026, 10, 29, 7),
           ),
         ),
       ),
     );
     await tester.pumpWidget(section(const ValueKey('a')));
     await tester.pump();
-    await tester.tap(find.text('30 phút'));
+    // QA 140: the length is kept (the end moves with the clock).
+    await tester.tap(find.byKey(const ValueKey('timed-end-minus')));
     await tester.pump();
-    expect(find.text('Sạc 30 phút'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('timed-end-minus')));
+    await tester.pump();
+    expect(find.text('Sạc 1 giờ 30 phút'), findsOneWidget);
     // A finished charge rebuilds the section from scratch.
     await tester.pumpWidget(section(const ValueKey('b')));
     await tester.pump();
-    expect(find.text('Sạc 30 phút'), findsOneWidget);
+    expect(find.text('Sạc 1 giờ 30 phút'), findsOneWidget);
     expect(
       (await SharedPreferences.getInstance()).getInt('timed_charge_minutes'),
-      30,
+      90,
     );
   });
 }
