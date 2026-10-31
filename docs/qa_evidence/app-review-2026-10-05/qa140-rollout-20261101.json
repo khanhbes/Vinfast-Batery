@@ -1,0 +1,22 @@
+{
+  "note": "Reconstructed: 14-update-api-image.ps1 printed 'API image rollout verified; hardware policy Unlocked, peers unchanged, no relay calls.' but could not write its receipt (relative EvidencePath resolved against the process directory). Values below read back with az and HTTPS after the rollout.",
+  "sourceSha": "c4e1872",
+  "builtFrom": "clean git worktree of HEAD (uncommitted web/ changes excluded)",
+  "gate": "task152: api/worker/qa build exit 0, 80 source files match, Linux pytest 773 passed / 15 skipped, isolated boot Pass 15.25 s, worker smoke Pass",
+  "api": {
+    "image": "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:f464c75f8d877d9de92a4aa211fe3a01dbe17421396483766a891052052a6194",
+    "revision": "vinfast-api--api106-1031200212",
+    "beforeImage": "vinfastbatteryf1c11a09.azurecr.io/vinfast-api@sha256:0120172c2205a74ba4b7c335c39ad8e875720516e54bea6449966f603507167c",
+    "health": 200,
+    "ready": 200,
+    "stopAtWithoutToken": 401,
+    "hardwarePolicy": "Unlocked"
+  },
+  "worker": {
+    "image": "vinfastbatteryf1c11a09.azurecr.io/vinfast-worker@sha256:ed669688a8b8a7ce5c535f462d9e1a004c43afbaebe03e23936c4ae287d2945d",
+    "revision": "vinfast-worker-control--0000027",
+    "health": "Healthy",
+    "beforeImage": "vinfastbatteryf1c11a09.azurecr.io/vinfast-worker@sha256:a8f748d88ba59a9335dc2d46146066bb274f71bcd0bbcaeb7b732537c8fc4e31"
+  },
+  "relayCalls": 0
+}
