@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/app_providers.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
@@ -27,6 +29,9 @@ class _GuideScreenState extends State<GuideScreen> {
 
   void _open(GuideDestination destination) {
     if (destination.tabIndex case final index?) {
+      if (destination == GuideDestination.history) {
+        openChargeHistory(ProviderScope.containerOf(context, listen: false));
+      }
       AppNavigation.openTab(context, index);
       return;
     }

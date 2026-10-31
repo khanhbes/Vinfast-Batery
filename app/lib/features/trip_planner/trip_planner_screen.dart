@@ -644,7 +644,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
       targetSoc: target,
     );
     Navigator.of(context).popUntil((route) => route.isFirst);
-    ref.read(currentTabProvider.notifier).state = 1;
+    openChargeControl(ref, ai: true);
   }
 
   void _notice(String text) {

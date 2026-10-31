@@ -12,14 +12,9 @@ import '../core/theme/luxe_theme.dart';
 import '../core/widgets/app_navigation_bar.dart';
 import '../core/widgets/app_popup.dart';
 import '../core/widgets/app_tab_stack.dart';
-import '../core/widgets/empty_state.dart';
-import '../core/widgets/error_state.dart';
-import '../core/widgets/vehicle_picker_sheet.dart';
 import '../core/widgets/vehicle_switcher.dart';
 import '../core/widgets/global_charging_pill.dart';
 import '../core/widgets/floating_battery_bot.dart';
-import '../features/ai/smart_charge_history_screen.dart';
-import '../features/ai/controllers/smart_charging_controller.dart';
 import '../features/notifications/notification_center_screen.dart';
 import '../core/services/guide_registry.dart';
 import '../core/services/dashboard_preferences_service.dart';
@@ -28,8 +23,8 @@ import '../core/widgets/coach_mark_overlay.dart';
 import '../features/overview/widgets/dashboard_customization_sheet.dart';
 import '../features/overview/overview_screen.dart';
 import '../features/charge/charge_screen.dart';
-import '../features/auth/auth_providers.dart';
 import '../features/more/more_screen.dart';
+import '../features/utilities/utilities_screen.dart';
 import '../core/services/screen_tour.dart';
 import '../features/premium/plan_tag.dart';
 
@@ -49,10 +44,10 @@ class AppNavigation extends ConsumerStatefulWidget {
   @override
   ConsumerState<AppNavigation> createState() => _AppNavigationState();
 
-  /// Navigate to V4 tab (0: Overview, 1: Charge, 2: History, 3: More).
+  /// Navigate to a tab ([AppTab]: Tổng quan, Sạc pin, Tiện ích, Cài đặt).
   /// Dùng context để truy cập Riverpod
   static void navigateToTab(BuildContext context, int index) {
-    if (index >= 0 && index < 4) {
+    if (index >= 0 && index < AppTab.count) {
       // Sử dụng ProviderScope container để update state
       ProviderScope.containerOf(
         context,
@@ -65,7 +60,7 @@ class AppNavigation extends ConsumerStatefulWidget {
   /// a hidden tab alone leaves Guide/BatteryBot obscuring the destination.
   /// This helper only navigates; it never dispatches charging operations.
   static bool openTab(BuildContext context, int index) {
-    if (!context.mounted || index < 0 || index >= 4) return false;
+    if (!context.mounted || index < 0 || index >= AppTab.count) return false;
     navigateToTab(context, index);
     Navigator.of(context).popUntil((route) => route.isFirst);
     return true;
@@ -128,12 +123,12 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       }
     });
     _screens = [
-      // Overview, Charge and History own their refresh indicators. Wrapping
-      // them here created two simultaneous pull-to-refresh spinners.
-      OverviewScreen(), // Tab 0: Overview
-      ChargeScreen(), // Tab 1: Charge
-      _SelectedHistory(), // Tab 2: History
-      _RefreshableTab(child: MoreScreen()), // Tab 3: More
+      // Overview and Charge (with its History) own their refresh
+      // indicators. Wrapping them here created two pull-to-refresh spinners.
+      OverviewScreen(), // AppTab.overview
+      ChargeScreen(), // AppTab.charge: Sạc AI | Theo giờ | Lịch sử
+      UtilitiesScreen(), // AppTab.utilities (QA 140)
+      _RefreshableTab(child: MoreScreen()), // AppTab.settings
     ];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_tryShowFirstRunGuide());
@@ -234,9 +229,18 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   /// QA 135: the first visit of a tab shows its guide (after Overview's).
   void _maybeScreenTour(int tab) {
     final (String? id, List<CoachMarkStep> steps) = switch (tab) {
-      1 => (ScreenTour.charge, GuideRegistry.chargeTourSteps()),
-      2 => (ScreenTour.history, GuideRegistry.historyTourSteps()),
-      3 => (ScreenTour.settings, GuideRegistry.settingsTourSteps()),
+      AppTab.charge
+          when ref.read(chargeSectionProvider) == ChargeSection.history =>
+        (ScreenTour.history, GuideRegistry.historyTourSteps()),
+      AppTab.charge => (ScreenTour.charge, GuideRegistry.chargeTourSteps()),
+      AppTab.utilities => (
+        ScreenTour.utilities,
+        GuideRegistry.utilitiesTourSteps(),
+      ),
+      AppTab.settings => (
+        ScreenTour.settings,
+        GuideRegistry.settingsTourSteps(),
+      ),
       _ => (null, const <CoachMarkStep>[]),
     };
     if (id == null) return;
@@ -255,6 +259,12 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     final currentIndex = ref.watch(currentTabProvider);
     ref.listen<int>(currentTabProvider, (previous, next) {
       if (previous != next) _maybeScreenTour(next);
+    });
+    // Lịch sử is a section of Sạc pin now; its guide shows on first open.
+    ref.listen<ChargeSection>(chargeSectionProvider, (previous, next) {
+      if (previous != next && next == ChargeSection.history) {
+        _maybeScreenTour(AppTab.charge);
+      }
     });
 
     SystemChrome.setSystemUIOverlayStyle(
@@ -320,7 +330,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     BuildContext context,
     int currentIndex,
   ) {
-    final tabTitles = ['Tổng quan', 'Sạc pin', 'Lịch sử', 'Cài đặt'];
+    final tabTitles = ['Tổng quan', 'Sạc pin', 'Tiện ích', 'Cài đặt'];
     const energyMode = true;
 
     final titleSwap = MediaQuery.disableAnimationsOf(context)
@@ -416,61 +426,6 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => NotificationCenterScreen()),
-    );
-  }
-}
-
-class _SelectedHistory extends ConsumerWidget {
-  const _SelectedHistory();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedId = ref.watch(selectedVehicleIdProvider);
-    final pending = ref.watch(pendingSmartChargeTargetProvider);
-    final id = pending?.vehicleId ?? selectedId;
-    if (id.isEmpty) {
-      return EmptyState(
-        icon: Icons.history_rounded,
-        title: 'Chưa chọn phương tiện',
-        message:
-            'Vui lòng chọn xe VinFast của bạn để xem toàn bộ lịch sử sạc pin.',
-        actionLabel: 'Chọn xe ngay',
-        onAction: () => VehiclePickerSheet.show(context, ref),
-      );
-    }
-    final vehicle = ref.watch(vehicleProvider(id));
-    return vehicle.when(
-      loading: () => Center(child: CircularProgressIndicator()),
-      error: (e, _) => ErrorState.fromError(
-        error: e,
-        prefix: 'Chưa tải được lịch sử',
-        onRetry: () => ref.invalidate(vehicleProvider(id)),
-      ),
-      data: (value) {
-        final args = SmartChargingControllerArgs(
-          vehicleId: id,
-          currentSoc: (value?.currentBattery ?? 0).toDouble(),
-        );
-        final history = ref.watch(
-          smartChargingControllerProvider(args).select((s) => s.history),
-        );
-        final controller = ref.read(
-          smartChargingControllerProvider(args).notifier,
-        );
-        return SmartChargeHistoryScreen(
-          controller: controller,
-          ownerUid: ref.watch(currentUidProvider),
-          initialItems: history,
-          embedded: true,
-          initialSessionId: pending?.sessionId,
-          onStartCharging: () => AppNavigation.navigateToTab(context, 1),
-          onPendingTargetConsumed: pending == null
-              ? null
-              : () =>
-                    ref.read(pendingSmartChargeTargetProvider.notifier).state =
-                        null,
-        );
-      },
     );
   }
 }

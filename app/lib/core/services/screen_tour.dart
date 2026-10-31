@@ -14,6 +14,7 @@ import 'guide_registry.dart';
 abstract final class ScreenTour {
   static const charge = 'tour_charge_v1';
   static const history = 'tour_history_v1';
+  static const utilities = 'tour_utilities_v1';
   static const settings = 'tour_settings_v1';
   static const premium = 'tour_premium_v1';
   static const bot = 'tour_bot_v1';

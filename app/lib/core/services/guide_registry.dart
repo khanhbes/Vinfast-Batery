@@ -55,7 +55,8 @@ extension GuideDestinationExtension on GuideDestination {
   int? get tabIndex => switch (this) {
     GuideDestination.overview => 0,
     GuideDestination.charging => 1,
-    GuideDestination.history => 2,
+    // QA 140: Lịch sử is a section of Sạc pin (see GuideScreen).
+    GuideDestination.history => 1,
     GuideDestination.settings => 3,
     GuideDestination.shellySetup || GuideDestination.batteryBot => null,
   };
@@ -141,8 +142,9 @@ class GuideRegistry {
   static final GlobalKey keyChargeTab = GlobalKey(
     debugLabel: 'anchor_charge_tab',
   );
-  static final GlobalKey keyHistoryTab = GlobalKey(
-    debugLabel: 'anchor_history_tab',
+  // QA 140: the third tab is Tiện ích (Lịch sử moved into Sạc pin).
+  static final GlobalKey keyUtilitiesTab = GlobalKey(
+    debugLabel: 'anchor_utilities_tab',
   );
   static final GlobalKey keyMoreSettingsTab = GlobalKey(
     debugLabel: 'anchor_more_settings_tab',
@@ -158,7 +160,8 @@ class GuideRegistry {
   static final keyHistoryHeader = _anchor('anchor_history_header');
   static final keySettingsPremium = _anchor('anchor_settings_premium');
   static final keySettingsHelp = _anchor('anchor_settings_help');
-  static final keySettingsNight = _anchor('anchor_settings_night');
+  static final keyUtilitiesHealth = _anchor('anchor_utilities_health');
+  static final keyUtilitiesNight = _anchor('anchor_utilities_night');
   static final keyPremiumPeriod = _anchor('anchor_premium_period');
   static final keyPremiumUltra = _anchor('anchor_premium_ultra');
   static final keyPremiumPromo = _anchor('anchor_premium_promo');
@@ -186,9 +189,9 @@ class GuideRegistry {
   static List<CoachMarkStep> chargeTourSteps() => [
     _step(
       'charge_mode',
-      'Hai cách sạc',
-      'Sạc AI: chọn % muốn đạt, máy chủ tự ngắt đúng mức. Hẹn giờ: sạc '
-          'trong một khoảng thời gian rồi ổ Shelly tự tắt.',
+      'Sạc AI, Theo giờ, Lịch sử',
+      'Sạc AI: chọn % muốn đạt, máy chủ tự ngắt đúng mức. Theo giờ: ổ Shelly '
+          'tự tắt khi hết giờ. Lịch sử: các phiên đã sạc.',
       keyChargeMode,
     ),
     _step(
@@ -238,20 +241,28 @@ class GuideRegistry {
       keySettingsPremium,
     ),
     _step(
-      'settings_night',
-      'Sạc đêm an toàn',
-      'Hẹn sạc đầy 80–90% ngay trước giờ thức dậy, giám sát chặt hơn ban '
-          'ngày (gói Ultra).',
-      keySettingsNight,
-      align: Alignment.topCenter,
-    ),
-    _step(
       'settings_help',
       'Trợ giúp',
       'App tự kiểm tra lỗi và gợi ý cách sửa; gửi câu hỏi tới đội Pinova ở '
           'mọi gói.',
       keySettingsHelp,
       align: Alignment.topCenter,
+    ),
+  ];
+
+  static List<CoachMarkStep> utilitiesTourSteps() => [
+    _step(
+      'utilities_health',
+      'Sức khỏe pin',
+      'Dung lượng pin còn lại sau mỗi lần sạc và dấu hiệu chai (gói Pro).',
+      keyUtilitiesHealth,
+    ),
+    _step(
+      'utilities_night',
+      'Sạc đêm an toàn',
+      'Hẹn sạc đầy 80–90% ngay trước giờ thức dậy, giám sát chặt hơn ban '
+          'ngày (gói Ultra).',
+      keyUtilitiesNight,
     ),
   ];
 
@@ -340,20 +351,21 @@ class GuideRegistry {
       tooltipAlignment: Alignment.topCenter,
     ),
     CoachMarkStep(
-      id: 'step_history',
-      titleVi: 'Lịch sử',
-      titleEn: 'History',
+      id: 'step_utilities',
+      titleVi: 'Tiện ích',
+      titleEn: 'Tools',
       descriptionVi:
-          'Xem lại các phiên sạc đã lưu và mở một phiên để xem chi tiết.',
-      descriptionEn: 'Review saved charging sessions and open one for details.',
-      anchorKey: keyHistoryTab,
+          'Sức khỏe pin, sạc đêm, lộ trình, AI cá nhân và bảo dưỡng xe.',
+      descriptionEn:
+          'Battery health, night charging, trips, personal AI and service.',
+      anchorKey: keyUtilitiesTab,
       tooltipAlignment: Alignment.topCenter,
     ),
     CoachMarkStep(
       id: 'step_settings',
       titleVi: 'Cài đặt',
       titleEn: 'Settings',
-      descriptionVi: 'Quản lý tài khoản, xe và mở lại hướng dẫn tại đây.',
+      descriptionVi: 'Tài khoản, xe, ổ Shelly, gói và giao diện.',
       descriptionEn:
           'Manage your account and vehicles, or replay this guide here.',
       anchorKey: keyMoreSettingsTab,
@@ -407,12 +419,12 @@ class GuideRegistry {
       summaryVi: 'Tìm phiên sạc đã lưu và xem số liệu của từng phiên.',
       summaryEn: 'Find saved sessions and review their details.',
       stepsVi: [
-        'Mở tab Lịch sử.',
+        'Mở tab Sạc pin, chọn Lịch sử.',
         'Chọn khoảng thời gian nếu có bộ lọc.',
         'Chạm một phiên để xem chi tiết.',
       ],
       stepsEn: [
-        'Open History.',
+        'Open Charging, then History.',
         'Choose a time period if a filter is available.',
         'Tap a session to view details.',
       ],

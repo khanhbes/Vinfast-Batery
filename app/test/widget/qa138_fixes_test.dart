@@ -12,11 +12,11 @@ import 'package:vinfast_battery/data/models/entitlement.dart';
 import 'package:vinfast_battery/data/models/personal_charging_profile.dart';
 import 'package:vinfast_battery/data/models/vehicle_learning_status.dart';
 import 'package:vinfast_battery/data/services/server_smart_charger_service.dart';
-import 'package:vinfast_battery/features/more/more_screen.dart';
 import 'package:vinfast_battery/features/premium/premium_gate.dart';
 import 'package:vinfast_battery/features/premium/premium_screen.dart';
 import 'package:vinfast_battery/features/settings/delete_account_sheet.dart';
 import 'package:vinfast_battery/features/settings/personal_ai_settings_screen.dart';
+import 'package:vinfast_battery/features/utilities/utilities_screen.dart';
 
 /// QA 138 (review 26/10/2026): the High findings, fixed.
 /// QA-02 the owner's AI data (switch, delete) is open on every plan, only
@@ -154,12 +154,16 @@ void main() {
       expect(tester.widget<ButtonStyleButton>(train).onPressed, isNotNull);
     });
 
-    testWidgets('the Settings row is open on Free', (tester) async {
+    // QA 140: the entry moved from Cài đặt to Tiện ích.
+    testWidgets('the Tiện ích tile is open on Free', (tester) async {
       await tester.binding.setSurfaceSize(const Size(412, 1600));
       addTearDown(() => tester.binding.setSurfaceSize(null));
-      await tester.pumpWidget(_app(const Scaffold(body: MoreScreen())));
+      await tester.pumpWidget(_app(const Scaffold(body: UtilitiesScreen())));
       await _settle(tester);
-      expect(find.byKey(const ValueKey('more-personal-ai')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('utilities-personal-ai')),
+        findsOneWidget,
+      );
       expect(
         find.byKey(const ValueKey('premium-locked-learning_train')),
         findsNothing,

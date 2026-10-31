@@ -38,14 +38,13 @@ void main() {
     expect(find.text('Xe của tôi'), findsOneWidget);
     expect(find.text('Sạc thông minh Shelly'), findsOneWidget);
     expect(
-      find.text('Lộ trình'),
-      BetaCapabilities.tripPlanner ? findsOneWidget : findsNothing,
-    );
-    expect(
       find.text('Trợ lý AI & Dự báo Pin'),
       BetaCapabilities.advancedAi ? findsOneWidget : findsNothing,
     );
-    expect(find.text('Bảo dưỡng xe'), findsOneWidget);
+    // QA 140: features moved to Tiện ích; Cài đặt keeps settings only.
+    for (final moved in ['Lộ trình', 'Bảo dưỡng xe', 'Thành tựu', 'AI cá nhân']) {
+      expect(find.text(moved), findsNothing, reason: moved);
+    }
     expect(find.text('Cài đặt hệ thống'), findsOneWidget);
     expect(find.text('Hướng dẫn sử dụng'), findsOneWidget);
     expect(find.textContaining('Cứu hộ 24/7'), findsNothing);

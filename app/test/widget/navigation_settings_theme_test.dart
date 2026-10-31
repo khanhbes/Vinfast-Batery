@@ -20,7 +20,7 @@ void main() {
         ),
       ),
     );
-    final node = tester.getSemantics(find.bySemanticsLabel('Lịch sử'));
+    final node = tester.getSemantics(find.bySemanticsLabel('Tiện ích'));
     expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
     // ignore: deprecated_member_use
     tester.binding.pipelineOwner.semanticsOwner!.performAction(
@@ -68,7 +68,7 @@ void main() {
           expect(size.width, greaterThanOrEqualTo(48));
           expect(size.height, greaterThanOrEqualTo(48));
         }
-        await tester.tap(find.text('Lịch sử'));
+        await tester.tap(find.text('Tiện ích'));
         await tester.pumpAndSettle();
         expect(selected, 2);
         expect(tester.takeException(), isNull);

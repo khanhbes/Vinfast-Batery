@@ -131,7 +131,23 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     ref
         .read(smartChargingControllerProvider(args).notifier)
         .updateDraft(targetSoc: pending.targetSoc.clamp(1, 100).toDouble());
-    if (!_aiMode) setState(() => _aiMode = true);
+    _selectAiMode(true);
+  }
+
+  /// QA 140: in the Sạc pin tab the mode is the tab's section (the switcher
+  /// sits above this screen); standalone, it stays local.
+  bool _aiModeOf(WidgetRef ref) => widget.embedded
+      ? ref.watch(chargeSectionProvider) != ChargeSection.timed
+      : _aiMode;
+
+  void _selectAiMode(bool ai) {
+    if (widget.embedded) {
+      ref.read(chargeSectionProvider.notifier).state = ai
+          ? ChargeSection.ai
+          : ChargeSection.timed;
+    } else if (_aiMode != ai) {
+      setState(() => _aiMode = ai);
+    }
   }
 
   @override
@@ -208,7 +224,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
     final reduced = MediaQuery.disableAnimationsOf(context);
     // Outgoing animated children keep the mode they were built with.
-    final aiMode = _aiMode;
+    final aiMode = _aiModeOf(ref);
 
     ref.listen<({String vehicleId, double targetSoc})?>(
       pendingChargeTargetSocProvider,
@@ -321,18 +337,21 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                               key: const ValueKey('plan-workspace'),
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                LuxeReveal(
-                                  index: 1,
-                                  child: KeyedSubtree(
-                                    key: GuideRegistry.keyChargeMode,
-                                    child: ChargeModeSwitcherV2(
-                                      isAiMode: _aiMode,
-                                      onChanged: (value) =>
-                                          setState(() => _aiMode = value),
+                                // In the tab the switcher is the tab's own
+                                // (QA 140: Sạc AI | Theo giờ | Lịch sử).
+                                if (!widget.embedded) ...[
+                                  LuxeReveal(
+                                    index: 1,
+                                    child: KeyedSubtree(
+                                      key: GuideRegistry.keyChargeMode,
+                                      child: ChargeModeSwitcherV2(
+                                        isAiMode: _aiMode,
+                                        onChanged: _selectAiMode,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 16),
+                                  const SizedBox(height: 16),
+                                ],
                                 AnimatedSwitcher(
                                   duration: reduced
                                       ? Duration.zero

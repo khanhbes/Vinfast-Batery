@@ -32,6 +32,7 @@ import 'package:vinfast_battery/features/auth/register_screen.dart';
 import 'package:vinfast_battery/features/battery_monitor/battery_health_screen.dart';
 import 'package:vinfast_battery/features/battery_monitor/battery_monitor_screen.dart';
 import 'package:vinfast_battery/features/more/more_screen.dart';
+import 'package:vinfast_battery/features/utilities/utilities_screen.dart';
 import 'package:vinfast_battery/features/overview/overview_screen.dart';
 import 'package:vinfast_battery/features/premium/premium_gate.dart';
 import 'package:vinfast_battery/features/premium/premium_screen.dart';
@@ -157,6 +158,7 @@ typedef _Shot = ({String id, String name, PlanTier tier, Widget Function() build
 
 final List<_Shot> _shots = [
   (id: 'more', name: 'Cài đặt', tier: PlanTier.free, build: () => const MoreScreen()),
+  (id: 'utilities', name: 'Tiện ích', tier: PlanTier.free, build: () => const UtilitiesScreen()),
   (id: 'premium', name: 'Pinova Premium', tier: PlanTier.free, build: () => const PremiumScreen()),
   (id: 'overview', name: 'Tổng quan', tier: PlanTier.free, build: () => const OverviewScreen()),
   (id: 'garage', name: 'Xe của tôi', tier: PlanTier.free, build: () => const VehicleGarageScreen()),

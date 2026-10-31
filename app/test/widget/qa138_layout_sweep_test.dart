@@ -22,6 +22,7 @@ import 'package:vinfast_battery/features/battery_monitor/battery_health_screen.d
 import 'package:vinfast_battery/features/battery_monitor/battery_monitor_screen.dart';
 import 'package:vinfast_battery/features/maintenance/maintenance_screen.dart';
 import 'package:vinfast_battery/features/more/more_screen.dart';
+import 'package:vinfast_battery/features/utilities/utilities_screen.dart';
 import 'package:vinfast_battery/features/notifications/notification_center_screen.dart';
 import 'package:vinfast_battery/features/overview/overview_screen.dart';
 import 'package:vinfast_battery/features/premium/premium_screen.dart';
@@ -100,6 +101,7 @@ typedef _Screen = ({String name, PlanTier tier, Widget Function() build});
 
 final List<_Screen> _screens = [
   (name: 'Cài đặt', tier: PlanTier.free, build: () => const MoreScreen()),
+  (name: 'Tiện ích', tier: PlanTier.free, build: () => const UtilitiesScreen()),
   (
     name: 'Pinova Premium',
     tier: PlanTier.free,

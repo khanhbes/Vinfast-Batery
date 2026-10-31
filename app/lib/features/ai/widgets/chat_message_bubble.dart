@@ -292,7 +292,7 @@ class ChatMessageBubble extends StatelessWidget {
     final label = switch (action) {
       BatteryBotAction.shellySetup => 'Mở thiết lập Shelly',
       BatteryBotAction.guideCharging => 'Đến trang Sạc pin',
-      BatteryBotAction.guideHistory => 'Xem tab Lịch sử',
+      BatteryBotAction.guideHistory => 'Xem Lịch sử sạc',
       BatteryBotAction.guideVehicle => 'Xem màn hình Tổng quan',
       null => actionKey,
     };

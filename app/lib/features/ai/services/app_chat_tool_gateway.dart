@@ -255,7 +255,7 @@ class AppChatToolGateway implements ChatToolGateway {
         );
         _guard(owner, vehicle.vehicleId, generation);
         return LocalChatReply(
-          'Đã đọc ${page.items.length} phiên gần nhất. Mở Lịch sử để xem điện năng và chi phí từng phiên.',
+          'Đã đọc ${page.items.length} phiên gần nhất. Mở Sạc pin → Lịch sử để xem điện năng và chi phí từng phiên.',
         );
       case 'reminders':
         final all = await reminders.list(

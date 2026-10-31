@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/widgets/luxe_settings.dart';
 import 'package:vinfast_battery/features/more/more_screen.dart';
+import 'package:vinfast_battery/features/utilities/utilities_screen.dart';
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -99,8 +100,6 @@ void main() {
       for (final text in [
         'Xe của tôi',
         'Sạc thông minh Shelly',
-        'Thành tựu',
-        'Bảo dưỡng xe',
         'Cài đặt hệ thống',
         'Trung tâm thông báo',
         'Đăng xuất tài khoản',
@@ -108,6 +107,38 @@ void main() {
         await tester.scrollUntilVisible(find.text(text), 200, scrollable: list);
         await tester.pump(const Duration(milliseconds: 600));
         expect(tester.takeException(), isNull, reason: text);
+      }
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    // QA 140: the new Tiện ích tab at 320 dp, text ×1/×2.
+    testWidgets('utilities tab fits 320dp at text $scale', (tester) async {
+      tester.view.physicalSize = const Size(320, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        ProviderScope(child: host(const UtilitiesScreen(), scale: scale)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 2));
+      expect(tester.takeException(), isNull);
+      final list = find.byType(Scrollable).first;
+      for (final text in [
+        'Sức khỏe pin',
+        'Sạc đêm an toàn',
+        'AI cá nhân',
+        'Bảo dưỡng xe',
+        'Thành tựu',
+      ]) {
+        await tester.scrollUntilVisible(find.text(text), 200, scrollable: list);
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(tester.takeException(), isNull, reason: text);
+        expect(
+          tester.getSize(find.text(text)).height,
+          greaterThan(0),
+          reason: text,
+        );
       }
       await tester.pumpWidget(const SizedBox());
     });

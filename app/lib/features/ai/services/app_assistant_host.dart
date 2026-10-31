@@ -53,12 +53,11 @@ class AppAssistantActionHost implements AssistantActionHost {
   bool? _push;
 
   static const _tabs = {
-    'overview': 0,
-    'charge': 1,
-    'history': 2,
-    'settings': 3,
+    'overview': AppTab.overview,
+    'utilities': AppTab.utilities,
+    'settings': AppTab.settings,
   };
-  static const _tabNames = ['overview', 'charge', 'history', 'settings'];
+  static const _tabNames = ['overview', 'charge', 'utilities', 'settings'];
 
   Future<void> _loadTariff() async {
     try {
@@ -103,7 +102,12 @@ class AppAssistantActionHost implements AssistantActionHost {
       }
     }
     return {
-      'screen': tab >= 0 && tab < _tabNames.length
+      // QA 140: Lịch sử is a section of the Sạc pin tab.
+      'screen':
+          tab == AppTab.charge &&
+              ref.read(chargeSectionProvider) == ChargeSection.history
+          ? 'history'
+          : tab >= 0 && tab < _tabNames.length
           ? _tabNames[tab]
           : 'overview',
       'vehicleId': vehicle?.vehicleId,
@@ -154,6 +158,14 @@ class AppAssistantActionHost implements AssistantActionHost {
       ref.read(currentTabProvider.notifier).state = tab;
       return true;
     }
+    if (screen == 'charge') {
+      openChargeControl(ref);
+      return true;
+    }
+    if (screen == 'history') {
+      openChargeHistory(ref);
+      return true;
+    }
     final vehicle = _vehicle;
     if (screen == 'session_detail') {
       if (vehicle != null && sessionId != null) {
@@ -162,7 +174,7 @@ class AppAssistantActionHost implements AssistantActionHost {
           sessionId: sessionId,
         );
       }
-      ref.read(currentTabProvider.notifier).state = 2;
+      openChargeHistory(ref);
       return true;
     }
     final Widget? page = switch (screen) {
@@ -262,7 +274,7 @@ class AppAssistantActionHost implements AssistantActionHost {
         vehicleId: vehicle.vehicleId,
         targetSoc: percent,
       );
-      ref.read(currentTabProvider.notifier).state = 1;
+      openChargeControl(ref, ai: true);
       return true;
     }
     if (name == 'set_night_plan') {
@@ -299,7 +311,7 @@ class AppAssistantActionHost implements AssistantActionHost {
         vehicleId: vehicle.vehicleId,
         targetSoc: percent,
       );
-      ref.read(currentTabProvider.notifier).state = 1;
+      openChargeControl(ref, ai: true);
       return true;
     }
     if (name == 'plan_trip' && BetaCapabilities.tripPlanner) {

@@ -2,14 +2,49 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/app_providers.dart';
+import '../../core/services/guide_registry.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/error_state.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
+import '../ai/controllers/smart_charging_controller.dart';
+import '../ai/smart_charge_history_screen.dart';
 import '../ai/smart_charging_control_screen.dart';
+import '../auth/auth_providers.dart';
+import 'charge_section_switcher.dart';
 
-/// Vehicle-scoped Smart Charge entry point for the V4 Charge tab.
+/// Vehicle-scoped Sạc pin tab (QA 140): Sạc AI | Theo giờ | Lịch sử. The
+/// switcher sits above the content and stays while a charge runs.
 class ChargeScreen extends ConsumerWidget {
   const ChargeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final section = ref.watch(chargeSectionProvider);
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: KeyedSubtree(
+            key: GuideRegistry.keyChargeMode,
+            child: ChargeSectionSwitcher(
+              value: section,
+              onChanged: (next) =>
+                  ref.read(chargeSectionProvider.notifier).state = next,
+            ),
+          ),
+        ),
+        Expanded(
+          child: section == ChargeSection.history
+              ? const ChargeHistoryView()
+              : const _ChargeControl(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChargeControl extends ConsumerWidget {
+  const _ChargeControl();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -52,6 +87,63 @@ class ChargeScreen extends ConsumerWidget {
               currentSoc: value.currentBattery.toDouble(),
               embedded: true,
             ),
+    );
+  }
+}
+
+/// Sạc pin → Lịch sử (the History tab before QA 140).
+class ChargeHistoryView extends ConsumerWidget {
+  const ChargeHistoryView({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedId = ref.watch(selectedVehicleIdProvider);
+    final pending = ref.watch(pendingSmartChargeTargetProvider);
+    final id = pending?.vehicleId ?? selectedId;
+    if (id.isEmpty) {
+      return EmptyState(
+        icon: Icons.history_rounded,
+        title: 'Chưa chọn phương tiện',
+        message:
+            'Vui lòng chọn xe VinFast của bạn để xem toàn bộ lịch sử sạc pin.',
+        actionLabel: 'Chọn xe ngay',
+        onAction: () => VehiclePickerSheet.show(context, ref),
+      );
+    }
+    final vehicle = ref.watch(vehicleProvider(id));
+    return vehicle.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => ErrorState.fromError(
+        error: e,
+        prefix: 'Chưa tải được lịch sử',
+        onRetry: () => ref.invalidate(vehicleProvider(id)),
+      ),
+      data: (value) {
+        final args = SmartChargingControllerArgs(
+          vehicleId: id,
+          currentSoc: (value?.currentBattery ?? 0).toDouble(),
+        );
+        final history = ref.watch(
+          smartChargingControllerProvider(args).select((s) => s.history),
+        );
+        final controller = ref.read(
+          smartChargingControllerProvider(args).notifier,
+        );
+        return SmartChargeHistoryScreen(
+          controller: controller,
+          ownerUid: ref.watch(currentUidProvider),
+          initialItems: history,
+          embedded: true,
+          initialSessionId: pending?.sessionId,
+          onStartCharging: () =>
+              ref.read(chargeSectionProvider.notifier).state = ChargeSection.ai,
+          onPendingTargetConsumed: pending == null
+              ? null
+              : () =>
+                    ref.read(pendingSmartChargeTargetProvider.notifier).state =
+                        null,
+        );
+      },
     );
   }
 }

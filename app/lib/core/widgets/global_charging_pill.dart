@@ -140,7 +140,7 @@ class GlobalChargingPill extends ConsumerWidget {
       stale: stale,
       onTap: () {
         ref.read(selectedVehicleIdProvider.notifier).state = vehicleId;
-        ref.read(currentTabProvider.notifier).state = 1;
+        openChargeControl(ref);
       },
     );
   }
@@ -204,7 +204,7 @@ class GlobalChargingPill extends ConsumerWidget {
     );
     if (selected == null || !context.mounted) return;
     ref.read(selectedVehicleIdProvider.notifier).state = selected;
-    ref.read(currentTabProvider.notifier).state = 1;
+    openChargeControl(ref);
   }
 }
 

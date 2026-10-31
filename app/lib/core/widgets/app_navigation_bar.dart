@@ -19,7 +19,7 @@ class AppNavigationBar extends StatelessWidget {
   static const destinations = [
     (Icons.dashboard_rounded, 'Tổng quan'),
     (Icons.bolt_rounded, 'Sạc pin'),
-    (Icons.history_rounded, 'Lịch sử'),
+    (Icons.apps_rounded, 'Tiện ích'),
     (Icons.tune_rounded, 'Cài đặt'),
   ];
 
@@ -28,7 +28,7 @@ class AppNavigationBar extends StatelessWidget {
 
   static Key? _guideKey(int i) => switch (i) {
     1 => GuideRegistry.keyChargeTab,
-    2 => GuideRegistry.keyHistoryTab,
+    2 => GuideRegistry.keyUtilitiesTab,
     3 => GuideRegistry.keyMoreSettingsTab,
     _ => null,
   };

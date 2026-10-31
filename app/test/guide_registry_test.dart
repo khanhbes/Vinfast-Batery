@@ -46,7 +46,7 @@ void main() {
       );
       expect(
         steps.map((step) => step.anchorKey),
-        contains(GuideRegistry.keyHistoryTab),
+        contains(GuideRegistry.keyUtilitiesTab),
       );
       for (final step in steps) {
         expect(step.id, isNotEmpty);

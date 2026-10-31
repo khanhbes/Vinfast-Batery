@@ -63,7 +63,7 @@ class BatteryBotFaq {
     BatteryBotAction.guideCharging =>
       'Mở Sạc pin để xem điều kiện bật sạc hoặc dùng Dừng sạc. Nếu nút bị khóa, kiểm tra thông báo kết nối và an toàn. Mình không tự bật hoặc tắt ổ cắm.',
     BatteryBotAction.guideHistory =>
-      'Mở Lịch sử, chọn xe và khoảng thời gian. Chạm một phiên để xem điện năng và chi phí đã ghi nhận.',
+      'Mở Sạc pin → Lịch sử, chọn xe và khoảng thời gian. Chạm một phiên để xem điện năng và chi phí đã ghi nhận.',
     BatteryBotAction.shellySetup =>
       'Mở Cài đặt → Sạc thông minh Shelly để kết nối. Trước kiểm tra an toàn, rút mọi tải và chỉ tiếp tục khi bạn đang giám sát thiết bị.',
     null =>

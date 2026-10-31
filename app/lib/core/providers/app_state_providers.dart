@@ -5,6 +5,40 @@ import 'app_providers.dart';
 /// Current tab index provider (thay thế GlobalKey)
 final currentTabProvider = StateProvider<int>((ref) => 0);
 
+/// The four tabs (QA 140: Lịch sử moved into Sạc pin, its place is the new
+/// Tiện ích tab; Cài đặt keeps settings only).
+abstract final class AppTab {
+  static const overview = 0;
+  static const charge = 1;
+  static const utilities = 2;
+  static const settings = 3;
+  static const count = 4;
+}
+
+/// What the Sạc pin tab shows (QA 140): Sạc AI | Theo giờ | Lịch sử.
+enum ChargeSection { ai, timed, history }
+
+final chargeSectionProvider = StateProvider<ChargeSection>(
+  (ref) => ChargeSection.ai,
+);
+
+/// Opens Sạc pin → Lịch sử (was the History tab before QA 140). [ref] is a
+/// `Ref` or a `WidgetRef`.
+void openChargeHistory(dynamic ref) {
+  ref.read(chargeSectionProvider.notifier).state = ChargeSection.history;
+  ref.read(currentTabProvider.notifier).state = AppTab.charge;
+}
+
+/// Opens Sạc pin on its charging controls: leaves Lịch sử (a pending target
+/// is only taken by the controls), and with [ai] picks Sạc AI.
+void openChargeControl(dynamic ref, {bool ai = false}) {
+  final section = ref.read(chargeSectionProvider.notifier);
+  if (ai || section.state == ChargeSection.history) {
+    section.state = ChargeSection.ai;
+  }
+  ref.read(currentTabProvider.notifier).state = AppTab.charge;
+}
+
 final activeChargingSessionProvider =
     ChangeNotifierProvider<ActiveChargingSessionCoordinator>((ref) {
       // ChangeNotifierProvider disposes the notifier itself; a second

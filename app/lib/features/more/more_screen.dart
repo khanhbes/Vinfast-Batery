@@ -17,36 +17,29 @@ import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
-import '../../data/models/shelly_connection_state.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
-import '../achievements/achievements_screen.dart';
 import '../achievements/controllers/achievements_controller.dart';
 import '../achievements/models/achievement.dart';
 import '../ai/ai_models_screen.dart';
 import '../ai/controllers/smart_charging_controller.dart';
 import '../auth/auth_gate.dart';
-import '../home/widgets/luxe_dashboard_cards.dart' show LuxePressable;
-import '../maintenance/maintenance_screen.dart';
 import '../notifications/notification_center_screen.dart';
 import '../premium/premium_banner.dart';
-import '../premium/premium_gate.dart';
 import '../support/help_center_screen.dart';
-import '../smart_charging/night_charging_screen.dart';
-import '../../data/models/entitlement.dart';
 import '../settings/guide_screen.dart';
 import '../settings/profile_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/vehicle_garage_screen.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
-import '../trip_planner/trip_planner_wrapper.dart';
+import 'widgets/luxe_tile_grid.dart';
 import '../settings/assistant_memory_screen.dart';
-import '../settings/personal_ai_settings_screen.dart';
 import '../../core/services/guide_registry.dart';
 import '../premium/plan_tag.dart';
 
-/// Tab Cài đặt (luxe): profile card ringed by the achievement rank, a 2×2
-/// grid of live tiles (vehicle, Shelly, achievements, maintenance) and quiet
-/// glass lists for system and support. Logout clears session and providers.
+/// Tab Cài đặt (luxe): profile card ringed by the achievement rank, live
+/// tiles for the vehicle and Shelly, and quiet glass lists for system and
+/// support. Features live in Tiện ích (QA 140): settings only here. Logout
+/// clears session and providers.
 class MoreScreen extends ConsumerStatefulWidget {
   const MoreScreen({super.key});
 
@@ -223,9 +216,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
               const LuxeSectionLabel('PHƯƠNG TIỆN & SẠC'),
               LuxeReveal(
                 index: 1,
-                child: _TileGrid(
+                child: LuxeTileGrid(
                   tiles: [
-                    _GridTile(
+                    LuxeTile(
                       icon: Icons.two_wheeler_rounded,
                       title: 'Xe của tôi',
                       value: vehicleContext.hasVehicle
@@ -233,25 +226,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                           : 'Chưa chọn xe',
                       onTap: () => _push(const VehicleGarageScreen()),
                     ),
-                    _GridTile(
+                    LuxeTile(
                       icon: Icons.power_rounded,
                       title: 'Sạc thông minh Shelly',
                       shelly: true,
                       onTap: () => _push(const SmartChargerSetupHubScreen()),
-                    ),
-                    _GridTile(
-                      icon: Icons.workspace_premium_rounded,
-                      title: 'Thành tựu',
-                      value:
-                          '${achievements.unlockedCount}/${achievementCatalog.length} huy hiệu',
-                      accent: achievements.rank.rarity.accent,
-                      onTap: () => _push(const AchievementsScreen()),
-                    ),
-                    _GridTile(
-                      icon: Icons.build_circle_rounded,
-                      title: 'Bảo dưỡng xe',
-                      value: 'Lịch theo ODO',
-                      onTap: () => _push(const MaintenanceScreen()),
                     ),
                   ],
                 ),
@@ -265,50 +244,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                 index: 2,
                 child: LuxeSettingsGroup(
                   children: [
-                    // Task 127: the owner trains the charge and trip models
-                    // here (was hidden behind the advanced-AI beta flag).
-                    // QA 138: open on every plan (the owner's data, its
-                    // switch and "delete" live there); only training is
-                    // Ultra, explained on that screen.
-                    LuxeSettingsRow(
-                      key: const ValueKey('more-personal-ai'),
-                      icon: Icons.model_training_rounded,
-                      title: 'AI cá nhân',
-                      subtitle:
-                          'Dữ liệu đã thu thập, quyền học dữ liệu và nút Huấn luyện',
-                      onTap: () {
-                        final vehicleId = ref.read(selectedVehicleIdProvider);
-                        if (vehicleId.isEmpty) {
-                          AppPopup.showWarning('Hãy chọn xe trước');
-                          return;
-                        }
-                        _push(PersonalAiSettingsScreen(vehicleId: vehicleId));
-                      },
-                    ),
-                    // QA 136: outside the plan these rows are faded and only
-                    // their plan tag opens Pinova Premium.
-                    PremiumLocked(
-                      feature: PremiumFeature.nightCharging,
-                      tagAlignment: AlignmentDirectional.centerEnd,
-                      tagPadding: const EdgeInsetsDirectional.only(end: 10),
-                      reserveTagSpace: true,
-                      child: LuxeSettingsRow(
-                        key: GuideRegistry.keySettingsNight,
-                        icon: Icons.nights_stay_rounded,
-                        title: 'Sạc đêm an toàn',
-                        subtitle:
-                            'Đầy 80–90% đúng giờ thức dậy, ngắt sớm khi ổ nóng',
-                        onTap: () => NightChargingScreen.open(
-                          context,
-                          ref,
-                          vehicleId: ref.read(selectedVehicleIdProvider),
-                          currentSoc: vehicleContext.vehicle?.currentBattery
-                              .toDouble(),
-                          currentOdoKm: vehicleContext.vehicle?.currentOdo
-                              .toDouble(),
-                        ),
-                      ),
-                    ),
                     LuxeSettingsRow(
                       key: const ValueKey('more-assistant-memory'),
                       icon: Icons.auto_awesome_rounded,
@@ -330,20 +265,6 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                               : LuxeColors.champagne,
                         ),
                         onTap: () => _push(const AiModelsScreen()),
-                      ),
-                    if (BetaCapabilities.tripPlanner)
-                      PremiumLocked(
-                        feature: PremiumFeature.tripEstimate,
-                        tagAlignment: AlignmentDirectional.centerEnd,
-                        tagPadding: const EdgeInsetsDirectional.only(end: 10),
-                        reserveTagSpace: true,
-                        child: LuxeSettingsRow(
-                          key: const ValueKey('more-trip-planner'),
-                          icon: Icons.alt_route_rounded,
-                          title: 'Lộ trình',
-                          subtitle: 'Chọn điểm đến và ước tính pin cần dùng',
-                          onTap: () => _push(const TripPlannerWrapper()),
-                        ),
                       ),
                     LuxeSettingsRow(
                       icon: Icons.tune_rounded,
@@ -708,141 +629,6 @@ class _MiniBattery extends StatelessWidget {
       ),
     ),
   );
-}
-
-// ─────────────────────────────── Tile grid ───────────────────────────────
-
-class _GridTile {
-  const _GridTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-    this.value,
-    this.accent,
-    this.shelly = false,
-  });
-  final IconData icon;
-  final String title;
-  final String? value;
-  final Color? accent;
-  final VoidCallback onTap;
-
-  /// Live Shelly status from the shared connection coordinator.
-  final bool shelly;
-}
-
-class _TileGrid extends StatelessWidget {
-  const _TileGrid({required this.tiles});
-  final List<_GridTile> tiles;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, box) {
-      final big = MediaQuery.textScalerOf(context).scale(14) > 20;
-      final columns = big || box.maxWidth < 300 ? 1 : 2;
-      final width = (box.maxWidth - 12 * (columns - 1)) / columns;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          for (final t in tiles)
-            SizedBox(
-              width: width,
-              child: _TileCard(tile: t),
-            ),
-        ],
-      );
-    },
-  );
-}
-
-class _TileCard extends StatelessWidget {
-  const _TileCard({required this.tile});
-  final _GridTile tile;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget body(String value, Color? dot) => Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            LuxeMedallion(icon: tile.icon, accent: tile.accent, size: 38),
-            const Spacer(),
-            if (dot != null)
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: dot,
-                  boxShadow: [
-                    BoxShadow(color: dot.withValues(alpha: 0.6), blurRadius: 8),
-                  ],
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Text(
-          tile.title,
-          maxLines: 2,
-          style: const TextStyle(
-            color: LuxeColors.text,
-            fontSize: 15,
-            height: 1.25,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: LuxeText.caption.copyWith(fontSize: 12.5),
-        ),
-      ],
-    );
-
-    return LuxePressable(
-      radius: 22,
-      semanticsLabel: tile.title,
-      onTap: () {
-        HapticFeedback.selectionClick();
-        tile.onTap();
-      },
-      child: LuxeGlass(
-        radius: 22,
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 124),
-          child: tile.shelly
-              ? StreamBuilder<ShellyConnectionSnapshot>(
-                  stream: ShellyConnectionCoordinator.shared.states,
-                  initialData: ShellyConnectionCoordinator.shared.current,
-                  builder: (context, snap) {
-                    final s = snap.data;
-                    final ok =
-                        s?.state == ShellyConnectionFlowState.connected &&
-                        s?.controlUncertain != true;
-                    final linked = s?.isLinked == true;
-                    return body(
-                      // Same label as Sạc pin / BatteryBot (Task 108).
-                      [
-                        s?.connectionLabel ?? 'Chưa kết nối Shelly',
-                        ?s?.metricsLine,
-                      ].join('\n'),
-                      ok
-                          ? LuxeColors.emerald
-                          : (linked ? LuxeColors.champagne : LuxeColors.dim),
-                    );
-                  },
-                )
-              : body(tile.value ?? '', null),
-        ),
-      ),
-    );
-  }
 }
 
 class _CountBadge extends StatelessWidget {

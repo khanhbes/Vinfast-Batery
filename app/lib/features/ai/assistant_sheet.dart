@@ -955,10 +955,10 @@ class _InteractiveAssistantSheetState
         ref.read(currentTabProvider.notifier).state = 0;
         break;
       case BatteryBotAction.guideCharging:
-        ref.read(currentTabProvider.notifier).state = 1;
+        openChargeControl(ref);
         break;
       case BatteryBotAction.guideHistory:
-        ref.read(currentTabProvider.notifier).state = 2;
+        openChargeHistory(ref);
         break;
       case BatteryBotAction.shellySetup:
         navigator.push(

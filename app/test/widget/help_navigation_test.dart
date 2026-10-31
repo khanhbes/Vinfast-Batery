@@ -25,14 +25,14 @@ void main() {
         builder: (context) => Scaffold(
           body: FilledButton(
             onPressed: () => AppNavigation.openTab(context, 2),
-            child: const Text('Open history'),
+            child: const Text('Open utilities'),
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
     expect(find.text('Root shell').hitTestable(), findsNothing);
-    await tester.tap(find.text('Open history'));
+    await tester.tap(find.text('Open utilities'));
     await tester.pumpAndSettle();
     expect(container.read(currentTabProvider), 2);
     expect(find.text('Root shell').hitTestable(), findsOneWidget);

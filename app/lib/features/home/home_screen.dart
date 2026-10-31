@@ -370,8 +370,7 @@ class HomeScreen extends ConsumerWidget {
             child: LuxeReveal(
               index: 4,
               child: RecentChargingChart(
-                onViewHistory: () =>
-                    ref.read(currentTabProvider.notifier).state = 2,
+                onViewHistory: () => openChargeHistory(ref),
               ),
             ),
           ),
