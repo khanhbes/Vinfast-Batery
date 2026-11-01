@@ -33,6 +33,7 @@ class _RideService implements ServerSmartChargerService {
     double? odoKm,
     required String source,
     String? sessionId,
+    int? batteryTempC,
   }) async {
     readings.add(source);
     return const BatteryReadingResult(readingId: 'r');
