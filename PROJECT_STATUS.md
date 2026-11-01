@@ -12,6 +12,24 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 143. Task Completion Log — Kiểm thử toàn luồng bằng tài khoản mới trên Xiaomi (BA/DA/tester, 02/11/2026) — Chỉ kiểm thử, chưa sửa code
+
+**Build:** 1.3.12+215 (`flutter build apk --profile`, thiếu `APP_API_BASE_URL` → app chỉ báo "Chưa liên lạc được máy chủ"; không dùng) rồi 1.3.13+216 với `--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io`, SHA-256 `EA3793B2…63E22E19`, `adb install -r` lên Xiaomi 7b20a377 (versionCode 216). Tài khoản test `pinova.qa.20261102@example.com` (Free, không Shelly, không lệnh relay nào). Bàn phím Gboard Telex: gõ ADB "exx" để ra "ex".
+
+**Lỗi nghiêm trọng:**
+- SOS: khi Pinova Bot đang khóa, "Xe bị cháy, có khói" chỉ nhận câu khóa; `emergencyKeywords` (`assistant/schemas.py`) chỉ có cụm cố định ("bốc khói", "cháy pin", "cháy ổ cắm"…), không bắt "cháy", "khói", "nổ", "bốc cháy".
+- Khảo sát ghi đè họ tên và số điện thoại đã đăng ký: màn khảo sát đọc trạng thái trước khi `register()` ghi xong → tên dự phòng "Bạn", SĐT rỗng → `POST /api/mobile/onboarding/commit` lưu đè.
+- ODO khảo sát: máy chủ nhận tới 9 999 999 (`server.py` `initial_odo > 9_999_999`), app không kiểm; ODO sai chặn mọi lần nhập ở "Cập nhật % pin & ODO" (không được nhỏ hơn lần trước), chỉ sửa được ở Hồ sơ xe → Sửa (đường này không áp luật ODO không giảm); Bảo dưỡng tạo mốc theo ODO sai.
+- Người dùng mới không có quãng đường ước tính: `estimateRange` cần SoH, khảo sát không hỏi SoH → Tổng quan "— km"; cùng lúc ô km/1 % hiện 1.35 (catalog), Pinova Bot trả "khoảng 108 km" (không trừ 5 % dự phòng), Gara/Hồ sơ xe hiện SoH 100 (mặc định, người dùng chưa nhập), Giám sát pin "—".
+- Tab Sạc (tài khoản chưa có Shelly): "Chưa liên lạc được máy chủ" + tự thử lại; Theo giờ "Chưa đọc được trạng thái Shelly".
+- Build profile/release thiếu `APP_API_BASE_URL` vẫn thành công.
+
+**Lỗi trung bình/nhỏ:** sau đổi tài khoản giữ tab cuối (Cài đặt) và id xe tài khoản cũ (`permission-denied`); vi phạm lần 3 tự đóng bot, mở Trợ giúp, mất cuộc chat; Sạc AI "đạt 100 % lúc 03:24" ≠ Theo giờ "Pin đầy khoảng 03:18"; dự đoán ghi "máy chủ tự ngắt" cho Free không Shelly; Sức khỏe pin: nhãn PRO đè chữ, hướng dẫn trỏ bài kiểm tra bị khóa, Giám sát pin khóa PRO trong khi Tiện ích mở, câu "không có nhiệt độ" lỗi thời; mã Admin sai kèm danh sách kiểm Wi-Fi; Đăng ký: lỗi không tự xóa khi sửa, thiếu autofill tài khoản mới; tuổi < 16 bị chặn nhưng bước bỏ qua được; emerald cho thẻ chọn/thiết lập (thẻ Shelly, chip 100 %, thẻ xe); số: "1234567 km", "1234.6k km", "0 kWh"/"0.00 kWh", "khoảng 37.417đ/tháng"; ô % gõ được 7 chữ số; catalog: Feliz 2025 262 km/2.4 kWh nhưng app dùng 1.35 km/1 % ghi "theo định mức dòng xe", Evo200 1.9 kWh/203 km, Feliz S 1.4 kWh/198 km (cần chủ app xác nhận).
+
+**Đạt:** kiểm tra nhập ở đăng nhập/đăng ký, lỗi đăng nhập chung, khảo sát 9 bước, tour từng tab, cập nhật % hiện ngay mọi màn, sửa ODO trong Hồ sơ xe, dự đoán sạc, lịch sử trống, khóa Free/Pro/Ultra, Pinova Bot: từ chối giả admin, cảnh báo lần 1/2, khóa 30 phút lần 3 có băng, mã Admin sai không lộ thông tin, đăng xuất/đăng nhập giữ dữ liệu.
+
+**Còn mở:** sửa các lỗi trên (chờ chủ app duyệt); Xiaomi đang đăng nhập tài khoản test.
+
 ## 142. Task Completion Log — Khung quét theo dòng xe (Feliz 2025: % pin, ODO, nhiệt độ pin) + Pinova Bot: quy tắc ứng xử do máy chủ quản (01/11/2026) — Test đạt, API đã deploy, APK 1.3.11+214 đã cài OnePlus (02/11)
 
 **Chủ app chọn:** cảnh báo nhiệt độ pin 45 °C (champagne) / 55 °C (đỏ), chỉ cảnh báo, vẫn cho bật sạc; quy tắc bot do máy chủ quản, gửi email thật; chống viết lách chữ tục, giả admin/hệ thống, spam, đòi dữ liệu người khác.
