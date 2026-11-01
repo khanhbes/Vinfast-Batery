@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 141. Task Completion Log — Rà soát UI/UX + hiệu năng trên OnePlus 1.3.9+212 và sửa toàn bộ (01/11/2026) — Code xong, phân tích tĩnh sạch; chưa chạy test, chưa build, chưa deploy
+## 141. Task Completion Log — Rà soát UI/UX + hiệu năng trên OnePlus 1.3.9+212 và sửa toàn bộ (01/11/2026) — Test đạt, API đã deploy, APK 1.3.10+213 đã build (chờ cài OnePlus)
 
 **Cách rà:** mở app trên OnePlus (helper có chặn), đi qua Tổng quan, Sạc pin (3 mục), 7 màn Tiện ích, Cài đặt, Pinova Bot, quét đồng hồ; đo khung hình bằng SurfaceFlinger khi cuộn (Tổng quan, Lịch sử, Thành tựu 0% trễ; Sạc AI 2%). Chưa xem: Premium, Hồ sơ, Xe của tôi, Shelly, Giao diện, Trung tâm thông báo, Trợ giúp (dừng vì cuộc gọi đến).
 
@@ -38,7 +38,9 @@
 
 **Giữ nguyên có chủ đích:** mục tiêu 70% là mức chủ xe chọn lần trước (nhớ theo xe); ODO trong sheet cập nhật để trống (điền sẵn sẽ tạo chuyến 0 km); nút "Dự đoán thời gian sạc" không bật relay nên không dùng màu nút bật.
 
-**Còn mở:** ảnh bản đồ qua `tile.openstreetmap.org` chỉ hợp cho thử nghiệm — bản store cần nhà cung cấp có giấy phép thương mại (đặt `MAP_TILE_URL`); chạy test đầy đủ, build APK, deploy API; xem nốt các màn chưa rà.
+**Kiểm chứng:** backend 803 pass / 15 skip; Flutter 1315 pass / 213 skip (10 test cập nhật theo chữ mới, 1 tràn ×2 ở ngày biểu đồ đã sửa); `flutter analyze` sạch. Gate task155 (worktree sạch `3ab2380`/`797d5b8`): Linux 800 pass, boot Pass, worker smoke Pass. API `vinfast-api@sha256:d6a483c5…3377784d07`, revision `vinfast-api--api106-1101131243`, health/ready 200, `noRelayCalls` (biên bản `docs/qa_evidence/app-review-2026-10-05/qa141-rollout-20261101.json`); `/api/trip/tiles/...` trả 401 khi chưa đăng nhập. Worker không đổi. APK 1.3.10+213 SHA-256 `44d301df…4834ba5e`.
+
+**Còn mở:** cài APK lên OnePlus (máy đang mất kết nối adb); ảnh bản đồ qua `tile.openstreetmap.org` chỉ hợp cho thử nghiệm — bản store cần nhà cung cấp có giấy phép thương mại (đặt `MAP_TILE_URL`); xem nốt các màn chưa rà.
 
 ## 140. Task Completion Log — 11 hạng mục của chủ app (29/10–01/11/2026) — Đợt 1 làm một phần (5a); Đợt 2 (tab mới, sạc theo giờ, màu theo gói) code xong; chưa chạy test, chưa build, chưa deploy
 
