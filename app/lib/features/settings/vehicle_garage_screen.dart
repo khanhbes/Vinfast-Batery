@@ -20,6 +20,7 @@ import 'vehicle_spec_detail_screen.dart';
 import '../../core/widgets/vehicle_photo.dart';
 import '../premium/premium_gate.dart';
 import '../../core/theme/plan_style.dart';
+import '../../data/services/vehicle_model_link_service.dart';
 
 /// Vehicle Garage Screen — LUXE (Task 119)
 /// - List user vehicles (active / archived)
@@ -82,6 +83,23 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
     } else {
       AppPopup.showError(result['error'] ?? 'Khôi phục thất bại');
     }
+  }
+
+  /// QA 140: pick the vehicle's model again; the server copies the
+  /// catalog's current battery figures (Feliz 2025 became 2.4 kWh) and keeps
+  /// the owner's own values (%, ODO, name, plate).
+  void _showRelinkSheet(String vehicleId) {
+    showLuxeSheet<void>(
+      context,
+      builder: (ctx) => _AddVehicleSheet(
+        relinkVehicleId: vehicleId,
+        onVehicleAdded: (_) {
+          _loadVehicles();
+          ref.invalidate(allVehiclesProvider);
+          ref.invalidate(vehicleProvider(vehicleId));
+        },
+      ),
+    );
   }
 
   void _showAddVehicleSheet() {
@@ -260,6 +278,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
               ref.read(selectedVehicleIdProvider.notifier).state = id;
             },
       onDelete: archived ? () => _restoreVehicle(id) : () => _deleteVehicle(id),
+      onRelink: archived ? null : () => _showRelinkSheet(id),
       onViewSpec: () {
         Navigator.push(
           context,
@@ -294,6 +313,9 @@ class _VehicleCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onViewSpec;
 
+  /// Đổi dòng xe (QA 140); null for an archived vehicle.
+  final VoidCallback? onRelink;
+
   const _VehicleCard({
     required this.heroTag,
     required this.model,
@@ -310,6 +332,7 @@ class _VehicleCard extends StatelessWidget {
     required this.onTap,
     required this.onDelete,
     required this.onViewSpec,
+    this.onRelink,
   });
 
   @override
@@ -442,6 +465,15 @@ class _VehicleCard extends StatelessWidget {
                           onPressed: onViewSpec,
                         ),
                         const SizedBox(width: 6),
+                        if (onRelink != null) ...[
+                          LuxeCircleButton(
+                            key: ValueKey('garage-relink-$heroTag'),
+                            icon: Icons.swap_horiz_rounded,
+                            tooltip: 'Đổi dòng xe',
+                            onPressed: onRelink,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
                         LuxeCircleButton(
                           icon: isArchived
                               ? Icons.unarchive_rounded
@@ -472,7 +504,11 @@ class _VehicleCard extends StatelessWidget {
 class _AddVehicleSheet extends StatefulWidget {
   final void Function(String vehicleId) onVehicleAdded;
 
-  const _AddVehicleSheet({required this.onVehicleAdded});
+  /// Set: the sheet picks a new model for this vehicle instead of adding
+  /// one (QA 140, "Đổi dòng xe").
+  final String? relinkVehicleId;
+
+  const _AddVehicleSheet({required this.onVehicleAdded, this.relinkVehicleId});
 
   @override
   State<_AddVehicleSheet> createState() => _AddVehicleSheetState();
@@ -563,6 +599,29 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
   }
 
   Future<void> _addVehicle(VinFastModelSpec spec) async {
+    final relink = widget.relinkVehicleId;
+    if (relink != null) {
+      setState(() => _isAdding = true);
+      try {
+        await VehicleModelLinkService().linkModel(
+          vehicleId: relink,
+          spec: spec,
+        );
+        if (!mounted) return;
+        widget.onVehicleAdded(relink);
+        Navigator.pop(context);
+        AppPopup.showSuccess(
+          'Đã đổi sang ${spec.modelName}',
+          detail: 'Pin ${spec.nominalCapacityWh.toInt()} Wh theo danh mục.',
+        );
+      } on Object {
+        if (mounted) {
+          setState(() => _isAdding = false);
+          AppPopup.showError('Chưa đổi được dòng xe. Thử lại sau.');
+        }
+      }
+      return;
+    }
     setState(() => _isAdding = true);
 
     final result = await AuthService().addVehicle(
@@ -625,8 +684,13 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 10),
                 child: LuxeSheetHeader(
                   eyebrow: 'Catalog đã xác minh',
-                  title: 'Thêm xe mới',
-                  caption: 'Chọn cấu hình đã được quản trị viên xác minh',
+                  title: widget.relinkVehicleId == null
+                      ? 'Thêm xe mới'
+                      : 'Đổi dòng xe',
+                  caption: widget.relinkVehicleId == null
+                      ? 'Chọn cấu hình đã được quản trị viên xác minh'
+                      : 'Thông số pin lấy theo danh mục; %, ODO, tên và biển '
+                            'số của bạn giữ nguyên',
                   trailing: LuxeCircleButton(
                     icon: Icons.close_rounded,
                     tooltip: 'Đóng',
@@ -737,43 +801,44 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
               ),
             ),
             // Personal values only; catalog technical values are read-only.
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _nicknameCtrl,
-                      style: const TextStyle(
-                        color: LuxeColors.text,
-                        fontSize: 14,
-                      ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: 'Tên gọi riêng (không bắt buộc)',
-                        prefixIcon: Icon(
-                          Icons.drive_file_rename_outline_rounded,
-                          size: 18,
+            if (widget.relinkVehicleId == null)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 6, 20, 4),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _nicknameCtrl,
+                        style: const TextStyle(
+                          color: LuxeColors.text,
+                          fontSize: 14,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'Tên gọi riêng (không bắt buộc)',
+                          prefixIcon: Icon(
+                            Icons.drive_file_rename_outline_rounded,
+                            size: 18,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _licensePlateCtrl,
-                      style: const TextStyle(
-                        color: LuxeColors.text,
-                        fontSize: 14,
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _licensePlateCtrl,
+                        style: const TextStyle(
+                          color: LuxeColors.text,
+                          fontSize: 14,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          hintText: 'Biển số (không bắt buộc)',
+                          prefixIcon: Icon(Icons.pin_rounded, size: 18),
+                        ),
                       ),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        hintText: 'Biển số (không bắt buộc)',
-                        prefixIcon: Icon(Icons.pin_rounded, size: 18),
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
             if (_isLoading)
               const SliverToBoxAdapter(
                 child: Padding(

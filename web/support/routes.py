@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from . import privacy
 from .tickets import SupportError
 
 
@@ -21,6 +22,36 @@ def create_support_blueprint(*, service, auth_resolver, require_admin, tier_of=N
 
     def user():
         return auth_resolver()
+
+    consents = privacy.PrivacyConsents(getattr(service, "db", None))
+
+    # QA 140: the public privacy policy (stores and the app link here) and
+    # the owner's consent to the current version.
+    @bp.get("/chinh-sach-bao-mat")
+    @bp.get("/privacy-policy")
+    def privacy_page():
+        return privacy.render_page(), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+    @bp.get("/api/account/privacy-consent")
+    def privacy_status():
+        uid, _email, _role = user()
+        if not uid:
+            return fail(401, "unauthorized", "Cần đăng nhập")
+        return jsonify({"success": True, "data": consents.status(uid)})
+
+    @bp.post("/api/account/privacy-consent")
+    def privacy_accept():
+        uid, _email, _role = user()
+        if not uid:
+            return fail(401, "unauthorized", "Cần đăng nhập")
+        body = request.get_json(silent=True) or {}
+        try:
+            consents.record(uid, str(body.get("version") or ""), str(body.get("source") or "app"))
+        except ValueError:
+            return fail(409, "privacyVersionOutdated", "Chính sách đã có bản mới. Hãy xem lại và đồng ý.")
+        if audit is not None:
+            audit("privacy_consent", "users", uid, uid, _email, {"version": privacy.VERSION})
+        return jsonify({"success": True, "data": consents.status(uid)})
 
     @bp.post("/api/support/tickets")
     def create():

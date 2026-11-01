@@ -26,10 +26,8 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:node="remove"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <!-- SCHEDULE_EXACT_ALARM: cho phép xin runtime permission trên Android 12+.
-         Không dùng USE_EXACT_ALARM để tránh policy Play Store (chỉ clock/calendar).
-         App sẽ fallback sang inexact nếu user từ chối hoặc OEM khoá. -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <!-- QA 140: no SCHEDULE_EXACT_ALARM (Play restricts it). Reminders are
+         inexact; the server and the Shelly timer own every cutoff. -->
     <application
         android:label="Pinova"
         android:name="${applicationName}"

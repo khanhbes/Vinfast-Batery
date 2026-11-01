@@ -9,6 +9,7 @@ import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
 import 'widgets/luxe_auth_widgets.dart';
+import '../settings/privacy_consent.dart';
 
 /// Account registration in the LUXE language with verified validation rules.
 class RegisterScreen extends StatefulWidget {
@@ -30,6 +31,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscureConfirm = true;
   String? _error;
 
+  /// QA 140: consent to the privacy policy is required to register.
+  bool _agreed = false;
+
   @override
   void dispose() {
     _nameCtrl.dispose();
@@ -42,6 +46,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _register() async {
     if (_loading || !_formKey.currentState!.validate()) return;
+    if (!_agreed) {
+      setState(
+        () => _error = 'Hãy đọc và đồng ý Chính sách bảo mật để đăng ký.',
+      );
+      return;
+    }
     HapticFeedback.lightImpact();
     setState(() {
       _loading = true;
@@ -60,6 +70,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (!mounted) return;
 
       if (result['success'] == true) {
+        // Recorded on the server; if this fails, the app asks again after
+        // sign-in.
+        unawaited(PrivacyConsent.accept(source: 'register'));
         AppPopup.showSuccess('Đăng ký thành công!');
         Navigator.of(context).popUntil((route) => route.isFirst);
       } else {
@@ -279,8 +292,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: LuxeAuthError(_error!),
                       ),
               ),
+              PrivacyConsentCheckbox(
+                value: _agreed,
+                onChanged: (v) => setState(() {
+                  _agreed = v;
+                  if (v) _error = null;
+                }),
+              ),
+              const SizedBox(height: 10),
               FilledButton(
-                onPressed: _loading ? null : _register,
+                onPressed: _loading || !_agreed ? null : _register,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(54),
                 ),

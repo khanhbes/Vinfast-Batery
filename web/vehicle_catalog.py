@@ -1039,6 +1039,7 @@ def create_catalog_blueprint(
                     "defaultEfficiency": defaults.get("defaultEfficiencyKmPerPercent"),
                     "specVersion": revision,
                     "updatedAt": now,
+                    **_capacity_fields(defaults, battery),
                 }
                 vehicle_batch.update(vehicle_snapshot.reference, updates)
             vehicle_batch.commit()
@@ -1295,12 +1296,28 @@ def create_catalog_blueprint(
             "defaultEfficiency": defaults.get("defaultEfficiencyKmPerPercent"),
             "specVersion": spec.get("revision"),
             "updatedAt": utcnow(),
+            **_capacity_fields(defaults, battery),
         }
         ref.update(updates)
         audit("vehicle_catalog_change", "Vehicles", vehicle_id, request._uid, request._email, {"catalogId": catalog_id, "revision": spec.get("revision")})
         return jsonify({"success": True, "data": _jsonable(updates)})
 
     return bp
+
+
+def _capacity_fields(defaults: dict, battery: dict) -> dict:
+    """The capacity fields the server and the app read first (QA 140): a
+    vehicle created before a catalog fix kept ``nominalCapacityWh`` 2600 for
+    the Feliz 2025 even after its catalog became 2400, because only
+    ``batteryCapacity`` was rewritten."""
+    capacity = _number(defaults.get("calculationCapacityWh")) or _number(battery.get("calculationCapacityWh"))
+    fields: dict = {}
+    if capacity:
+        fields.update({"nominalCapacityWh": capacity, "batteryCapacityWh": capacity})
+    amp_hours = _number(battery.get("capacityAh"))
+    if amp_hours:
+        fields["nominalCapacityAh"] = amp_hours
+    return fields
 
 
 def claim_and_process_research_job(db: Any) -> bool:

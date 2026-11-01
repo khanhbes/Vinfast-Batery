@@ -36,6 +36,7 @@ import '../settings/assistant_memory_screen.dart';
 import '../../core/services/guide_registry.dart';
 import '../premium/plan_tag.dart';
 import '../../core/theme/plan_style.dart';
+import '../settings/privacy_consent.dart';
 
 /// Tab Cài đặt (luxe): profile card ringed by the achievement rank, live
 /// tiles for the vehicle and Shelly, and quiet glass lists for system and
@@ -287,6 +288,14 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       title: 'Trợ giúp & khắc phục sự cố',
                       subtitle: 'Tự kiểm tra lỗi, sửa nhanh, hỏi đội Pinova',
                       onTap: () => _push(const HelpCenterScreen()),
+                    ),
+                    LuxeSettingsRow(
+                      key: const ValueKey('more-privacy'),
+                      icon: Icons.privacy_tip_rounded,
+                      title: 'Chính sách bảo mật',
+                      subtitle:
+                          'Dữ liệu nào được dùng, ở đâu, và quyền của bạn',
+                      onTap: () => unawaited(PrivacyConsent.openPolicy()),
                     ),
                     LuxeSettingsRow(
                       icon: Icons.menu_book_rounded,

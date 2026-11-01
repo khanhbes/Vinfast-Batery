@@ -81,6 +81,13 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: RegisterScreen()));
     expect(find.byType(TextFormField), findsNWidgets(5));
     final primaryAction = find.byType(FilledButton);
+    // QA 140: no registration without consent to the privacy policy.
+    expect(tester.widget<FilledButton>(primaryAction).onPressed, isNull);
+    final consent = find.byKey(const ValueKey('privacy-consent-checkbox'));
+    await tester.ensureVisible(consent);
+    await tester.tap(consent);
+    await tester.pump();
+    expect(tester.widget<FilledButton>(primaryAction).onPressed, isNotNull);
     await tester.ensureVisible(primaryAction);
     await tester.tap(primaryAction);
     await tester.pump();

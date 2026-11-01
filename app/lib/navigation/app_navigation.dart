@@ -28,6 +28,9 @@ import '../features/utilities/utilities_screen.dart';
 import '../core/services/screen_tour.dart';
 import '../features/premium/plan_tag.dart';
 import '../core/theme/plan_style.dart';
+import '../core/services/auth_service.dart';
+import '../features/auth/auth_gate.dart';
+import '../features/settings/privacy_consent.dart';
 
 final guideTourCoordinatorProvider = Provider<GuideTourCoordinator>((ref) {
   final coordinator = GuideTourCoordinator();
@@ -120,6 +123,7 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
         unawaited(ref.read(activeChargingSessionProvider).bindUser(nextUid));
         WidgetsBinding.instance.addPostFrameCallback((_) {
           unawaited(_tryShowFirstRunGuide());
+          _askPrivacy();
         });
       }
     });
@@ -133,7 +137,34 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
     ];
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_tryShowFirstRunGuide());
+      _askPrivacy();
     });
+  }
+
+  /// QA 140: an account that has not accepted the current privacy policy is
+  /// asked once after sign-in (the guide waits behind the sheet).
+  String? _privacyAskedFor;
+
+  void _askPrivacy() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || _privacyAskedFor == uid || !mounted) return;
+    _privacyAskedFor = uid;
+    unawaited(
+      PrivacyConsent.askIfNeeded(context, onSignOut: _signOutAfterRefusal),
+    );
+  }
+
+  Future<void> _signOutAfterRefusal() async {
+    await AuthService().signOut();
+    if (!mounted) return;
+    ref.read(selectedVehicleIdProvider.notifier).state = '';
+    ref.read(currentTabProvider.notifier).state = AppTab.overview;
+    unawaited(
+      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+        MaterialPageRoute<void>(builder: (_) => const AuthGate()),
+        (_) => false,
+      ),
+    );
   }
 
   @override
