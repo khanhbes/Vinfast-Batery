@@ -127,7 +127,8 @@ class TripPlanChatCard extends StatelessWidget {
       'charge_on_the_way' =>
         'Cần sạc giữa đường khoảng ${n('stops')?.round()} lần.',
       'charge_at_destination' => 'Sạc ở điểm đến trước khi quay về.',
-      'ride_eco' => 'Chạy chậm lại tiết kiệm khoảng ${n('savedPct')?.round()}% pin.',
+      'ride_eco' =>
+        'Chạy chậm lại tiết kiệm khoảng ${n('savedPct')?.round()}% pin.',
       'shorter_route' =>
         'Tuyến ${n('distanceKm')} km ngắn hơn, tiết kiệm khoảng ${n('savedPct')?.round()}%.',
       _ => null,
