@@ -250,9 +250,15 @@ class HybridAssistantEngine implements LocalChatEngine {
       case 'start_timed_charging':
         final minutes = (args['minutes'] as num?)?.toInt();
         final target = (args['target_percent'] as num?)?.toInt();
+        final until = args['until']?.toString();
         if (minutes == null) return null;
         // QA 135: the % the user aimed for rides along as the session target.
-        return 'bật sạc $minutes phút${target == null ? '' : ' đến $target%'}';
+        // QA 140: "sạc đến 9:30" carries the clock time the outlet stops at.
+        final clock =
+            until != null && RegExp(r'^\d{1,2}:\d{2}$').hasMatch(until)
+            ? ' đến $until'
+            : '';
+        return 'bật sạc $minutes phút$clock${target == null ? '' : ' đến $target%'}';
       case 'stop_charging':
         return 'dừng sạc';
       case 'create_reminder':

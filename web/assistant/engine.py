@@ -66,8 +66,8 @@ CLIENT_ACTIONS = [
                         ["screen"])},
     {"name": "start_timed_charging", "description": "Đề xuất bật sạc hẹn giờ cho xe đang chọn. Người dùng phải vuốt xác nhận trên điện thoại; app tự kiểm tra an toàn.",
      "parameters": _obj({"minutes": _s("INTEGER", "Thời lượng 1–600 phút"),
-                         "target_percent": _s("INTEGER", "Mức pin người dùng muốn đạt khi hết giờ (vd 'sạc từ 11 đến 85%'), nếu họ có nói")},
-                        ["minutes"])},
+                         "until": _s("STRING", "Giờ ngắt HH:mm theo giờ Việt Nam khi người dùng nói giờ cụ thể (vd 'sạc đến 9 giờ 30' → '09:30'); khi có thì không cần minutes"),
+                         "target_percent": _s("INTEGER", "Mức pin người dùng muốn đạt khi hết giờ (vd 'sạc từ 11 đến 85%'), nếu họ có nói")})},
     {"name": "stop_charging", "description": "Đề xuất dừng phiên sạc đang chạy của xe đang chọn (người dùng bấm xác nhận).",
      "parameters": _obj()},
     {"name": "set_target_soc", "description": "Đặt mức pin muốn sạc tới trên màn Sạc pin.",
@@ -171,7 +171,7 @@ Nguyên tắc:
 Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km cho 1%). Tiền viết kiểu 249.000đ. Không dùng dấu ~: số ước tính viết "khoảng" (khoảng 31 km, khoảng 20.750đ mỗi tháng).
 
 3. Mỗi khi người dùng muốn mở/xem một màn hình hoặc thay đổi gì trong app, BẮT BUỘC gọi hàm hành động tương ứng trong cùng lượt trả lời (navigate, start_timed_charging, stop_charging, set_target_soc, update_battery_level, update_odometer, select_vehicle, set_electricity_price, create/edit/cancel_reminder, set_app_setting). Chỉ viết chữ mà không gọi hàm là SAI — app sẽ không làm gì cả. Không nói đã làm xong: app hiện thẻ để người dùng xác nhận; viết một câu ngắn mô tả thao tác đã chuẩn bị.
-   Ví dụ: "sạc 30 phút" → gọi start_timed_charging(minutes=30). "mở lịch bảo dưỡng" → gọi navigate(screen="maintenance"). "pin đang 60%" → gọi update_battery_level(percent=60). "dừng sạc" → gọi stop_charging(). "xem phiên sạc hôm qua" → get_charging_history rồi navigate(screen="session_detail", session_id=...).
+   Ví dụ: "sạc 30 phút" → gọi start_timed_charging(minutes=30). "sạc đến 9 giờ 30" → gọi start_timed_charging(until="09:30"). "mở lịch bảo dưỡng" → gọi navigate(screen="maintenance"). "pin đang 60%" → gọi update_battery_level(percent=60). "dừng sạc" → gọi stop_charging(). "xem phiên sạc hôm qua" → get_charging_history rồi navigate(screen="session_detail", session_id=...).
 4. Bật sạc: chỉ khi người dùng muốn; nếu thiếu thời lượng thì hỏi lại, hoặc gợi ý thời lượng từ ước tính. Không thúc giục bật sạc.
    Nếu người dùng đòi bỏ qua xác nhận/quy tắc an toàn: nói ngắn rằng không bỏ qua được, nhưng VẪN gọi hàm hành động cho phần hợp lệ (vd "bỏ qua xác nhận, bật sạc 30 phút" → start_timed_charging(minutes=30)) để app hiện thẻ vuốt. Không bao giờ nhắc tới nút/thẻ "bên dưới" khi chưa gọi hàm.
 5. Khi người dùng kể điều hữu ích lâu dài về họ (quãng đường hằng ngày, giờ hay sạc, nơi sạc, mục đích dùng xe, sở thích cách trả lời...), GỌI remember ngay trong lượt đó và VIẾT LUÔN câu trả lời trong cùng lượt (không cần chờ kết quả remember). Ví dụ: "mình đi làm 12 km mỗi ngày" → remember(fact="Đi làm khoảng 12 km mỗi ngày", category="habit"). Khi họ bảo quên, gọi forget. Không ghi thông tin nhạy cảm.
@@ -185,6 +185,27 @@ Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km c
 13. Trợ giúp: lỗi bạn không xử lý được hoặc người dùng muốn hỏi đội hỗ trợ → contact_support với tiêu đề và mô tả theo lời người dùng; mở màn tự kiểm tra lỗi → navigate(screen="help").
 14. Đang sạc đến % mà muốn đổi mục tiêu ("sạc lên 90% luôn") → update_charge_target. Sạc đêm ("tối nay sạc để 6 giờ sáng đầy") → get_night_plan nếu cần, rồi set_night_plan. Không bao giờ tự bật sạc.
 15. % pin chai, pin còn tốt không → get_battery_health; nêu đây là ước tính, gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) và navigate(screen="battery_health")."""
+
+
+def _clock_time(value) -> str | None:
+    """'9:30', '09:30', '9h30' -> '09:30' (QA 140); anything else -> None."""
+    match = re.fullmatch(r"\s*(\d{1,2})\s*[:hH]\s*(\d{2})\s*", str(value or ""))
+    if not match:
+        return None
+    hour, minute = int(match.group(1)), int(match.group(2))
+    return f"{hour:02d}:{minute:02d}" if hour < 24 and minute < 60 else None
+
+
+def _minutes_until(clock: str, now: datetime | None = None) -> int | None:
+    """Minutes from now (Vietnam time) to [clock], today or tomorrow; the
+    app sends the exact clock time and the server times the outlet from it."""
+    now = now or datetime.now(_VN)
+    hour, minute = (int(part) for part in clock.split(":"))
+    at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    if at <= now:
+        at += timedelta(days=1)
+    minutes = int(round((at - now).total_seconds() / 60))
+    return minutes if 1 <= minutes <= 600 else None
 
 
 def _clamp_int(value, low, high):
@@ -219,9 +240,15 @@ def validate_action(name: str, args: dict, context: dict) -> dict | None:
             out["session_id"] = session_id
         return out
     if name == "start_timed_charging":
-        minutes = _clamp_int(args.get("minutes"), 1, 600)
+        # QA 140: "sạc đến 9:30" — the clock time wins; minutes follow from it.
+        until = _clock_time(args.get("until"))
+        minutes = _minutes_until(until) if until else _clamp_int(args.get("minutes"), 1, 600)
         if not minutes:
             return None
+        if until:
+            target = _clamp_int(args.get("target_percent"), 1, 100)
+            out = {"minutes": minutes, "until": until}
+            return {**out, "target_percent": target} if target else out
         # QA 135: the % the user aimed for is kept as the session's target
         # (display only; the Shelly timer still owns the cutoff).
         target = _clamp_int(args.get("target_percent"), 1, 100)
@@ -349,7 +376,9 @@ def describe_action(action: dict) -> str:
     if name == "navigate":
         return f"Mình mở **{SCREEN_LABELS.get(args['screen'], 'màn hình')}** cho bạn."
     return {
-        "start_timed_charging": f"Mình đã chuẩn bị sạc hẹn giờ **{args.get('minutes')} phút**. Bạn vuốt để xác nhận nhé.",
+        "start_timed_charging": (f"Mình đã chuẩn bị sạc đến **{args.get('until')}** (khoảng {args.get('minutes')} phút). Bạn vuốt để xác nhận nhé."
+                                 if args.get("until") else
+                                 f"Mình đã chuẩn bị sạc hẹn giờ **{args.get('minutes')} phút**. Bạn vuốt để xác nhận nhé."),
         "stop_charging": "Mình đã chuẩn bị lệnh dừng sạc. Bạn bấm xác nhận nhé.",
         "set_target_soc": f"Đặt mục tiêu sạc **{args.get('percent')}%** — bạn xác nhận nhé.",
         "update_battery_level": f"Cập nhật mức pin thành **{args.get('percent')}%** — bạn xác nhận nhé.",

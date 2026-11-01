@@ -120,6 +120,22 @@ class AppChatToolGateway implements ChatToolGateway {
     return seconds >= 60 && seconds <= 36000 ? seconds : null;
   }
 
+  /// QA 140: "bật sạc 150 phút đến 09:30" — the clock time Pinova Bot was
+  /// asked for ("sạc đến 9 giờ 30"): today, or tomorrow once it has passed.
+  static DateTime? parseStopAt(String question, DateTime now) {
+    final matches = RegExp(
+      r'(?:đến|den|tới|toi|lúc|luc)\s*(\d{1,2})[:h](\d{2})(?!\s*%)',
+      caseSensitive: false,
+    ).allMatches(question).toList();
+    if (matches.length != 1) return null;
+    final hour = int.parse(matches.single[1]!);
+    final minute = int.parse(matches.single[2]!);
+    if (hour > 23 || minute > 59) return null;
+    var at = DateTime(now.year, now.month, now.day, hour, minute);
+    if (!at.isAfter(now)) at = at.add(const Duration(days: 1));
+    return at;
+  }
+
   /// "bật sạc 265 phút đến 85%": the % the user aimed for, kept as the
   /// session target (display only; the Shelly timer owns the cutoff). QA 135:
   /// without it the server stored the start % ("Mục tiêu 11%" for 11→85).
@@ -449,7 +465,11 @@ class AppChatToolGateway implements ChatToolGateway {
         'version': session.version,
       };
     }
-    final duration = parseDuration(question);
+    final now = DateTime.now();
+    final stopAt = parseStopAt(question, now);
+    final duration = stopAt != null
+        ? stopAt.difference(now).inSeconds
+        : parseDuration(question);
     if (duration == null) {
       return {
         'allowed': false,
@@ -501,16 +521,21 @@ class AppChatToolGateway implements ChatToolGateway {
       // When it would switch off if swiped now (QA 130: the card only said
       // "30 phút"); the card carries no executable arguments, so the time is
       // part of the evidence text. The Shelly timer owns the real cutoff.
-      'estimatedTime':
-          '${seconds ~/ 60} phút · tự ngắt lúc '
-          '${formatClock(DateTime.now().add(Duration(seconds: seconds)))} '
-          'nếu bật ngay${target == null ? '' : ' · mục tiêu khoảng $target%'}',
+      'estimatedTime': stopAt != null
+          ? 'Tự ngắt lúc ${formatClock(stopAt)} · sạc khoảng '
+                '${formatChargeDuration(Duration(seconds: seconds))}'
+                '${target == null ? '' : ' · mục tiêu khoảng $target%'}'
+          : '${seconds ~/ 60} phút · tự ngắt lúc '
+                '${formatClock(DateTime.now().add(Duration(seconds: seconds)))} '
+                'nếu bật ngay${target == null ? '' : ' · mục tiêu khoảng $target%'}',
       'safetyNote':
           'Chỉ báo bật thành công sau khi đọc lại thấy ổ đã bật và hẹn giờ đang chạy. Không tự gửi lại lệnh bật khi mất phản hồi.',
       'deviceId': binding.deviceId,
       'durationSeconds': seconds,
       'currentSoc': vehicle.currentBattery,
       'targetSoc': ?target,
+      // QA 140: the server takes the timer from this clock time at ON.
+      if (stopAt != null) 'stopAt': stopAt.toUtc().toIso8601String(),
     };
   }
 
@@ -630,6 +655,9 @@ class AppChatToolGateway implements ChatToolGateway {
           currentSoc: (evidence['currentSoc'] as num).toDouble(),
           expectedDeviceId: deviceId,
           targetSoc: (evidence['targetSoc'] as num?)?.toDouble(),
+          stopAt: DateTime.tryParse(
+            evidence['stopAt']?.toString() ?? '',
+          )?.toLocal(),
         );
       } on SmartChargerException catch (error) {
         _guard(owner, vehicle.vehicleId, generation);

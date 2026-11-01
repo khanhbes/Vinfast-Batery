@@ -110,7 +110,8 @@ class _TileCard extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          maxLines: 2,
+          // QA 140: the Shelly line ("Đang tắt · 0 W · 230 V") needs three.
+          maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: LuxeText.caption.copyWith(fontSize: 12.5),
         ),
