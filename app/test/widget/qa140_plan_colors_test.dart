@@ -19,10 +19,6 @@ const _emeraldAllowed = <String, int>{
   'core/widgets/luxe_submit_button.dart': 2,
   'core/widgets/global_charging_pill.dart': 2,
   'core/widgets/pinova_brand.dart': 2,
-  // Pinova Bot is redesigned per plan with its avatar (QA 140 item 10).
-  'core/widgets/battery_bot_mascot.dart': 20,
-  'features/ai/assistant_sheet.dart': 9,
-  'features/ai/widgets/chat_message_bubble.dart': 2,
   // Status: model ready, reading locked, session outcome, confirmed card,
   // live charging, command steps, done states, charging dial.
   'features/achievements/models/achievement.dart': 1,

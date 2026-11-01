@@ -36,6 +36,7 @@ import '../../core/services/screen_tour.dart';
 import '../premium/plan_tag.dart';
 import '../../core/providers/entitlement_provider.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/theme/plan_style.dart';
 
 /// Bottom Sheet trò chuyện cùng trợ lý ảo BatteryBot với AI Streaming & Lịch sử
 class InteractiveAssistantSheet extends ConsumerStatefulWidget {
@@ -492,7 +493,7 @@ class _InteractiveAssistantSheetState
     }
     if (!mounted || !_isCurrent(generation)) return;
 
-    const uiColors = _LuxePalette();
+    final uiColors = _LuxePalette(context.planAccent);
     await showLuxeSheet<void>(
       context,
       builder: (modalCtx) {
@@ -973,7 +974,7 @@ class _InteractiveAssistantSheetState
     if (s == null) return const SizedBox.shrink();
 
     final isHigh = s.priority.toUpperCase() == 'HIGH';
-    final accent = isHigh ? LuxeColors.champagne : LuxeColors.emerald;
+    final accent = isHigh ? LuxeColors.champagne : context.planAccent;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 2),
@@ -1123,6 +1124,15 @@ class _InteractiveAssistantSheetState
             fit: StackFit.expand,
             children: [
               const LuxeBackdrop(),
+              // QA 140: the top edge in the plan's colours; on Ultra the
+              // current runs along it while Pinova Bot is answering.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 2.5,
+                child: _PlanEdge(active: _isTyping),
+              ),
               LayoutBuilder(
                 builder: (context, box) => Column(
                   children: [
@@ -1157,7 +1167,7 @@ class _InteractiveAssistantSheetState
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: LuxeColors.emerald.withValues(
+                                      color: context.planAccent.withValues(
                                         alpha: 0.55,
                                       ),
                                     ),
@@ -1209,10 +1219,10 @@ class _InteractiveAssistantSheetState
                                     ),
                                     child: Row(
                                       children: [
-                                        const Icon(
+                                        Icon(
                                           Icons.two_wheeler_rounded,
                                           size: 18,
-                                          color: LuxeColors.emerald,
+                                          color: context.planAccent,
                                         ),
                                         const SizedBox(width: 10),
                                         Expanded(
@@ -1410,7 +1420,7 @@ class _InteractiveAssistantSheetState
                           ),
                           border: Border.all(
                             color: _isListeningVoice
-                                ? LuxeColors.emerald
+                                ? context.planAccent
                                 : LuxeColors.hairlineStrong,
                           ),
                         ),
@@ -1439,12 +1449,12 @@ class _InteractiveAssistantSheetState
                                           // QA 139: no waveform (voice input is
                                           // off; it looped without real audio).
                                           const Spacer(),
-                                          const Text(
+                                          Text(
                                             'Đang nghe…',
                                             style: TextStyle(
                                               fontSize: 12.5,
                                               fontWeight: FontWeight.w600,
-                                              color: LuxeColors.emerald,
+                                              color: context.planAccent,
                                             ),
                                           ),
                                         ],
@@ -1646,7 +1656,7 @@ class _SuggestionCards extends StatelessWidget {
                             Icon(
                               _iconFor(suggestions[i]),
                               size: 20,
-                              color: LuxeColors.emerald,
+                              color: context.planAccent,
                             ),
                             const SizedBox(height: 10),
                             Text(
@@ -1707,10 +1717,10 @@ class _TypingDotState extends State<_TypingDot>
     child: Container(
       width: 8,
       height: 8,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: LuxeColors.emerald,
-        boxShadow: [BoxShadow(color: LuxeColors.emeraldGlow, blurRadius: 8)],
+        color: context.planAccent,
+        boxShadow: [BoxShadow(color: context.planAccentGlow, blurRadius: 8)],
       ),
     ),
   );
@@ -1718,10 +1728,12 @@ class _TypingDotState extends State<_TypingDot>
 
 /// Luxe colours for the history sheet (same names as [AppUiColors]).
 class _LuxePalette {
-  const _LuxePalette();
+  const _LuxePalette(this.primary);
   Color get surface => const Color(0xFF0C0D0F);
   Color get background => LuxeColors.raised;
-  Color get primary => LuxeColors.emerald;
+
+  /// The plan's accent (QA 140).
+  final Color primary;
   Color get text => LuxeColors.text;
   Color get muted => LuxeColors.muted;
 }
@@ -1761,6 +1773,77 @@ class _BotTitle extends ConsumerWidget {
           style: const TextStyle(fontSize: 12.5, color: LuxeColors.muted),
         ),
       ],
+    );
+  }
+}
+
+/// The sheet's top edge: the plan's gradient, still on Free/Pro; on Ultra
+/// with effects on it flows while [active] (Pinova Bot answering) and rests
+/// otherwise.
+class _PlanEdge extends StatefulWidget {
+  const _PlanEdge({required this.active});
+  final bool active;
+
+  @override
+  State<_PlanEdge> createState() => _PlanEdgeState();
+}
+
+class _PlanEdgeState extends State<_PlanEdge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _flow = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  );
+
+  void _sync() {
+    final run = widget.active && PlanMotion.of(context).running;
+    if (run && !_flow.isAnimating) {
+      _flow.repeat();
+    } else if (!run && _flow.isAnimating) {
+      _flow.stop();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(_PlanEdge old) {
+    super.didUpdateWidget(old);
+    _sync();
+  }
+
+  @override
+  void dispose() {
+    _flow.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final plan = PlanStyle.of(context);
+    final colors = plan.accentColors;
+    return IgnorePointer(
+      child: AnimatedBuilder(
+        animation: _flow,
+        builder: (context, _) => DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                for (final c in [...colors, colors.first])
+                  c.withValues(alpha: _flow.isAnimating ? 0.95 : 0.45),
+              ],
+              // One loop slides the pattern by its own width.
+              begin: Alignment(-1 + 2 * _flow.value, 0),
+              end: Alignment(1 + 2 * _flow.value, 0),
+              tileMode: TileMode.repeated,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

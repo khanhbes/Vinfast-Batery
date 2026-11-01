@@ -12,6 +12,7 @@ import 'streaming_text_widget.dart';
 import 'trip_plan_chat_card.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
@@ -299,7 +300,7 @@ class ChatMessageBubble extends StatelessWidget {
 
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
-        foregroundColor: LuxeColors.emerald,
+        foregroundColor: context.planAccent,
         side: const BorderSide(color: Color(0x8034D399)),
         backgroundColor: const Color(0x1434D399),
         minimumSize: const Size(48, 48),
@@ -472,7 +473,7 @@ class _FeedbackButton extends StatelessWidget {
           isSelected ? activeIcon : icon,
           key: ValueKey(isSelected),
           size: 16,
-          color: isSelected ? LuxeColors.emerald : LuxeColors.dim,
+          color: isSelected ? context.planAccent : LuxeColors.dim,
         ),
       ),
     ),
