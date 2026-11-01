@@ -459,7 +459,7 @@ class LuxeBatteryCapacityCard extends ConsumerWidget {
     );
     return LuxePressable(
       onTap: () => BatteryHealthScreen.open(context, ref, id),
-      semanticsLabel: '${shell.title}. ${shell.caption} Mở % pin chai',
+      semanticsLabel: '${shell.title}. ${shell.caption} Mở Sức khỏe pin',
       child: shell,
     );
   }
@@ -527,7 +527,7 @@ class _CapacityShell extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          '% pin chai',
+                          'Sức khỏe pin',
                           style: TextStyle(
                             color: LuxeColors.platinum,
                             fontSize: 13,

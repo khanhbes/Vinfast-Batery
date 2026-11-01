@@ -33,7 +33,7 @@ async function getToken(forceRefresh = false) {
   return user.getIdToken(forceRefresh)
 }
 
-async function apiFetch(path, options = {}) {
+export async function apiFetch(path, options = {}) {
   // httpClient already replays a read once on 502-504/network errors; a second
   // retry layer here sent a failing GET up to 6 times (Task 125).
   const { silent = false, retries = 0, ...requestOptions } = options

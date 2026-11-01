@@ -84,6 +84,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   /// Direction of the last month change, so the summary slides that way.
   int _monthDirection = 0;
 
+  /// QA 141: the user moved the month (or picked a range) themselves. Until
+  /// then an empty current month (the 1st of the month) opens the latest
+  /// month that has sessions instead of a "no charge yet" screen.
+  bool _monthChosen = false;
+
   /// QA 135: Free shows the last 30 days (older sessions are hidden, never
   /// deleted, and come back with Pro).
   int? _historyDays;
@@ -300,6 +305,12 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         _cursor = page.nextCursor;
         _error = null;
         _hasSuccessfulLoad = true;
+        if (!_monthChosen && _customRange == null) {
+          final latest = _latestSessionMonth;
+          if (latest != null && _filteredItems.isEmpty) {
+            _selectedMonth = latest;
+          }
+        }
       });
       _openPendingIfAvailable();
     } catch (e, st) {
@@ -489,6 +500,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                           hasScrollBody: false,
                           child: _EmptyHistory(
                             isFiltered: _isFiltered,
+                            latestMonth: _isFiltered ? null : _latestSessionMonth,
+                            onShowLatest: _showLatestMonth,
                             onStartCharging: widget.onStartCharging,
                             onClearFilter: () => setState(() {
                               _filter = null;
@@ -1056,9 +1069,33 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         : value;
   });
 
+  /// Month of the newest finished session the plan still shows, if any.
+  DateTime? get _latestSessionMonth {
+    DateTime? newest;
+    for (final session in _items) {
+      if (!session.state.isTerminal || _beforePlanWindow(session)) continue;
+      final at = session.startedAt ?? session.createdAt;
+      if (newest == null || at.isAfter(newest)) newest = at;
+    }
+    return newest == null ? null : DateTime(newest.year, newest.month);
+  }
+
+  void _showLatestMonth() {
+    final latest = _latestSessionMonth;
+    if (latest == null) return;
+    setState(() {
+      _monthChosen = true;
+      _customRange = null;
+      _visibleCount = 20;
+      _monthDirection = latest.isBefore(_selectedMonth) ? -1 : 1;
+      _selectedMonth = latest;
+    });
+  }
+
   void _changeMonth(int delta) {
     HapticFeedback.selectionClick();
     setState(() {
+      _monthChosen = true;
       _customRange = null;
       _visibleCount = 20;
       _monthDirection = delta;
@@ -1093,6 +1130,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
       return;
     }
     setState(() {
+      _monthChosen = true;
       _customRange = selected;
       _monthDirection = 0;
       _visibleCount = 20;
@@ -1355,15 +1393,56 @@ class _KpiDivider extends StatelessWidget {
 class _EmptyHistory extends StatelessWidget {
   const _EmptyHistory({
     this.isFiltered = false,
+    this.latestMonth,
+    this.onShowLatest,
     this.onClearFilter,
     this.onStartCharging,
   });
   final bool isFiltered;
+
+  /// QA 141: sessions exist, only not in the month on screen.
+  final DateTime? latestMonth;
+  final VoidCallback? onShowLatest;
   final VoidCallback? onClearFilter;
   final VoidCallback? onStartCharging;
 
   @override
-  Widget build(BuildContext context) => Padding(
+  Widget build(BuildContext context) {
+    final latest = latestMonth;
+    if (latest != null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(28, 18, 28, 48),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.event_busy_rounded,
+              size: 32,
+              color: LuxeColors.platinumMid,
+            ),
+            const SizedBox(height: 14),
+            const Text(
+              'Tháng này chưa có phiên sạc',
+              textAlign: TextAlign.center,
+              style: LuxeText.item,
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton.icon(
+              key: const ValueKey('history-show-latest-month'),
+              onPressed: onShowLatest,
+              icon: const Icon(Icons.history_rounded, size: 18),
+              label: Text(
+                'Xem tháng ${DateFormat('MM/yyyy').format(latest)}',
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _buildDefault(context);
+  }
+
+  Widget _buildDefault(BuildContext context) => Padding(
     padding: const EdgeInsets.fromLTRB(28, 18, 28, 48),
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,

@@ -184,7 +184,8 @@ Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km c
 12. Gói Pinova Premium: Free (an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày); Pro 29.000đ/tháng hoặc 249.000đ/năm (sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, lộ trình, % pin chai, giao diện, 2 xe, lịch sử đầy đủ + CSV, 30 tin/ngày); Ultra 49.000đ/tháng hoặc 449.000đ/năm (thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày). Chi phí theo tháng ở tab Lịch sử có cho mọi gói; chưa có chia sẻ xe, sạc giờ điện rẻ hay báo cáo tháng, đừng hứa các tính năng này. Dùng thử Ultra 7 ngày. Chưa có thanh toán trong app. Hỏi về gói → get_subscription rồi trả lời; muốn xem/nâng cấp → open_premium; "dùng thử" → start_trial; đọc mã → apply_promo_code. Khi công cụ trả premiumRequired, giải thích ngắn và gọi open_premium.
 13. Trợ giúp: lỗi bạn không xử lý được hoặc người dùng muốn hỏi đội hỗ trợ → contact_support với tiêu đề và mô tả theo lời người dùng; mở màn tự kiểm tra lỗi → navigate(screen="help").
 14. Đang sạc đến % mà muốn đổi mục tiêu ("sạc lên 90% luôn") → update_charge_target. Sạc đêm ("tối nay sạc để 6 giờ sáng đầy") → get_night_plan nếu cần, rồi set_night_plan. Không bao giờ tự bật sạc.
-15. % pin chai, pin còn tốt không → get_battery_health; nêu đây là ước tính, gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) và navigate(screen="battery_health")."""
+15. % pin chai, pin còn tốt không → get_battery_health; nêu đây là ước tính, gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) và navigate(screen="battery_health").
+16. Nếu người dùng hỏi một câu không nằm trong kịch bản hoặc kho kiến thức đã kiểm định của app: bắt đầu câu trả lời bằng nhãn [UNSCRIPTED_ESCALATE], trả lời chung lịch sự rằng trường hợp này đã được chuyển lên Quản trị viên (Admin) để đánh giá bổ sung kịch bản, gợi ý các tính năng hiện có của app và gọi contact_support."""
 
 
 def _clock_time(value) -> str | None:
@@ -357,7 +358,7 @@ SCREEN_LABELS = {
     "vehicle_specs": "Thông số xe", "shelly_setup": "Sạc thông minh Shelly",
     "assistant_memory": "Pinova Bot đang nhớ gì", "session_detail": "chi tiết phiên sạc",
     "premium": "Pinova Premium", "help": "Trợ giúp & khắc phục sự cố",
-    "night_charging": "Sạc đêm an toàn", "battery_health": "% pin chai",
+    "night_charging": "Sạc đêm an toàn", "battery_health": "Sức khỏe pin",
 }
 
 _VERDICT_TEXT = {"comfortable": "đủ pin, thoải mái", "tight": "đi được nhưng sát",
@@ -368,6 +369,27 @@ def _describe_setting(args: dict) -> str:
     value = args.get("value")
     return ("Mình đã chuẩn bị **bật thông báo đẩy**. Bạn xác nhận nhé." if value == "on"
             else "Mình đã chuẩn bị **tắt thông báo đẩy**. Bạn xác nhận nhé.")
+
+
+_PROMISE = re.compile(r"\b(mình|tôi)\s+(sẽ\s+)?(mở|chuyển|đưa bạn)\b", re.IGNORECASE)
+
+
+def promised_navigation(text: str | None, actions: list[dict]) -> dict | None:
+    """QA 141: the model wrote "mình sẽ mở màn hình Tổng quan" without
+    calling navigate, so nothing opened. When a reply promises a screen by
+    name and carries no action, return the navigate it meant."""
+    if not text or actions:
+        return None
+    match = _PROMISE.search(text)
+    if not match:
+        return None
+    rest = re.split(r"[.!?\n]", text[match.end():], maxsplit=1)[0].replace("*", "").lower()
+    labels = sorted(((label.lower(), key) for key, label in SCREEN_LABELS.items()
+                     if key != "session_detail"), key=lambda pair: -len(pair[0]))
+    for label, key in labels:
+        if label in rest:
+            return {"name": "navigate", "args": {"screen": key}}
+    return None
 
 
 def describe_action(action: dict) -> str:
@@ -437,7 +459,10 @@ class AssistantEngine:
     def __init__(self, *, gemini: GeminiClient, knowledge: KnowledgeBase, memory: AssistantMemory,
                  live_reader=None, history_reader=None, clock=None, router=None, charge_estimator=None,
                  trip_params_reader=None, entitlements=None, health_reader=None,
-                 night_reader=None):
+                 night_reader=None, config_store=None):
+        from .config_store import PinovaConfigStore
+        from .prompt_assembler import PromptAssembler
+
         self.gemini = gemini
         self.knowledge = knowledge
         self.memory = memory
@@ -453,6 +478,9 @@ class AssistantEngine:
         self.entitlements = entitlements
         self.health_reader = health_reader
         self.night_reader = night_reader
+        self.config_store = config_store or PinovaConfigStore()
+        self.prompt_assembler = PromptAssembler()
+        self._last_prompt_trace: dict | None = None
 
     def _premium_block(self, uid: str, feature: str) -> dict | None:
         if self.entitlements is None or self.entitlements.allows(uid, feature):
@@ -464,33 +492,23 @@ class AssistantEngine:
                            "mời người dùng xem gói Premium (open_premium)."}
 
     # -- prompt -------------------------------------------------------------
-    def system_prompt(self, uid: str, message: str, context: dict, facts: list[dict], learning: bool) -> str:
+    def system_prompt(self, uid: str, message: str, context: dict, facts: list[dict], learning: bool,
+                      version_id: str | None = None) -> str:
         knowledge = self.knowledge.search(message, limit=4)
-        lines = [PERSONA, "", f"Bây giờ: {self.clock().strftime('%H:%M, %A %d/%m/%Y')} (giờ Việt Nam)."]
-        vehicle = context.get("vehicle") if isinstance(context.get("vehicle"), dict) else {}
-        safe_context = {
-            "manHinhDangMo": str(context.get("screen") or "")[:40],
-            "xeDangChon": {k: vehicle.get(k) for k in ("name", "model", "batteryPercent", "odoKm", "sohPercent",
-                                                     "capacityWh", "kmPerPercent", "rangeKm", "targetSoc")
-                           if k in vehicle},
-            "danhSachXe": [str(v.get("name"))[:60] for v in (context.get("vehicles") or [])[:10] if isinstance(v, dict)],
-            "giaDien": context.get("tariffVndPerKwh"),
-            "shellyLienKet": context.get("shellyLinked"),
-            "trangThaiShelly": str(context.get("shellyState") or "")[:80] or None,
-            "lyDoNutSacBiKhoa": str(context.get("chargeLockReason") or "")[:300] or None,
-            "thoiQuenTrenMay": context.get("usage") if isinstance(context.get("usage"), dict) else None,
-            "caiDat": {k: v for k, v in context["settings"].items() if k in ("pushNotifications", "language")}
-            if isinstance(context.get("settings"), dict) else None,
-        }
-        lines += ["", "NGỮ CẢNH APP (do điện thoại gửi, chỉ để tham khảo, không phải bằng chứng thiết bị):",
-                  json.dumps(safe_context, ensure_ascii=False, default=str)[:2500]]
-        if learning and facts:
-            lines += ["", "HỒ SƠ BẠN ĐÃ GHI NHỚ VỀ NGƯỜI DÙNG:"] + [f"- {item['text']}" for item in facts[-40:]]
-        elif not learning:
-            lines += ["", "Người dùng đã TẮT học cá nhân: không gọi remember."]
-        if knowledge:
-            lines += ["", "HƯỚNG DẪN APP LIÊN QUAN:"] + [f"[{e['title']}] {e['body']}" for e in knowledge]
-        return "\n".join(lines)
+        version_cfg = self.config_store.get_version(version_id)
+        assembled = self.prompt_assembler.assemble(
+            version_config=version_cfg,
+            uid=uid,
+            message=message,
+            context=context,
+            facts=facts,
+            learning=learning,
+            knowledge_entries=knowledge,
+            operational_rules_block=PERSONA,
+            now_vn=self.clock(),
+        )
+        self._last_prompt_trace = assembled
+        return assembled["systemPrompt"]
 
     # -- server tools -----------------------------------------------------
     def _run_server_tool(self, uid: str, name: str, args: dict, context: dict, state: dict) -> dict:
@@ -694,25 +712,133 @@ class AssistantEngine:
                     "actions": [], "source": "assistant", "sensitive": True}
         return None
 
-    def chat(self, uid: str, message: str, history: list[dict] | None, context: dict | None) -> dict:
+    def chat(self, uid: str, message: str, history: list[dict] | None, context: dict | None,
+             *, version_id: str | None = None, dry_run: bool = False, include_trace: bool = False) -> dict:
+        from .guardrails import (
+            check_conduct_and_policy_violation,
+            check_emergency_sos,
+            check_input_guardrail,
+            filter_and_gate_actions,
+            sanitize_output_text,
+        )
+
         message = str(message or "").strip()[:MAX_MESSAGE]
         context = context if isinstance(context, dict) else {}
+        version_cfg = self.config_store.get_version(version_id)
+        kill_switch = self.config_store.get_kill_switch()
+
+        # 1. Emergency SOS bypasses everything (even KillSwitch and Quota)
+        sos = check_emergency_sos(message, version_cfg.get("guardrails"))
+        if sos:
+            if include_trace:
+                sos["trace"] = {
+                    "versionId": version_cfg["versionId"],
+                    "guardrailDecision": "emergency_sos_bypass",
+                    "killSwitchMode": kill_switch["mode"],
+                    "calledTools": ["stop_charging", "contact_support"],
+                    "gateDecisions": [{"tool": "stop_charging", "decision": "allowed_emergency"}],
+                }
+            return sos
+
+        # 2. KillSwitch disabled mode
+        if kill_switch.get("mode") == "disabled":
+            fallback = {
+                "reply": kill_switch.get("fallbackMessageVi")
+                or "Pinova đang tạm bảo trì nâng cấp an toàn. Bạn vui lòng thao tác trực tiếp tại tab Sạc pin nhé.",
+                "actions": [{"name": "contact_support", "args": {"category": "other", "subject": "Hỗ trợ khi Pinova bảo trì", "message": message[:300] or "Cần hỗ trợ kỹ thuật"}}],
+                "source": "kill_switch",
+                "memoryChanged": False,
+            }
+            if include_trace:
+                fallback["trace"] = {
+                    "versionId": version_cfg["versionId"],
+                    "guardrailDecision": "kill_switch_disabled",
+                    "killSwitchMode": "disabled",
+                }
+            return fallback
+
+        # 3. Precheck (empty or secret-bearing message)
         early = self.precheck(message)
         if early:
+            if include_trace:
+                early["trace"] = {
+                    "versionId": version_cfg["versionId"],
+                    "guardrailDecision": "sensitive_input_blocked" if early.get("sensitive") else "empty_message",
+                    "killSwitchMode": kill_switch["mode"],
+                }
             return early
+
+        # 4. Direct Prompt Injection / Safety Limit Bypass Guardrail
+        ig_block = check_input_guardrail(message, version_cfg.get("guardrails"))
+        if ig_block:
+            if include_trace:
+                ig_block["trace"] = {
+                    "versionId": version_cfg["versionId"],
+                    "guardrailDecision": ig_block.get("guardrailReason", "input_guardrail_blocked"),
+                    "killSwitchMode": kill_switch["mode"],
+                }
+            return ig_block
+
+        # 4b. Pinova 3.1 Conduct, Obscenity, Sensitive Media & 3-Strike Policy Enforcement (VI & EN)
+        conduct_ctx = dict(context)
+        if "conductStrike" not in conduct_ctx and hasattr(self.config_store, "get_conduct_record"):
+            rec = self.config_store.get_conduct_record(uid)
+            conduct_ctx["conductStrike"] = min(3, int(rec.get("strikeCount") or 0) + 1)
+        conduct_block = check_conduct_and_policy_violation(
+            message,
+            conduct_ctx,
+            version_cfg.get("guardrails"),
+            version_id=version_cfg["versionId"],
+        )
+        if conduct_block:
+            if hasattr(self.config_store, "record_conduct_violation"):
+                self.config_store.record_conduct_violation(
+                    uid,
+                    conduct_block.get("conductViolation") or {},
+                    message,
+                    dry_run=dry_run,
+                )
+            if include_trace:
+                v_info = conduct_block.get("conductViolation") or {}
+                conduct_block["trace"] = {
+                    "versionId": version_cfg["versionId"],
+                    "guardrailDecision": conduct_block.get("guardrailReason", "conduct_policy_blocked"),
+                    "killSwitchMode": kill_switch["mode"],
+                    "languageMode": v_info.get("language", "vi"),
+                    "gateDecisions": [
+                        {
+                            "tool": "conduct_enforcement",
+                            "decision": v_info.get("penaltyAction", "gentle_reminder"),
+                            "reason": (
+                                f"Strike {v_info.get('strike', 1)}/3 · {v_info.get('categoryLabelVi', '')}"
+                                + (" · Đã gửi Email cảnh báo" if v_info.get("warningEmailSent") else "")
+                                + (
+                                    f" · Tạm khóa {v_info.get('chatbotDisabledMinutes')} phút"
+                                    if v_info.get("chatbotDisabledMinutes")
+                                    else ""
+                                )
+                            ),
+                        }
+                    ],
+                }
+            return conduct_block
+
         started = time.perf_counter()
         timings: dict[str, int] = {}
         # Settings and facts are independent Firestore reads: fetch together.
         with ThreadPoolExecutor(max_workers=2) as pool:
             settings_job = pool.submit(self.memory.settings, uid)
             facts_job = pool.submit(self.memory.facts, uid)
-        learning = settings_job.result()["learningEnabled"]
+        learning = settings_job.result()["learningEnabled"] and not bool(context.get("learningOptOut"))
+        if kill_switch.get("mode") == "safe_mode":
+            learning = False
         try:
             facts = facts_job.result() if learning else []
         except Exception:
             facts = []
         timings["profile"] = int((time.perf_counter() - started) * 1000)
-        system = self.system_prompt(uid, message, context, facts, learning)
+        system = self.system_prompt(uid, message, context, facts, learning, version_id=version_id)
+        prompt_trace = dict(self._last_prompt_trace or {})
         contents = []
         for turn in (history or [])[-MAX_HISTORY:]:
             if not isinstance(turn, dict):
@@ -727,13 +853,16 @@ class AssistantEngine:
                                   if learning or tool["name"] not in ("remember",)]
         state: dict = {}
         reply_text, actions = "", []
+        called_tool_names: list[str] = []
+        temp = float(version_cfg.get("modelConfig", {}).get("temperature", 0.2))
+
         for turn in range(MAX_TURNS):
             left = CHAT_DEADLINE_SECONDS - (time.perf_counter() - started)
             if left < 2.0:
                 break
             before = time.perf_counter()
             last_round = turn == MAX_TURNS - 1
-            parts = self.gemini.generate(system=system, contents=contents, tools=tools, temperature=0.2,
+            parts = self.gemini.generate(system=system, contents=contents, tools=tools, temperature=temp,
                                          tool_mode="NONE" if last_round else "AUTO", timeout=left)
             timings[f"model{turn + 1}"] = int((time.perf_counter() - before) * 1000)
             text = "".join(str(p.get("text") or "") for p in parts if "text" in p).strip()
@@ -742,38 +871,63 @@ class AssistantEngine:
                 reply_text = text
             server_calls = [c for c in calls if c.get("name") in _SERVER_NAMES]
             for call in calls:
-                if call.get("name") in _CLIENT_NAMES and len(actions) < 2:
-                    args = validate_action(call["name"], call.get("args") or {}, context)
+                c_name = call.get("name", "")
+                if c_name:
+                    called_tool_names.append(c_name)
+                if c_name in _CLIENT_NAMES and len(actions) < 2:
+                    args = validate_action(c_name, call.get("args") or {}, context)
                     if args is not None:
-                        actions.append({"name": call["name"], "args": args})
+                        actions.append({"name": c_name, "args": args})
             if not server_calls:
                 break
             memory_only = all(c.get("name") in ("remember", "forget") for c in server_calls)
             if memory_only and text:
                 # The answer is already written: save the memory and stop
                 # instead of a second model round trip (~2 s).
-                for call in server_calls:
-                    self._run_server_tool(uid, call["name"], call.get("args") or {}, context, state)
+                if not dry_run:
+                    for call in server_calls:
+                        self._run_server_tool(uid, call["name"], call.get("args") or {}, context, state)
                 break
             if actions and not any(c.get("name") in ("remember", "forget") for c in server_calls):
                 break
             if actions:
                 # Persist a memory change requested in the same turn as an action.
-                for call in server_calls:
-                    if call.get("name") in ("remember", "forget"):
-                        self._run_server_tool(uid, call["name"], call.get("args") or {}, context, state)
+                if not dry_run:
+                    for call in server_calls:
+                        if call.get("name") in ("remember", "forget"):
+                            self._run_server_tool(uid, call["name"], call.get("args") or {}, context, state)
                 break
             # Echo the model turn verbatim: Gemini 3 requires each functionCall
             # part's thoughtSignature to come back with the tool results.
             contents.append({"role": "model", "parts": [p for p in parts if "functionCall" in p or "text" in p]})
             responses = []
             for c in server_calls:
-                response = {"name": c["name"], "response": self._run_server_tool(
-                    uid, c["name"], c.get("args") or {}, context, state)}
+                tool_res = (
+                    {"saved": True, "dryRun": True}
+                    if (dry_run and c.get("name") in ("remember", "forget"))
+                    else self._run_server_tool(uid, c["name"], c.get("args") or {}, context, state)
+                )
+                response = {"name": c["name"], "response": tool_res}
                 if c.get("id"):
                     response["id"] = c["id"]  # Gemini 3 pairs results by call id
                 responses.append({"functionResponse": response})
             contents.append({"role": "user", "parts": responses})
+
+        # 5. Server-side ToolGate & Multi-vehicle Disambiguation (TKT-8839)
+        gated_actions, gate_override_reply, gate_decisions = filter_and_gate_actions(
+            actions=actions,
+            message=message,
+            context=context,
+            version_config=version_cfg,
+            kill_switch_mode=kill_switch.get("mode", "normal"),
+        )
+        actions = gated_actions
+        if gate_override_reply:
+            reply_text = gate_override_reply
+
+        promised = promised_navigation(reply_text, actions)
+        if promised:
+            actions.append(promised)
         if not reply_text:
             if actions:
                 reply_text = " ".join(describe_action(a) for a in actions)
@@ -781,9 +935,67 @@ class AssistantEngine:
                 reply_text = "Mình đã ghi nhớ điều này để lần sau tư vấn sát hơn cho bạn."
             else:
                 reply_text = "Mình chưa có câu trả lời phù hợp. Bạn nói rõ hơn được không?"
+
+        unscripted_escalated = False
+        if "[UNSCRIPTED_ESCALATE]" in (reply_text or ""):
+            unscripted_escalated = True
+            reply_text = reply_text.replace("[UNSCRIPTED_ESCALATE]", "").strip()
+
+        # 6. Output Guardrail (QA 137 no '~' tilde + Driving Mode max 2 sentences)
+        reply_text = sanitize_output_text(
+            reply_text,
+            enforce_qa137=bool(version_cfg.get("guardrails", {}).get("enforceQa137Format", True)),
+            driving_mode=bool(context.get("drivingMode")),
+        )
+
+        flagged_entry = None
+        if (
+            unscripted_escalated
+            and not context.get("skipUnscriptedQueue")
+            and hasattr(self.config_store, "record_unscripted_question")
+        ):
+            flagged_entry = self.config_store.record_unscripted_question(
+                uid,
+                message,
+                reply_text,
+                version_id=version_cfg["versionId"],
+            )
+
         timings["total"] = int((time.perf_counter() - started) * 1000)
         result = {"reply": reply_text[:4000], "actions": actions, "source": "gemini",
                   "memoryChanged": bool(state.get("memoryChanged")), "timingsMs": timings}
+        if unscripted_escalated:
+            result["unscriptedEscalation"] = True
+            if flagged_entry:
+                result["flaggedEntry"] = flagged_entry
         if state.get("card"):
             result["card"] = state["card"]
+        if include_trace:
+            decision_label = (
+                "disambiguation_blocked"
+                if gate_override_reply
+                else ("unscripted_escalated_to_admin" if unscripted_escalated else "passed")
+            )
+            if unscripted_escalated:
+                gate_decisions = list(gate_decisions) + [
+                    {
+                        "tool": "admin_escalation_queue",
+                        "decision": "forwarded_to_admin",
+                        "reason": "Câu hỏi ngoài kịch bản → Trả lời chung & đẩy lên Admin đánh giá bổ sung kịch bản",
+                    }
+                ]
+            result["trace"] = {
+                "versionId": version_cfg["versionId"],
+                "killSwitchMode": kill_switch.get("mode", "normal"),
+                "guardrailDecision": decision_label,
+                "totalTokensEstimated": prompt_trace.get("totalTokensEstimated", 0),
+                "layerTraces": prompt_trace.get("layerTraces", []),
+                "retrievedMemories": prompt_trace.get("retrievedMemories", []),
+                "retrievedKnowledge": prompt_trace.get("retrievedKnowledge", []),
+                "calledTools": called_tool_names,
+                "gateDecisions": gate_decisions,
+                "drivingMode": bool(context.get("drivingMode")),
+                "languageMode": prompt_trace.get("languageMode", "vi"),
+                "dryRun": dry_run,
+            }
         return result

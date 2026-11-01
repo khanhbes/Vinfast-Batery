@@ -1091,7 +1091,7 @@ class _CompareTable extends StatelessWidget {
     ('Lịch sử sạc', '30 ngày', 'Đầy đủ', 'Đầy đủ'),
     ('Sạc đến % tự tắt, đổi mục tiêu', '—', '✓', '✓'),
     ('Lộ trình', '—', '✓', '✓'),
-    ('% pin chai, bài kiểm tra', '—', '✓', '✓'),
+    ('Sức khỏe pin, bài kiểm tra', '—', '✓', '✓'),
     ('Giao diện tùy chọn, xuất file', '—', '✓', '✓'),
     ('Số xe', '1', '2', '10'),
     ('Sạc đêm an toàn', '—', '—', '✓'),

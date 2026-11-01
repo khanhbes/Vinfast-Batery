@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/installed_version.dart';
 import '../../core/constants/beta_capabilities.dart';
 import '../../core/models/vehicle_context.dart';
 import '../../core/providers/app_providers.dart';
@@ -673,10 +674,18 @@ class _BrandFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Text(
-        '${AppConstants.appName} · Phiên bản ${AppConstants.appVersion}',
-        textAlign: TextAlign.center,
-        style: LuxeText.label.copyWith(fontSize: 11.5, color: LuxeColors.dim),
+      FutureBuilder<String?>(
+        future: installedVersion,
+        builder: (context, snapshot) => Text(
+          snapshot.data == null
+              ? AppConstants.appName
+              : '${AppConstants.appName} · Phiên bản ${snapshot.data}',
+          textAlign: TextAlign.center,
+          style: LuxeText.label.copyWith(
+            fontSize: 11.5,
+            color: LuxeColors.dim,
+          ),
+        ),
       ),
       const SizedBox(height: 3),
       const Text(

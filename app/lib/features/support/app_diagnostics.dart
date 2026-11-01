@@ -5,10 +5,10 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/installed_version.dart';
 import '../../data/models/entitlement.dart';
 import '../../data/models/shelly_connection_state.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
@@ -49,14 +49,8 @@ class DiagnosticCheck {
 class DiagnosticsProbe {
   const DiagnosticsProbe();
 
-  Future<String> appVersion() async {
-    try {
-      final info = await PackageInfo.fromPlatform();
-      return '${info.version}+${info.buildNumber}';
-    } on Object {
-      return AppConstants.appVersion;
-    }
-  }
+  Future<String> appVersion() async =>
+      await installedVersion ?? 'không rõ';
 
   bool isAndroid() {
     try {

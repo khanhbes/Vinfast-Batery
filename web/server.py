@@ -18,6 +18,18 @@ if sys.platform == 'win32':
         pass
 
 import os
+try:
+    from dotenv import load_dotenv
+    _server_dir = os.path.dirname(os.path.abspath(__file__))
+    for _env_candidate in [
+        os.path.join(_server_dir, '.env'),
+        os.path.join(_server_dir, '.env.local'),
+        os.path.join(_server_dir, '..', '.env'),
+    ]:
+        if os.path.isfile(_env_candidate):
+            load_dotenv(_env_candidate, override=False)
+except Exception:
+    pass
 import io
 import csv
 import html

@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory)][string]$ApiUrl,
     [Parameter(Mandatory)][string]$FirebaseConfigPath,
     [string]$DashboardPath,
-    [switch]$Deploy
+    [switch]$Deploy,
+    [switch]$SkipInstall
 )
 . "$PSScriptRoot/common.ps1"
 $config = Read-DeploymentConfig $ConfigPath
@@ -55,8 +56,10 @@ try {
     $env:VITE_AI_API_BASE_URL = $env:VITE_API_BASE_URL
     Push-Location $DashboardPath
     try {
-        Invoke-AdminNpm ci
-        if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+        if (-not $SkipInstall) {
+            Invoke-AdminNpm ci
+            if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+        }
         $auditPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'

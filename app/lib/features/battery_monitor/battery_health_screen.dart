@@ -125,7 +125,7 @@ class BatteryHealthScreen extends ConsumerWidget {
   Widget _screen(BuildContext context, WidgetRef ref) {
     final async = ref.watch(batteryHealthProvider(vehicleId));
     return LuxeScaffold(
-      title: '% pin chai',
+      title: 'Sức khỏe pin',
       body: RefreshIndicator(
         color: context.planAccent,
         onRefresh: () => ref.refresh(batteryHealthProvider(vehicleId).future),

@@ -29,7 +29,7 @@ class PremiumBanner extends ConsumerWidget {
         ? 'Xem quyền lợi, gia hạn hoặc nhập mã khuyến mãi'
         : plan.trialAvailable
         ? 'Dùng thử ${plan.trialDays} ngày miễn phí: sạc đêm an toàn, sạc đến %, AI cá nhân'
-        : 'Sạc đêm an toàn, sạc đến %, % pin chai, AI cá nhân';
+        : 'Sạc đêm an toàn, sạc đến %, Sức khỏe pin, AI cá nhân';
     return Semantics(
       button: true,
       label: '$title. $caption',

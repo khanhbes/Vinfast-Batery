@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/plan_style.dart';
+
 /// Breathing Bot Avatar with pulsating soft halo animation
 class BreathingBotAvatar extends StatefulWidget {
   const BreathingBotAvatar({
@@ -55,6 +57,10 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
 
   @override
   Widget build(BuildContext context) {
+    // QA 141: the plan's colours (was the old VinFast green/blue).
+    final colors = PlanStyle.of(context).accentColors;
+    final first = colors.first;
+    final last = colors.last;
     return AnimatedBuilder(
       animation: _animController,
       builder: (context, child) {
@@ -74,14 +80,12 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF00C853).withValues(alpha: glowAlpha),
+                    color: first.withValues(alpha: glowAlpha),
                     blurRadius: glowRadius,
                     spreadRadius: pulseProgress * 2.0,
                   ),
                   BoxShadow(
-                    color: const Color(
-                      0xFF0072BC,
-                    ).withValues(alpha: glowAlpha * 0.8),
+                    color: last.withValues(alpha: glowAlpha * 0.8),
                     blurRadius: glowRadius * 1.2,
                     offset: const Offset(0, 1),
                   ),
@@ -95,8 +99,8 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
               height: widget.size,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0072BC), Color(0xFF00C853)],
+                gradient: LinearGradient(
+                  colors: [last, first],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -114,7 +118,7 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
               ),
               child: Icon(
                 Icons.smart_toy_rounded,
-                color: Colors.white,
+                color: PlanColors.ink,
                 size: widget.size * 0.56,
               ),
             ),

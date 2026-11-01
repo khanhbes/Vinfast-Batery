@@ -73,8 +73,6 @@ class AppConstants {
     _customApiBaseUrl = candidate;
   }
 
-  static const String appVersion = '1.3.0';
-
   // Firestore Collection Names
   static const String vehiclesCollection = 'Vehicles';
   static const String chargeLogsCollection = 'ChargeLogs';

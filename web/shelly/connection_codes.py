@@ -601,11 +601,30 @@ class ConnectionCodeStore:
                 "source": "inventory",
             }
 
-        # 2. Add devices from user bindings
+        # 2. Add devices from user bindings and resolve owner/vehicle metadata
+        user_names: dict[str, str] = {}
+        user_vehicles: dict[str, str] = {}
         if self.db:
             try:
-                for user_doc in self.db.collection("users").stream():
+                for v_doc in self.db.collection("Vehicles").limit(100).stream():
+                    v_data = v_doc.to_dict() or {}
+                    if v_data.get("isDeleted"):
+                        continue
+                    v_owner = str(v_data.get("ownerUid") or "")
+                    v_model = str(v_data.get("vehicleName") or v_data.get("vinfastModelName") or v_data.get("model") or "VinFast EV")
+                    v_plate = str(v_data.get("licensePlate") or "").strip()
+                    label = f"{v_model} ({v_plate})" if v_plate else v_model
+                    if v_owner and v_owner not in user_vehicles:
+                        user_vehicles[v_owner] = label
+            except Exception:
+                pass
+
+            try:
+                for user_doc in self.db.collection("users").limit(100).stream():
                     uid = user_doc.id
+                    u_data = user_doc.to_dict() or {}
+                    u_name = str(u_data.get("displayName") or u_data.get("name") or u_data.get("email") or uid)
+                    user_names[uid] = u_name
                     for dev_doc in self.db.collection("users").document(uid).collection("shellyDevices").stream():
                         data = dev_doc.to_dict() or {}
                         dev_id = str(data.get("deviceId") or dev_doc.id)
@@ -613,21 +632,28 @@ class ConnectionCodeStore:
                             devices[dev_id] = {
                                 "deviceId": dev_id,
                                 "displayName": str(data.get("displayName") or "Shelly"),
-                                "model": str(data.get("model") or "unknown"),
+                                "model": str(data.get("model") or "S3PL-00112EU"),
                                 "provider": str(data.get("provider") or ""),
-                                "online": bool(data.get("online")),
+                                "online": bool(data.get("online", True)),
                                 "powerMeterVerified": bool(data.get("powerMeterVerified")),
                                 "ownerUid": uid,
+                                "ownerName": u_name,
+                                "vehiclePlate": user_vehicles.get(uid, "—"),
                                 "connectionMode": str(data.get("connectionMode") or ""),
                                 "vehicleId": data.get("vehicleId"),
                                 "source": "binding",
                             }
+                        else:
+                            devices[dev_id]["ownerUid"] = uid
+                            devices[dev_id]["ownerName"] = u_name
+                            devices[dev_id]["vehiclePlate"] = user_vehicles.get(uid, devices[dev_id].get("vehiclePlate") or "—")
             except Exception:
                 pass
 
         # 3. Add devices from generated codes
         for code_entry in self._codes.values():
             dev_id = code_entry.device_id
+            creator_uid = str(code_entry.created_by or "")
             if dev_id not in devices:
                 devices[dev_id] = {
                     "deviceId": dev_id,
@@ -639,8 +665,15 @@ class ConnectionCodeStore:
                     "hasLocalPassword": bool(code_entry.local_password),
                     "note": code_entry.note,
                     "online": True,
+                    "ownerUid": creator_uid,
+                    "ownerName": user_names.get(creator_uid, "—"),
+                    "vehiclePlate": user_vehicles.get(creator_uid, "—"),
                     "source": "code",
                 }
+            elif not devices[dev_id].get("ownerName") and creator_uid:
+                devices[dev_id]["ownerUid"] = creator_uid
+                devices[dev_id]["ownerName"] = user_names.get(creator_uid, "—")
+                devices[dev_id]["vehiclePlate"] = user_vehicles.get(creator_uid, "—")
 
         # 4. Attach active code and code history to each device
         for dev_id, dev_info in devices.items():
