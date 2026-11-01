@@ -5,6 +5,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/charge_confirm_control.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_submit_button.dart';
+import 'charge_edit_controls.dart';
 
 /// Change the target while charging (QA 135, Pro). Lower: a plain button,
 /// the server cuts at the new target. Higher: the owner confirms the way
@@ -175,7 +176,12 @@ class _EditTargetSheetState extends State<EditTargetSheet> {
               ),
               const SizedBox(height: 14),
               if (_busy || _done)
-                _Progress(done: _done, label: 'Đang gia hạn giới hạn an toàn…')
+                ChargeEditProgress(
+                  done: _done,
+                  busyLabel: 'Đang gia hạn giới hạn an toàn…',
+                  doneLabel: 'Đã đổi mục tiêu',
+                  keyPrefix: 'edit-target',
+                )
               else
                 ChargeConfirmControl(
                   key: ValueKey('edit-target-raise-$_target'),
@@ -196,51 +202,4 @@ class _EditTargetSheetState extends State<EditTargetSheet> {
       ),
     );
   }
-}
-
-class _Progress extends StatelessWidget {
-  const _Progress({required this.done, required this.label});
-  final bool done;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    key: ValueKey(done ? 'edit-target-done' : 'edit-target-busy'),
-    height: 60,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(99),
-      color: done
-          ? LuxeColors.emerald.withValues(alpha: 0.15)
-          : LuxeColors.glass,
-      border: Border.all(
-        color: done
-            ? LuxeColors.emerald.withValues(alpha: 0.6)
-            : LuxeColors.hairline,
-      ),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (done)
-          const Icon(Icons.check_circle_rounded, color: LuxeColors.emerald)
-        else
-          SizedBox.square(
-            dimension: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: LuxeColors.champagne,
-              value: luxeReduceMotion(context) ? 0.7 : null,
-            ),
-          ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            done ? 'Đã đổi mục tiêu' : label,
-            style: const TextStyle(color: LuxeColors.text, fontSize: 15),
-          ),
-        ),
-      ],
-    ),
-  );
 }

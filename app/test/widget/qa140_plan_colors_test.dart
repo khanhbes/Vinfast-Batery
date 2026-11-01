@@ -29,8 +29,7 @@ const _emeraldAllowed = <String, int>{
   'features/ai/widgets/action_confirmation_card.dart': 2,
   'features/ai/widgets/active_charging_card_v2.dart': 8,
   'features/ai/widgets/command_progress_strip.dart': 3,
-  'features/ai/widgets/edit_stop_at_sheet.dart': 3,
-  'features/ai/widgets/edit_target_sheet.dart': 3,
+  'features/ai/widgets/charge_edit_controls.dart': 3, // done strip
   'features/ai/widgets/history_luxe_widgets.dart': 2,
   'features/ai/widgets/luxe_soc_dial.dart': 5,
   'features/ai/widgets/recent_sessions_section_v2.dart': 2,

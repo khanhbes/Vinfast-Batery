@@ -10,6 +10,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../../core/theme/plan_style.dart';
 import '../../../core/widgets/app_popup.dart';
 import '../../../data/services/charge_estimator.dart';
+import 'charge_edit_controls.dart';
 
 /// Charge until a clock time (QA 140): the owner picks when the outlet
 /// switches off ("Ngắt lúc 09:30"), and the Shelly hardware timer is armed
@@ -293,7 +294,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
               const SizedBox(height: 14),
               Row(
                 children: [
-                  _StepButton(
+                  ChargeStepButton(
                     key: const ValueKey('timed-end-minus'),
                     icon: Icons.remove_rounded,
                     label: 'Sớm hơn 15 phút',
@@ -345,7 +346,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                       ),
                     ),
                   ),
-                  _StepButton(
+                  ChargeStepButton(
                     key: const ValueKey('timed-end-plus'),
                     icon: Icons.add_rounded,
                     label: 'Muộn hơn 15 phút',
@@ -520,52 +521,6 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   }
 }
 
-/// − / + beside the end time: a 48 dp glass circle.
-class _StepButton extends StatelessWidget {
-  const _StepButton({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final plan = PlanStyle.of(context);
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Ink(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(colors: plan.glassColors),
-              border: Border.all(color: plan.glassBorder),
-            ),
-            child: Icon(
-              icon,
-              size: 22,
-              color: onTap == null ? LuxeColors.dim : LuxeColors.text,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Brushed platinum bezel, a glass core in the plan's accent, power glyph.
 class _PowerFace extends StatelessWidget {
   const _PowerFace({required this.enabled, required this.colors});
   final bool enabled;

@@ -10,6 +10,7 @@ import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_submit_button.dart';
 import '../../../data/services/charge_estimator.dart';
 import 'timed_charging_section_v2.dart';
+import 'charge_edit_controls.dart';
 
 /// Move the end of a running timed charge (QA 140). Later: the owner
 /// confirms the way they switch charging ON (the outlet stays on longer).
@@ -153,7 +154,7 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
             const SizedBox(height: 18),
             Row(
               children: [
-                _RoundButton(
+                ChargeStepButton(
                   key: const ValueKey('edit-stop-minus'),
                   icon: Icons.remove_rounded,
                   label: 'Sớm hơn 15 phút',
@@ -200,7 +201,7 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
                     ),
                   ),
                 ),
-                _RoundButton(
+                ChargeStepButton(
                   key: const ValueKey('edit-stop-plus'),
                   icon: Icons.add_rounded,
                   label: 'Muộn hơn 15 phút',
@@ -239,7 +240,12 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
               ),
               const SizedBox(height: 14),
               if (locked)
-                _Progress(done: _done)
+                ChargeEditProgress(
+                  done: _done,
+                  busyLabel: 'Đang đặt lại hẹn giờ của ổ…',
+                  doneLabel: 'Đã đổi giờ ngắt',
+                  keyPrefix: 'edit-stop',
+                )
               else
                 ChargeConfirmControl(
                   key: ValueKey('edit-stop-later-${formatClock(_stopAt)}'),
@@ -260,94 +266,4 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
       ),
     );
   }
-}
-
-class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    super.key,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final plan = PlanStyle.of(context);
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          onTap: onTap,
-          customBorder: const CircleBorder(),
-          child: Ink(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(colors: plan.glassColors),
-              border: Border.all(color: plan.glassBorder),
-            ),
-            child: Icon(
-              icon,
-              size: 22,
-              color: onTap == null ? LuxeColors.dim : LuxeColors.text,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _Progress extends StatelessWidget {
-  const _Progress({required this.done});
-  final bool done;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    key: ValueKey(done ? 'edit-stop-done' : 'edit-stop-busy'),
-    height: 60,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(99),
-      color: done
-          ? LuxeColors.emerald.withValues(alpha: 0.15)
-          : LuxeColors.glass,
-      border: Border.all(
-        color: done
-            ? LuxeColors.emerald.withValues(alpha: 0.6)
-            : LuxeColors.hairline,
-      ),
-    ),
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (done)
-          const Icon(Icons.check_circle_rounded, color: LuxeColors.emerald)
-        else
-          SizedBox.square(
-            dimension: 20,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: LuxeColors.champagne,
-              value: luxeReduceMotion(context) ? 0.7 : null,
-            ),
-          ),
-        const SizedBox(width: 10),
-        Flexible(
-          child: Text(
-            done ? 'Đã đổi giờ ngắt' : 'Đang đặt lại hẹn giờ của ổ…',
-            style: const TextStyle(color: LuxeColors.text, fontSize: 15),
-          ),
-        ),
-      ],
-    ),
-  );
 }
