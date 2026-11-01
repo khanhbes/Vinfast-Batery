@@ -100,8 +100,9 @@ void main() {
       ),
     );
     await tester.pump(const Duration(seconds: 2));
-    expect(find.text('2.4'), findsWidgets);
-    expect(find.text('Hôm nay'), findsOneWidget);
+    // QA 141: kWh with two decimals; "Nay" fits a seventh of the width.
+    expect(find.text('2.40'), findsWidgets);
+    expect(find.text('Nay'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

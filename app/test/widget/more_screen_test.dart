@@ -57,12 +57,12 @@ void main() {
 
     // Sign out button & branding footer
     expect(find.text('Pinova Bot đang nhớ gì'), findsOneWidget);
+    // QA 141: the version comes from the installed package (none in tests).
     await tester.scrollUntilVisible(
-      find.textContaining('Pinova · Phiên bản'),
+      find.text('Hệ sinh thái quản lý & tối ưu năng lượng xe điện'),
       300,
       scrollable: find.byType(Scrollable).first,
     );
     expect(find.text('Đăng xuất tài khoản'), findsOneWidget);
-    expect(find.textContaining('Pinova · Phiên bản'), findsOneWidget);
   });
 }

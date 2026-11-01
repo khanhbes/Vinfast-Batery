@@ -143,7 +143,7 @@ void main() {
       final control = tester.widget<ChargeConfirmControl>(
         find.byType(ChargeConfirmControl),
       );
-      expect(control.label, 'Vuốt để hẹn sạc đêm đến 85%');
+      expect(control.label, 'Vuốt để hẹn sạc 85%');
       control.onConfirmed();
       await tester.pump(const Duration(milliseconds: 300));
       expect(api.armed.single['target'], 85);

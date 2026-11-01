@@ -883,7 +883,11 @@ class _InteractiveAssistantSheetState
         final basicMode =
             accumulated.startsWith('Chế độ cơ bản') ||
             accumulated.startsWith('Bạn đã dùng hết lượt AI');
-        final shortcut = basicMode ? BatteryBotFaq.actionFor(text) : null;
+        // QA 141: the instant how-to answers keep the button too.
+        final shortcut =
+            basicMode || BatteryBotFaq.quickAnswers.containsKey(text.trim())
+            ? BatteryBotFaq.actionFor(text)
+            : null;
         setState(() {
           _isTyping = false;
           _messages[index] = _messages[index].copyWith(

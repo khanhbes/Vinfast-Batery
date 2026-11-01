@@ -48,9 +48,21 @@ class HealthTrendChart extends StatelessWidget {
           Row(
             children: [
               const SizedBox(width: 34),
-              Text(date(clean.first.$1), style: LuxeText.caption),
-              const Spacer(),
-              Text(date(clean.last.$1), style: LuxeText.caption),
+              Expanded(
+                child: Text(
+                  date(clean.first.$1),
+                  maxLines: 1,
+                  style: LuxeText.caption,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  date(clean.last.$1),
+                  maxLines: 1,
+                  textAlign: TextAlign.end,
+                  style: LuxeText.caption,
+                ),
+              ),
             ],
           ),
         ],
@@ -88,7 +100,7 @@ class _TrendPainter extends CustomPainter {
       final label = TextPainter(
         text: TextSpan(
           text: '${mark.round()}%',
-          style: TextStyle(color: LuxeColors.dim, fontSize: 10 * textScale),
+          style: TextStyle(color: LuxeColors.dim, fontSize: 11 * textScale),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

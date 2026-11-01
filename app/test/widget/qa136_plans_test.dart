@@ -247,7 +247,7 @@ void main() {
         tier: PlanTier.ultra,
         scale: scale,
       );
-      expect(find.text('2.9'), findsOneWidget);
+      expect(find.text('2.87'), findsOneWidget); // QA 141: 2 decimals
       expect(find.textContaining('Nhiều nhất: Ngày 23/10'), findsOneWidget);
       final chart = find.byKey(const ValueKey('history-energy-bars'));
       final box = tester.getRect(chart);

@@ -322,7 +322,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.text('92%'), findsOneWidget);
-      expect(find.text('dung lượng pin'), findsOneWidget);
+      expect(find.text('dung lượng'), findsOneWidget);
 
       // A fresh scope: Riverpod keeps the first overrides on an update.
       await tester.pumpWidget(const SizedBox());
