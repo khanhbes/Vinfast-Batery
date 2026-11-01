@@ -77,10 +77,11 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
     final isDocked = coordinator.isDocked;
     // Docked while the user scrolls down: tucked into the edge so it stops
     // covering cards and chips ("Cập nhật % pin & ODO", "100% Đầy pin" —
-    // QA 129); about a third stays visible to tap or drag back.
-    final effectiveRight = isDocked ? -40.0 : _right;
-    final effectiveOpacity = isDocked ? 0.55 : 1.0;
-    final effectiveScale = isDocked ? 0.72 : 1.0;
+    // QA 129). QA 141: about 36 × 48 dp stays visible (16 dp was hard to
+    // see and to tap).
+    final effectiveRight = isDocked ? -16.0 : _right;
+    final effectiveOpacity = isDocked ? 0.75 : 1.0;
+    final effectiveScale = isDocked ? 0.86 : 1.0;
     final showBubble = isBubbleVisible && !isDocked && bubbleText != null;
 
     return AnimatedPositioned(

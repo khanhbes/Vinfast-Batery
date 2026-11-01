@@ -19,9 +19,12 @@ const historyAmber = LuxeColors.champagne;
 /// "576 Wh" with "1.97 kWh" and "12g 18p" with "4 giờ 25 phút").
 String historyEnergy(double wh) => '${(wh / 1000).toStringAsFixed(2)} kWh';
 
+/// QA 141: elapsed time to the nearest minute, the same in every list
+/// (one list floored, another rounded up: 3 giờ 37 vs 3 giờ 38 phút).
 String historyDuration(Duration value) {
-  final hours = value.inHours;
-  final minutes = value.inMinutes.remainder(60);
+  final total = (value.inSeconds / 60).round().clamp(0, 1 << 30);
+  final hours = total ~/ 60;
+  final minutes = total % 60;
   return hours == 0
       ? '$minutes phút'
       : minutes == 0
@@ -168,7 +171,7 @@ class _HistoryEnergyBarsState extends State<HistoryEnergyBars> {
                       curve: LuxeMotion.enter,
                       builder: (context, v, _) => LuxeMetalText(
                         // Always kWh (QA 139), like every History figure.
-                        v.toStringAsFixed(v >= 100 ? 0 : 1),
+                        v >= 100 ? v.toStringAsFixed(0) : formatKwh(v),
                         style: const TextStyle(
                           fontSize: 40,
                           height: 1.0,
@@ -438,30 +441,35 @@ class HistoryKpi extends StatelessWidget {
   final String label;
   final String value;
 
+  // QA 141: room beside the dividers ("21 giờ 52 phút" touched them) and a
+  // second line for long labels ("Chưa đặt giá điện" was cut).
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Text(
-          value,
-          maxLines: 1,
-          style: const TextStyle(
-            color: LuxeColors.text,
-            fontSize: 17,
-            fontWeight: FontWeight.w500,
-            fontFeatures: [ui.FontFeature.tabularFigures()],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 6),
+    child: Column(
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: const TextStyle(
+              color: LuxeColors.text,
+              fontSize: 17,
+              fontWeight: FontWeight.w500,
+              fontFeatures: [ui.FontFeature.tabularFigures()],
+            ),
           ),
         ),
-      ),
-      const SizedBox(height: 3),
-      Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: LuxeText.label.copyWith(fontSize: 11.5),
-      ),
-    ],
+        const SizedBox(height: 3),
+        Text(
+          label,
+          maxLines: 2,
+          textAlign: TextAlign.center,
+          style: LuxeText.label.copyWith(fontSize: 11.5),
+        ),
+      ],
+    ),
   );
 }
 
@@ -738,7 +746,7 @@ class HistoryTimelineTile extends StatelessWidget {
     final started = (session.startedAt ?? session.createdAt).toLocal();
     final meta = [
       DateFormat('HH:mm').format(started),
-      formatChargeDuration(historySessionDuration(session)),
+      historyDuration(historySessionDuration(session)),
       if (session.estimatedCostVnd != null)
         historyCost(session.estimatedCostVnd),
     ].join('  ·  ');

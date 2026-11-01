@@ -46,23 +46,49 @@ class LuxeTileGrid extends StatelessWidget {
     builder: (context, box) {
       final big = MediaQuery.textScalerOf(context).scale(14) > 20;
       final columns = big || box.maxWidth < 300 ? 1 : 2;
-      final width = (box.maxWidth - 12 * (columns - 1)) / columns;
-      return Wrap(
-        spacing: 12,
-        runSpacing: 12,
+      Widget cell(LuxeTile t) => KeyedSubtree(
+        key: t.key,
+        child: t.lockedBy == null
+            ? _TileCard(tile: t)
+            : PremiumLocked(
+                feature: t.lockedBy!,
+                tagPadding: const EdgeInsets.all(10),
+                child: _TileCard(tile: t),
+              ),
+      );
+      if (columns == 1) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final (i, t) in tiles.indexed) ...[
+              if (i > 0) const SizedBox(height: 12),
+              cell(t),
+            ],
+          ],
+        );
+      }
+      // QA 141: the two tiles of a row share one height (a longer line
+      // made one taller than its neighbour).
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final t in tiles)
-            SizedBox(
-              key: t.key,
-              width: width,
-              child: t.lockedBy == null
-                  ? _TileCard(tile: t)
-                  : PremiumLocked(
-                      feature: t.lockedBy!,
-                      tagPadding: const EdgeInsets.all(10),
-                      child: _TileCard(tile: t),
-                    ),
+          for (var i = 0; i < tiles.length; i += 2) ...[
+            if (i > 0) const SizedBox(height: 12),
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(child: cell(tiles[i])),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: i + 1 < tiles.length
+                        ? cell(tiles[i + 1])
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ),
             ),
+          ],
         ],
       );
     },
@@ -120,7 +146,10 @@ class _TileCard extends StatelessWidget {
 
     return LuxePressable(
       radius: 22,
-      semanticsLabel: tile.title,
+      // QA 141: one announcement (TalkBack read the title twice).
+      semanticsLabel: tile.value == null || tile.shelly
+          ? tile.title
+          : '${tile.title}. ${tile.value}',
       onTap: () {
         HapticFeedback.selectionClick();
         tile.onTap();
@@ -130,29 +159,33 @@ class _TileCard extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 124),
-          child: tile.shelly
-              ? StreamBuilder<ShellyConnectionSnapshot>(
-                  stream: ShellyConnectionCoordinator.shared.states,
-                  initialData: ShellyConnectionCoordinator.shared.current,
-                  builder: (context, snap) {
-                    final s = snap.data;
-                    final ok =
-                        s?.state == ShellyConnectionFlowState.connected &&
-                        s?.controlUncertain != true;
-                    final linked = s?.isLinked == true;
-                    return body(
-                      // Same label as Sạc pin / BatteryBot (Task 108).
-                      [
-                        s?.connectionLabel ?? 'Chưa kết nối Shelly',
-                        ?s?.metricsLine,
-                      ].join('\n'),
-                      ok
-                          ? LuxeColors.emerald
-                          : (linked ? LuxeColors.champagne : LuxeColors.dim),
-                    );
-                  },
-                )
-              : body(tile.value ?? '', null),
+          child: ExcludeSemantics(
+            excluding: !tile.shelly,
+            child: tile.shelly
+                ? StreamBuilder<ShellyConnectionSnapshot>(
+                    stream: ShellyConnectionCoordinator.shared.states,
+                    initialData: ShellyConnectionCoordinator.shared.current,
+                    builder: (context, snap) {
+                      final s = snap.data;
+                      final ok =
+                          s?.state == ShellyConnectionFlowState.connected &&
+                          s?.controlUncertain != true;
+                      final linked = s?.isLinked == true;
+                      return body(
+                        // Same label as Sạc pin / BatteryBot (Task 108).
+                        [
+                          s?.connectionLabel ?? 'Chưa kết nối Shelly',
+                          // QA 141: relay state only; volts and amps are for Sạc pin.
+                          ?s?.metricsLine?.split(' · ').first,
+                        ].join('\n'),
+                        ok
+                            ? LuxeColors.emerald
+                            : (linked ? LuxeColors.champagne : LuxeColors.dim),
+                      );
+                    },
+                  )
+                : body(tile.value ?? '', null),
+          ),
         ),
       ),
     );

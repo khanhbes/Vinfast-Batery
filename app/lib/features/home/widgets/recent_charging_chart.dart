@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/utils/number_text.dart';
 import '../../achievements/controllers/achievements_controller.dart';
 import '../../achievements/services/achievement_engine.dart';
 import '../../../core/providers/vehicle_providers.dart';
@@ -182,7 +183,8 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
                 for (var i = 0; i < 7; i++)
                   Expanded(
                     child: Text(
-                      i == 6 ? 'Hôm nay' : _weekday[week[i].day.weekday - 1],
+                      // QA 141: "Hôm nay" did not fit a seventh.
+                      i == 6 ? 'Nay' : _weekday[week[i].day.weekday - 1],
                       textAlign: TextAlign.center,
                       maxLines: 1,
                       overflow: TextOverflow.fade,
@@ -221,8 +223,8 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
     );
   }
 
-  static String _kwh(double v) =>
-      v >= 10 ? v.toStringAsFixed(0) : v.toStringAsFixed(v == 0 ? 0 : 1);
+  // QA 141: two decimals like History.
+  static String _kwh(double v) => v == 0 ? '0' : formatKwh(v);
 }
 
 class _Figure extends StatelessWidget {
@@ -301,6 +303,17 @@ class _BarsPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final maxV = values.fold<double>(0, math.max);
+    // QA 141: the scale, so a bar's height means a number.
+    if (maxV > 0) {
+      final label = TextPainter(
+        text: TextSpan(
+          text: '${formatKwh(maxV)} kWh',
+          style: const TextStyle(color: LuxeColors.dim, fontSize: 10),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      label.paint(canvas, Offset(size.width - label.width, 0));
+    }
     final slot = size.width / values.length;
     final barW = math.min(18.0, slot * 0.42);
     // Faint baseline and midline.
@@ -352,7 +365,11 @@ class _BarsPainter extends CustomPainter {
             rect.outerRect.topCenter,
             rect.outerRect.bottomCenter,
             hot
-                ? [Color(0xFFB9F5DC), Color.lerp(accent, Colors.black, 0.25)!]
+                // QA 141: the plan's colour (a mint green was left here).
+                ? [
+                    Color.lerp(accent, Colors.white, 0.45)!,
+                    Color.lerp(accent, Colors.black, 0.25)!,
+                  ]
                 : const [LuxeColors.platinum, Color(0xFF3A3C41)],
           ),
       );

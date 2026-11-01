@@ -220,6 +220,13 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Thông báo sạc: nút Dừng chạy được khi app đã tắt (`ChargeStopAction`, isolate nền); mọi nơi khởi tạo plugin thông báo dùng chung `NotificationService.onResponse`. Kênh sạc mức DEFAULT, không âm thanh (để hiện màn khóa).
   - Quét đồng hồ: mốc ODO luôn là số lớn hơn giữa số truyền vào và ODO mới nhất của xe; `readDashboard` thử bản xoay ±6°/±12° khi thiếu số.
 
+- **QA 141 (01/11/2026, rà UI/UX trên máy):**
+  - kWh luôn `formatKwh` (2 số lẻ), thời lượng đã qua luôn `historyDuration` (làm tròn phút) ở mọi danh sách; số phiên bản chỉ từ `installedVersion`.
+  - Số đã học (km/1 %, quãng đường) hiện "—" tới khi `learnedModelsProvider` trả về, không hiện số catalog rồi đổi.
+  - Ảnh bản đồ chỉ qua `GET /api/trip/tiles/<z>/<x>/<y>.png` (nhà mạng VN chặn `*.openstreetmap.org`); bản store đặt `MAP_TILE_URL` sang nhà cung cấp có giấy phép.
+  - Lưới ô hai cột cao bằng nhau mỗi hàng (`IntrinsicHeight`); mỗi ô/tab là một nút TalkBack.
+  - Bot hứa "mình sẽ mở …" mà không gọi `navigate` thì máy chủ gắn lệnh mở (`promised_navigation`).
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

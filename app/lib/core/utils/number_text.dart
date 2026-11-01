@@ -17,6 +17,10 @@ String groupThousands(num value) {
   return negative ? '-$out' : out.toString();
 }
 
+/// Energy (QA 139/141): always kWh with two decimals ("0.87 kWh",
+/// "15.30 kWh"), on every screen, so one session reads the same everywhere.
+String formatKwh(double kwh) => kwh.toStringAsFixed(2);
+
 /// Money (QA 137, owner's choice): the Vietnamese way, "249.000đ" — dots
 /// group thousands and "đ" follows the number. Only money: VND has no
 /// decimals here, so the dot cannot be misread, while every other number

@@ -24,8 +24,13 @@ class TimedChargingSectionV2 extends StatefulWidget {
     required this.readyForControl,
     this.disabledReason,
     this.onOpenSetup,
+    this.estimate,
     this.clock = DateTime.now,
   });
+
+  /// QA 141: estimated % when a charge of this length ends, and how long
+  /// until the battery is full when that comes first (null: unknown).
+  final TimedChargeEstimate? Function(Duration length)? estimate;
 
   /// Called with the chosen end; the caller confirms and sends it.
   final Future<void> Function(DateTime stopAt) onStart;
@@ -263,10 +268,24 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     return 'Sạc ${formatChargeDuration(length)}';
   }
 
+  /// "pin khoảng 85% lúc ngắt" or, when it fills first, when it is full.
+  String? get _estimateLine {
+    if (!_lengthValid) return null;
+    final estimate = widget.estimate?.call(_length);
+    if (estimate == null) return null;
+    final full = estimate.fullAfter;
+    if (full != null && full < _length) {
+      return 'Pin đầy khoảng ${formatClock(widget.clock().add(full))}, '
+          'máy chủ tự ngắt khi pin đầy';
+    }
+    return 'Ước tính pin khoảng ${estimate.endSoc}% lúc ngắt';
+  }
+
   @override
   Widget build(BuildContext context) {
     final plan = PlanStyle.of(context);
     final reduced = MediaQuery.disableAnimationsOf(context);
+    final estimateLine = _submitting ? null : _estimateLine;
     final enabled = widget.readyForControl && !_submitting && _lengthValid;
     final reason =
         widget.disabledReason ??
@@ -485,6 +504,19 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
             letterSpacing: 0.2,
           ),
         ),
+        if (estimateLine != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            estimateLine,
+            key: const ValueKey('timed-charge-estimate'),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: LuxeColors.champagne,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
         if (!widget.readyForControl) ...[
           const SizedBox(height: 10),
           Semantics(
@@ -519,6 +551,13 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
       ],
     );
   }
+}
+
+/// Estimated end of a timed charge (display only, never a permission).
+class TimedChargeEstimate {
+  const TimedChargeEstimate({required this.endSoc, this.fullAfter});
+  final int endSoc;
+  final Duration? fullAfter;
 }
 
 class _PowerFace extends StatelessWidget {

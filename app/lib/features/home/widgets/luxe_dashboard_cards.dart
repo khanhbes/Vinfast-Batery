@@ -290,8 +290,16 @@ class LuxeQuickActions extends StatelessWidget {
 
 /// ODO · efficiency · capacity (the battery itself lives in the hero).
 class LuxeStatsStrip extends ConsumerWidget {
-  const LuxeStatsStrip({super.key, required this.vehicle, this.learned});
+  const LuxeStatsStrip({
+    super.key,
+    required this.vehicle,
+    this.learned,
+    this.learnedPending = false,
+  });
   final VehicleModel? vehicle;
+
+  /// QA 141: "—" for km/1 % until the learned model answers.
+  final bool learnedPending;
 
   /// Trained trip model: the km/% every other screen uses (QA 129).
   final TripModelParams? learned;
@@ -299,7 +307,7 @@ class LuxeStatsStrip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final v = vehicle;
-    final perPct = v == null ? null : kmPerPctFor(v, learned);
+    final perPct = v == null || learnedPending ? null : kmPerPctFor(v, learned);
     // QA 139: the estimated capacity left (Pro) once there is one; the SoH
     // the owner typed otherwise, and said so.
     final allowed = ref.watch(
@@ -326,55 +334,61 @@ class LuxeStatsStrip extends ConsumerWidget {
           ? (
               Icons.battery_std_rounded,
               '${capacity.clamp(0, 100).round()}%',
-              'dung lượng pin',
+              'dung lượng',
             )
           : (
               Icons.battery_std_rounded,
               v?.hasSohData == true ? '${v!.stateOfHealth.round()}%' : '—',
-              v?.hasSohData == true ? 'SoH bạn nhập' : 'dung lượng pin',
+              v?.hasSohData == true ? 'SoH bạn nhập' : 'dung lượng',
             ),
     ];
-    return Row(
-      children: [
-        for (var i = 0; i < cells.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
-          Expanded(
-            child: LuxeGlass(
-              radius: 18,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(cells[i].$1, size: 16, color: LuxeColors.platinumMid),
-                  const SizedBox(height: 8),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      cells[i].$2,
-                      style: const TextStyle(
-                        color: LuxeColors.text,
-                        fontSize: 19,
-                        fontWeight: FontWeight.w300,
-                        fontFeatures: [ui.FontFeature.tabularFigures()],
+    // QA 141: equal heights when a label wraps at large text.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(
+              child: LuxeGlass(
+                radius: 18,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 14,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(cells[i].$1, size: 16, color: LuxeColors.platinumMid),
+                    const SizedBox(height: 8),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        cells[i].$2,
+                        style: const TextStyle(
+                          color: LuxeColors.text,
+                          fontSize: 19,
+                          fontWeight: FontWeight.w300,
+                          fontFeatures: [ui.FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
-                  ),
-                  Text(
-                    cells[i].$3,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: LuxeColors.dim,
-                      fontSize: 11.5,
+                    Text(
+                      cells[i].$3,
+                      maxLines: 2,
+                      style: const TextStyle(
+                        color: LuxeColors.dim,
+                        fontSize: 11.5,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -514,10 +528,7 @@ class _CapacityShell extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'DUNG LƯỢNG PIN · ƯỚC TÍNH',
-                    style: LuxeText.eyebrow,
-                  ),
+                  const Text('DUNG LƯỢNG · ƯỚC TÍNH', style: LuxeText.eyebrow),
                   const SizedBox(height: 6),
                   Text(title, style: LuxeText.item),
                   const SizedBox(height: 2),

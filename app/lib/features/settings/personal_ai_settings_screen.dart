@@ -390,8 +390,8 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                     title: 'Nhập file chuyến đi (CSV)',
                     subtitle: _training == 'import'
                         ? 'Đang nhập…'
-                        : 'Cột distance_km, soc_delta (hoặc start/end_soc), '
-                              'avg_speed_kmh, payload_kg…',
+                        : 'File bảng tính có quãng đường và % pin đã dùng '
+                              'của từng chuyến',
                     onTap: _training == null && consent ? _importCsv : null,
                   ),
                 ],
@@ -569,8 +569,11 @@ class _ModelCard extends StatelessWidget {
                               fontWeight: FontWeight.w300,
                             ),
                           ),
+                          // QA 141: "4 / 3 mới" read as a broken count.
                           Text(
-                            '/ ${status.required} mới',
+                            status.pending >= status.required
+                                ? 'đủ'
+                                : 'trên ${status.required}',
                             style: LuxeText.label.copyWith(fontSize: 11),
                           ),
                         ],
@@ -689,11 +692,15 @@ class _ModelCard extends StatelessWidget {
                     minimumSize: const Size(48, 48),
                   ),
                 ),
-                TextButton(
+                // QA 141: a real button (plain text did not look tappable).
+                OutlinedButton.icon(
                   key: ValueKey('retrain-$unit'),
                   onPressed: canRetrain ? onRetrain : null,
-                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                  child: const Text('Huấn luyện lại từ đầu'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                  ),
+                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                  label: const Text('Huấn luyện lại từ đầu'),
                 ),
               ],
             ),

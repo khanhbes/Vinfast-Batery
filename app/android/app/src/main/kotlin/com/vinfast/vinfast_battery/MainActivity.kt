@@ -38,6 +38,34 @@ class MainActivity : FlutterActivity() {
                 ?.createNotificationChannel(channel)
         }
         super.onCreate(savedInstanceState)
+        preferHighRefreshRate()
+    }
+
+    /**
+     * QA 141: the OnePlus 9 Pro screen runs at 120 Hz but Pinova was drawn
+     * at 60 Hz (ColorOS keeps apps at 60 unless they ask). Ask for the
+     * fastest mode at the current resolution; the system may still lower it
+     * (battery saver, heat).
+     */
+    private fun preferHighRefreshRate() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return
+        val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display
+        } else {
+            @Suppress("DEPRECATION")
+            windowManager.defaultDisplay
+        } ?: return
+        val current = display.mode
+        val best = display.supportedModes
+            .filter {
+                it.physicalWidth == current.physicalWidth &&
+                    it.physicalHeight == current.physicalHeight
+            }
+            .maxByOrNull { it.refreshRate } ?: return
+        if (best.refreshRate <= current.refreshRate + 1f) return
+        window.attributes = window.attributes.apply {
+            preferredDisplayModeId = best.modeId
+        }
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {

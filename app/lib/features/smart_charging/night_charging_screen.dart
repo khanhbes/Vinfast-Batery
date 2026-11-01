@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/learned_models_provider.dart';
 import '../../core/services/pinova_api.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
@@ -149,6 +150,26 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
       widget.initialWake ?? const TimeOfDay(hour: 6, minute: 30);
 
   NightChargingApi get _api => ref.read(nightChargingApiProvider);
+
+  /// QA 141: when the plan should start and finish, from the learned Wh per
+  /// 1 % and charging power (the server picks the real start). Null when
+  /// nothing is learned yet.
+  String? _startEstimate() {
+    final learned = ref
+        .watch(learnedModelsProvider(widget.vehicleId))
+        .valueOrNull;
+    final whPerPct = learned?.whPerPct;
+    final powerW = learned?.powerW;
+    if (whPerPct == null || powerW == null || _target <= _current) return null;
+    final minutes = ((_target - _current) * whPerPct / powerW * 60).ceil();
+    final now = DateTime.now();
+    var wake = DateTime(now.year, now.month, now.day, _wake.hour, _wake.minute);
+    if (!wake.isAfter(now)) wake = wake.add(const Duration(days: 1));
+    final finish = wake.subtract(const Duration(minutes: 20));
+    final start = finish.subtract(Duration(minutes: minutes));
+    return 'Ước tính bật khoảng ${formatClock(start)}, '
+        'đạt $_target% khoảng ${formatClock(finish)}';
+  }
 
   @override
   void initState() {
@@ -381,12 +402,27 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                     child: CircularProgressIndicator(color: context.planAccent),
                   ),
                 )
-              else
+              else ...[
+                if (_startEstimate() case final line?) ...[
+                  Text(
+                    line,
+                    key: const ValueKey('night-estimate'),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: LuxeColors.champagne,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                // QA 141: short enough to fit (the % was cut off).
                 ChargeConfirmControl(
                   key: const ValueKey('night-confirm'),
-                  label: 'Vuốt để hẹn sạc đêm đến $_target%',
+                  label: 'Vuốt để hẹn sạc $_target%',
                   onConfirmed: _arm,
                 ),
+              ],
             ],
           ],
         ],

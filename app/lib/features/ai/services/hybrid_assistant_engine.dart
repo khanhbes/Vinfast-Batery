@@ -119,6 +119,12 @@ class HybridAssistantEngine implements LocalChatEngine {
     if (const {'hoan tac', 'undo', 'quay lai nhu cu'}.contains(normalized)) {
       return _undo();
     }
+    final quick = BatteryBotFaq.quickAnswers[message.trim()];
+    if (quick != null) {
+      _remember('user', message);
+      _remember('assistant', quick);
+      return LocalChatReply(quick);
+    }
     final generation = _generation;
     final uid = uidResolver();
     final AssistantTurn turn;

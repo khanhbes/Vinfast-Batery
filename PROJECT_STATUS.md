@@ -12,6 +12,34 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 141. Task Completion Log — Rà soát UI/UX + hiệu năng trên OnePlus 1.3.9+212 và sửa toàn bộ (01/11/2026) — Code xong, phân tích tĩnh sạch; chưa chạy test, chưa build, chưa deploy
+
+**Cách rà:** mở app trên OnePlus (helper có chặn), đi qua Tổng quan, Sạc pin (3 mục), 7 màn Tiện ích, Cài đặt, Pinova Bot, quét đồng hồ; đo khung hình bằng SurfaceFlinger khi cuộn (Tổng quan, Lịch sử, Thành tựu 0% trễ; Sạc AI 2%). Chưa xem: Premium, Hồ sơ, Xe của tôi, Shelly, Giao diện, Trung tâm thông báo, Trợ giúp (dừng vì cuộc gọi đến).
+
+**Đã sửa (app):**
+- Lịch sử mở tháng gần nhất có phiên khi tháng hiện tại trống (ngày 1/11 báo "Chưa có phiên… Bắt đầu phiên sạc đầu tiên"); tháng trống có nút "Xem tháng MM/yyyy".
+- Bản đồ Lộ trình lấy ảnh qua `GET /api/trip/tiles/<z>/<x>/<y>.png` (nhà mạng VN không phân giải `*.openstreetmap.org`); báo "Chưa tải được bản đồ" thay cho khung đen.
+- Tab Sạc: nhắc bật thông báo khi đang tắt (`PushOffNotice`, "Để sau" 30 ngày); bỏ "Lịch sử gần đây" và thẻ Thành tựu trong tab (đã có mục Lịch sử / Tiện ích); đổi Sạc AI ↔ Theo giờ về đầu trang; Theo giờ ghi % ước tính lúc ngắt hoặc giờ pin đầy.
+- Số phiên bản ở Cài đặt lấy từ gói cài (`installed_version.dart`; hằng `1.3.0` đã bỏ).
+- Avatar tin nhắn bot theo màu gói (hết xanh VinFast); 3 câu gợi ý hướng dẫn trả lời ngay trên máy (`BatteryBotFaq.quickAnswers`); thẻ gợi ý cao bằng nhau.
+- Tổng quan: quãng đường và km/1% hiện "—" tới khi mô hình đã học trả về (hết nhảy 72 → 64 km); ẩn thẻ "Hiệu suất…" khi đã có thẻ Quãng đường; nhãn không bị cắt ("Nay", "dung lượng"); biểu đồ 7 ngày có mức kWh lớn nhất, cột chọn theo màu gói.
+- kWh luôn 2 số lẻ (`formatKwh`) ở Lịch sử, danh sách gần đây, Thói quen; thời lượng làm tròn tới phút gần nhất ở mọi danh sách (`historyDuration`).
+- "% pin chai" → "Sức khỏe pin" (tiêu đề, liên kết, Premium, bot); biểu đồ có điểm, thang % và ngày (`HealthTrendChart`); bước 3 bài kiểm tra mở tab Sạc với 100%.
+- Thói quen sạc: nhắc theo đúng thứ thói quen ("mỗi T6, T7"), tuần không sạc hiện 0, ô số liệu cao bằng nhau, kWh 2 số lẻ.
+- Sạc đêm: nhãn vuốt ngắn ("Vuốt để hẹn sạc 85%"), dòng ước tính giờ bật / giờ đạt mục tiêu.
+- Nút đang chọn của `LuxeSegmented` theo màu gói (trước xám trên xám).
+- AI cá nhân: bỏ số kỹ thuật trong kết luận huấn luyện, vòng "4 / 3 mới" → "đủ / trên 3", mô tả CSV bằng lời, "Huấn luyện lại từ đầu" là nút viền.
+- Lưới ô (Tiện ích, Cài đặt) cao bằng nhau mỗi hàng; ô Sức khỏe pin hiện % còn lại; TalkBack đọc mỗi ô một lần; thanh tab dưới một nút mỗi tab.
+- Cài đặt: số điện thoại/email che bớt (`maskContact`), hạng thành tựu chuyển xuống dòng điểm, ô Shelly chỉ ghi trạng thái relay.
+- Nút bot thu vào mép lộ khoảng 36×48 dp (trước 16 dp); tiêu đề Bảo dưỡng và Thành tựu dùng nút quay lại kính như các màn khác.
+- Android xin tần số quét cao nhất (`MainActivity.preferHighRefreshRate`; OnePlus đang vẽ 60 Hz trên màn 120 Hz).
+
+**Đã sửa (máy chủ, cần deploy):** `TileProxy` + route ảnh bản đồ (Pro, cache 600 ô, `MAP_TILE_URL` để đổi nhà cung cấp); `promised_navigation` gắn lệnh mở màn khi bot hứa "mình sẽ mở …" mà không gọi `navigate`; nhãn `battery_health` = "Sức khỏe pin"; kiến thức núm tối/sáng. Test mới: `web/tests/test_qa141_map_tiles.py`, `test_qa141_bot_promise.py`.
+
+**Giữ nguyên có chủ đích:** mục tiêu 70% là mức chủ xe chọn lần trước (nhớ theo xe); ODO trong sheet cập nhật để trống (điền sẵn sẽ tạo chuyến 0 km); nút "Dự đoán thời gian sạc" không bật relay nên không dùng màu nút bật.
+
+**Còn mở:** ảnh bản đồ qua `tile.openstreetmap.org` chỉ hợp cho thử nghiệm — bản store cần nhà cung cấp có giấy phép thương mại (đặt `MAP_TILE_URL`); chạy test đầy đủ, build APK, deploy API; xem nốt các màn chưa rà.
+
 ## 140. Task Completion Log — 11 hạng mục của chủ app (29/10–01/11/2026) — Đợt 1 làm một phần (5a); Đợt 2 (tab mới, sạc theo giờ, màu theo gói) code xong; chưa chạy test, chưa build, chưa deploy
 
 **Yêu cầu (29/10):** 11 mục: dung lượng Feliz 2025 = 2.4 kWh + Sức khỏe pin; gộp Lịch sử vào Sạc pin + tab Tiện ích; thông báo sạc có nút Dừng, còn khi tắt app; màu theo gói 100%; giờ bật/ngắt và % sạc khớp ổ; sạc theo giờ đồng hồ; hiệu ứng Ultra + animation đổi gói; quét camera dùng chung; thói quen sạc; Pinova Bot theo gói; kiểm chứng bảo mật/pháp lý. Chủ app chọn: 4 tab (Tổng quan · Sạc pin (Sạc AI | Theo giờ | Lịch sử) · Tiện ích · Cài đặt); Free giữ platinum; màu trạng thái cố định; Sức khỏe pin Free cơ bản, Pro/Ultra đủ; hiệu ứng Ultra khi thao tác và khi sạc; avatar bot tạo bằng công cụ web; lịch sạc từ thói quen là gợi ý + "Áp dụng"; làm lỗi trước. Theo yêu cầu 27/10: không chạy test/build/deploy khi chưa hỏi.

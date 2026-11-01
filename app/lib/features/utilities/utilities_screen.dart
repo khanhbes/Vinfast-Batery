@@ -29,6 +29,12 @@ class UtilitiesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final vehicleContext = ref.watch(vehicleContextProvider);
     final achievements = ref.watch(achievementsControllerProvider);
+    // QA 141: a live figure on the tile, not only a description.
+    final selectedId = ref.watch(selectedVehicleIdProvider);
+    final health = selectedId.isEmpty
+        ? null
+        : ref.watch(batteryHealthProvider(selectedId)).valueOrNull;
+    final healthPct = (health?.test ?? health?.estimate)?.sohPct;
 
     void push(Widget page) =>
         Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page));
@@ -60,7 +66,10 @@ class UtilitiesScreen extends ConsumerWidget {
                       key: GuideRegistry.keyUtilitiesHealth,
                       icon: Icons.battery_charging_full_rounded,
                       title: 'Sức khỏe pin',
-                      value: 'Dung lượng còn lại và dấu hiệu chai',
+                      value: healthPct == null
+                          ? 'Dung lượng còn lại và dấu hiệu chai'
+                          : 'Còn khoảng ${healthPct.clamp(0, 100).round()}% '
+                                'dung lượng',
                       onTap: () {
                         final id = vehicleId();
                         if (id != null) {

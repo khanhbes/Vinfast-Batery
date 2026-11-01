@@ -402,40 +402,62 @@ class NotificationService {
   Future<bool> scheduleChargeHabitReminder(
     TimeOfDay at, {
     required int targetPct,
+    List<int> weekdays = const [],
   }) async {
     await initialize();
     if (!await _hasNotificationPermission()) return false;
+    // QA 141: on the owner's usual days (0 = Monday), not every day when the
+    // habit is "T6, T7". Replaces any earlier habit reminder.
+    for (
+      var id = chargeHabitReminderId;
+      id <= chargeHabitReminderId + 7;
+      id++
+    ) {
+      await _plugin.cancel(id);
+    }
+    final days = weekdays.where((d) => d >= 0 && d <= 6).toSet().toList()
+      ..sort();
+    final daily = days.isEmpty || days.length >= 7;
     final zone = tz.getLocation('Asia/Ho_Chi_Minh');
     final now = tz.TZDateTime.now(zone);
-    var when = tz.TZDateTime(
-      zone,
-      now.year,
-      now.month,
-      now.day,
-      at.hour,
-      at.minute,
-    );
-    if (!when.isAfter(now)) when = when.add(const Duration(days: 1));
-    await _plugin.zonedSchedule(
-      chargeHabitReminderId,
-      'Đến giờ sạc xe',
-      'Theo thói quen của bạn: sạc tới $targetPct% là đủ và tốt cho pin.',
-      when,
-      NotificationDetails(
-        iOS: _iosDetails(),
-        android: AndroidNotificationDetails(
-          channelCharge,
-          'Sạc pin',
-          icon: '@drawable/ic_stat_pinova',
-          color: NotificationAccent.current,
+    for (final day in daily ? const [-1] : days) {
+      var when = tz.TZDateTime(
+        zone,
+        now.year,
+        now.month,
+        now.day,
+        at.hour,
+        at.minute,
+      );
+      if (day >= 0) {
+        when = when.add(Duration(days: (day + 1 - when.weekday) % 7));
+      }
+      if (!when.isAfter(now)) {
+        when = when.add(Duration(days: day >= 0 ? 7 : 1));
+      }
+      await _plugin.zonedSchedule(
+        day >= 0 ? chargeHabitReminderId + 1 + day : chargeHabitReminderId,
+        'Đến giờ sạc xe',
+        'Theo thói quen của bạn: sạc tới $targetPct% là đủ và tốt cho pin.',
+        when,
+        NotificationDetails(
+          iOS: _iosDetails(),
+          android: AndroidNotificationDetails(
+            channelCharge,
+            'Sạc pin',
+            icon: '@drawable/ic_stat_pinova',
+            color: NotificationAccent.current,
+          ),
         ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-      matchDateTimeComponents: DateTimeComponents.time,
-      payload: 'smart_charge/current',
-    );
+        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: day >= 0
+            ? DateTimeComponents.dayOfWeekAndTime
+            : DateTimeComponents.time,
+        payload: 'smart_charge/current',
+      );
+    }
     return true;
   }
 

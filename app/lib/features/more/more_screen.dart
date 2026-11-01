@@ -394,14 +394,6 @@ class _ProfileCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            rank.name.toUpperCase(),
-                            style: LuxeText.eyebrow.copyWith(
-                              color: rank.rarity.accent,
-                              fontSize: 11,
-                            ),
-                          ),
-                          const SizedBox(height: 5),
                           // QA 136: the plan's tag next to the name.
                           Wrap(
                             spacing: 8,
@@ -431,15 +423,20 @@ class _ProfileCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            contactInfo,
+                            maskContact(contactInfo),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: LuxeText.caption,
                           ),
                           const SizedBox(height: 6),
+                          // QA 141: the achievement rank with its points, not
+                          // as a title above the name next to the plan tag.
                           Text(
-                            '$points điểm thành tựu',
-                            style: LuxeText.label.copyWith(fontSize: 11.5),
+                            '${rank.name} · $points điểm thành tựu',
+                            style: LuxeText.label.copyWith(
+                              fontSize: 11.5,
+                              color: rank.rarity.accent,
+                            ),
                           ),
                         ],
                       ),
@@ -681,10 +678,7 @@ class _BrandFooter extends StatelessWidget {
               ? AppConstants.appName
               : '${AppConstants.appName} · Phiên bản ${snapshot.data}',
           textAlign: TextAlign.center,
-          style: LuxeText.label.copyWith(
-            fontSize: 11.5,
-            color: LuxeColors.dim,
-          ),
+          style: LuxeText.label.copyWith(fontSize: 11.5, color: LuxeColors.dim),
         ),
       ),
       const SizedBox(height: 3),
@@ -716,4 +710,21 @@ class _ShrinkAtLargeText extends StatelessWidget {
           ),
         )
       : child;
+}
+
+/// QA 141: the profile card is on screen often (and in screenshots), so the
+/// phone number and e-mail are partly hidden: "0852 ••• 174".
+String maskContact(String value) {
+  final text = value.trim();
+  final digits = text.replaceAll(RegExp(r'[^0-9+]'), '');
+  if (RegExp(r'^\+?[0-9]{9,15}$').hasMatch(digits)) {
+    return '${digits.substring(0, 4)} ••• ${digits.substring(digits.length - 3)}';
+  }
+  final at = text.indexOf('@');
+  if (at > 0) {
+    final name = text.substring(0, at);
+    final keep = name.length <= 2 ? 1 : 2;
+    return '${name.substring(0, keep)}•••${text.substring(at)}';
+  }
+  return text;
 }

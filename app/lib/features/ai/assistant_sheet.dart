@@ -1471,8 +1471,7 @@ class _InteractiveAssistantSheetState
                                         fontSize: 15,
                                       ),
                                       decoration: const InputDecoration(
-                                        hintText:
-                                            'Hỏi Pinova Bot về pin, sạc, xe…',
+                                        hintText: 'Hỏi về pin, sạc, xe',
                                         hintMaxLines: 1,
                                         hintStyle: TextStyle(
                                           fontSize: 14,
@@ -1632,48 +1631,71 @@ class _SuggestionCards extends StatelessWidget {
       builder: (context, box) {
         final big = MediaQuery.textScalerOf(context).scale(14) > 20;
         final columns = big || box.maxWidth < 300 ? 1 : 2;
-        final w = (box.maxWidth - 10 * (columns - 1)) / columns;
-        return Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (var i = 0; i < suggestions.length; i++)
-              SizedBox(
-                width: w,
-                child: LuxeReveal(
-                  index: i + 2,
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(18),
-                      onTap: () => onSelect(suggestions[i]),
-                      child: LuxeGlass(
-                        radius: 18,
-                        padding: const EdgeInsets.fromLTRB(14, 12, 12, 14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                              _iconFor(suggestions[i]),
-                              size: 20,
-                              color: context.planAccent,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              suggestions[i],
-                              style: const TextStyle(
-                                color: LuxeColors.text,
-                                fontSize: 14,
-                                height: 1.3,
-                              ),
-                            ),
-                          ],
-                        ),
+        // QA 141: the cards of a row share one height.
+        Widget card(int i) => LuxeReveal(
+          index: i + 2,
+          child: Material(
+            type: MaterialType.transparency,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => onSelect(suggestions[i]),
+              child: LuxeGlass(
+                radius: 18,
+                padding: const EdgeInsets.fromLTRB(14, 12, 12, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      _iconFor(suggestions[i]),
+                      size: 20,
+                      color: context.planAccent,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      suggestions[i],
+                      style: const TextStyle(
+                        color: LuxeColors.text,
+                        fontSize: 14,
+                        height: 1.3,
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
+            ),
+          ),
+        );
+        if (columns == 1) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < suggestions.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                card(i),
+              ],
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (var i = 0; i < suggestions.length; i += 2) ...[
+              if (i > 0) const SizedBox(height: 10),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: card(i)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: i + 1 < suggestions.length
+                          ? card(i + 1)
+                          : const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         );
       },

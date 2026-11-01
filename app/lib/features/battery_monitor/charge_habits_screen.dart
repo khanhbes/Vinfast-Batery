@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/services/pinova_api.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/utils/number_text.dart';
 import '../../core/theme/plan_style.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
@@ -240,7 +241,7 @@ class _Body extends StatelessWidget {
           const LuxeSectionLabel('% LÚC CẮM VÀ LÚC RÚT'),
           _Histogram(start: a.startPct, end: a.endPct),
           if (a.weeklyKWh.isNotEmpty) ...[
-            const LuxeSectionLabel('ĐIỆN NẠP MỖI TUẦN'),
+            const LuxeSectionLabel('ĐIỆN NẠP MỖI TUẦN (kWh)'),
             _WeeklyBars(weeks: a.weeklyKWh),
           ],
         ],
@@ -365,7 +366,12 @@ class _StatsGrid extends StatelessWidget {
       ('Sạc gần đầy', _pct(stats['fullShare'])),
       ('Cắm khi dưới 15%', _pct(stats['lowStartShare'])),
       ('Chu kỳ tương đương', '${stats['equivalentCycles'] ?? '—'}'),
-      ('Điện đã nạp', '${stats['kWh'] ?? '—'} kWh'),
+      (
+        'Điện đã nạp',
+        stats['kWh'] is num
+            ? '${formatKwh((stats['kWh'] as num).toDouble())} kWh'
+            : '—',
+      ),
       ('Sạc ban đêm', _pct(stats['nightShare'])),
     ];
     return LayoutBuilder(
@@ -386,7 +392,13 @@ class _StatsGrid extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(label, style: LuxeText.caption),
+                      // QA 141: two label lines on every tile in two
+                      // columns, so a row keeps one height when one wraps.
+                      Text(
+                        columns > 1 ? '$label\n' : label,
+                        maxLines: columns > 1 ? 2 : null,
+                        style: LuxeText.caption,
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         value,
@@ -591,8 +603,36 @@ class _WeeklyBars extends StatelessWidget {
   const _WeeklyBars({required this.weeks});
   final List<({String week, double kWh})> weeks;
 
+  /// QA 141: weeks without a charge as 0, so 7/9 → 12/10 does not read as
+  /// consecutive weeks. At most the last 9 weeks.
+  static List<({String week, double kWh})> filled(
+    List<({String week, double kWh})> weeks,
+  ) {
+    final byDay = <DateTime, double>{};
+    for (final w in weeks) {
+      final d = DateTime.tryParse(w.week);
+      if (d == null) return weeks;
+      byDay[DateTime.utc(d.year, d.month, d.day)] = w.kWh;
+    }
+    if (byDay.isEmpty) return weeks;
+    final days = byDay.keys.toList()..sort();
+    String iso(DateTime d) =>
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+        '${d.day.toString().padLeft(2, '0')}';
+    final out = <({String week, double kWh})>[
+      for (
+        var d = days.first;
+        !d.isAfter(days.last);
+        d = d.add(const Duration(days: 7))
+      )
+        (week: iso(d), kWh: byDay[d] ?? 0),
+    ];
+    return out.length > 9 ? out.sublist(out.length - 9) : out;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final weeks = filled(this.weeks);
     final most = weeks.fold<double>(0.01, (a, w) => w.kWh > a ? w.kWh : a);
     final accent = context.planAccent;
     // Two caption lines grow with the text size; the bars keep 76 dp.
@@ -615,7 +655,7 @@ class _WeeklyBars extends StatelessWidget {
                     children: [
                       FittedBox(
                         child: Text(
-                          w.kWh.toStringAsFixed(2),
+                          w.kWh == 0 ? '0' : formatKwh(w.kWh),
                           style: LuxeText.caption,
                         ),
                       ),
@@ -661,9 +701,12 @@ class _ScheduleCard extends ConsumerWidget {
     final s = schedule;
     final at = TimeOfDay(hour: s.startHour, minute: 0);
     final clock = '${s.startHour.toString().padLeft(2, '0')}:00';
-    final days = s.weekdays.length >= 7 || s.weekdays.isEmpty
+    final everyDay = s.weekdays.length >= 7 || s.weekdays.isEmpty;
+    final days = everyDay
         ? 'mọi ngày'
         : s.weekdays.map((d) => _weekdayShort[d]).join(', ');
+    // QA 141: the reminder follows the usual days ("hằng ngày" was wrong).
+    final when = everyDay ? 'hằng ngày' : 'mỗi $days';
     final length = s.estimatedMinutes == null
         ? null
         : formatChargeDuration(Duration(minutes: s.estimatedMinutes!));
@@ -692,16 +735,20 @@ class _ScheduleCard extends ConsumerWidget {
             key: const ValueKey('habits-remind'),
             onPressed: () async {
               final ok = await NotificationService()
-                  .scheduleChargeHabitReminder(at, targetPct: s.targetPct);
+                  .scheduleChargeHabitReminder(
+                    at,
+                    targetPct: s.targetPct,
+                    weekdays: s.weekdays,
+                  );
               AppPopup.showMessage(
                 ok
-                    ? 'Sẽ nhắc bạn sạc lúc $clock hằng ngày.'
+                    ? 'Sẽ nhắc bạn sạc lúc $clock $when.'
                     : 'Hãy bật quyền thông báo cho Pinova để nhận nhắc.',
               );
             },
             child: _ButtonLabel(
               icon: Icons.alarm_rounded,
-              text: 'Nhắc tôi lúc $clock hằng ngày',
+              text: 'Nhắc tôi lúc $clock $when',
             ),
           ),
           const SizedBox(height: 8),

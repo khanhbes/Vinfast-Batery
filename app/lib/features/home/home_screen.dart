@@ -50,7 +50,16 @@ class HomeScreen extends ConsumerWidget {
         ? prefService.visibleWidgets
               .where((id) => id == DashboardWidgetId.quickActions)
               .toList()
-        : prefService.visibleWidgets;
+        : prefService.visibleWidgets
+              // QA 141: the range card already says the km per 1 %.
+              .where(
+                (id) =>
+                    id != DashboardWidgetId.efficiencyReference ||
+                    !prefService.visibleWidgets.contains(
+                      DashboardWidgetId.rangePrediction,
+                    ),
+              )
+              .toList();
 
     // ── Initial auto-select on frame if vehicleId is not yet selected ──
     final currentVehicles = allVehiclesAsync.valueOrNull;
@@ -183,28 +192,37 @@ class HomeScreen extends ConsumerWidget {
                               key: GuideRegistry.keyBatterySummary,
                               child: vehicleAsync.when(
                                 data: (vehicle) {
-                                  final learned = ref
-                                      .watch(learnedModelsProvider(vehicleId))
-                                      .valueOrNull
-                                      ?.trip;
+                                  final learnedAsync = ref.watch(
+                                    learnedModelsProvider(vehicleId),
+                                  );
+                                  final learned =
+                                      learnedAsync.valueOrNull?.trip;
+                                  // QA 141: the catalog number first and the
+                                  // learned one a second later read as a jump
+                                  // (72 → 64 km); show "—" until it answers.
+                                  final pending = !learnedAsync.hasValue;
                                   return LuxeReveal(
                                     child: switch (dashboardStyle) {
                                       DashboardStyle.luxe => LuxeVehicleHero(
                                         vehicle: vehicle,
                                         learned: learned,
+                                        rangePending: pending,
                                       ),
                                       DashboardStyle.lcd => LcdClusterHero(
                                         vehicle: vehicle,
                                         learned: learned,
+                                        rangePending: pending,
                                       ),
                                       DashboardStyle.compact =>
                                         CompactMetricsHero(
                                           vehicle: vehicle,
                                           learned: learned,
+                                          rangePending: pending,
                                         ),
                                       DashboardStyle.minimal => MinimalHero(
                                         vehicle: vehicle,
                                         learned: learned,
+                                        rangePending: pending,
                                         onCharge: () =>
                                             ref
                                                     .read(
@@ -264,10 +282,9 @@ class HomeScreen extends ConsumerWidget {
     required WidgetRef ref,
   }) {
     // One learned km/% for the hero, stats, range card and note (QA 129).
-    final learned = ref
-        .watch(learnedModelsProvider(vehicleId))
-        .valueOrNull
-        ?.trip;
+    final learnedAsync = ref.watch(learnedModelsProvider(vehicleId));
+    final learned = learnedAsync.valueOrNull?.trip;
+    final learnedPending = !learnedAsync.hasValue;
     switch (id) {
       case DashboardWidgetId.quickActions:
         return SliverToBoxAdapter(
@@ -320,7 +337,11 @@ class HomeScreen extends ConsumerWidget {
             child: vehicleAsync.when(
               data: (vehicle) => LuxeReveal(
                 index: 2,
-                child: LuxeStatsStrip(vehicle: vehicle, learned: learned),
+                child: LuxeStatsStrip(
+                  vehicle: vehicle,
+                  learned: learned,
+                  learnedPending: learnedPending,
+                ),
               ),
               loading: () => const _LuxeSkeleton(height: 96),
               error: (_, _) => const LuxeStatsStrip(vehicle: null),
@@ -334,7 +355,7 @@ class HomeScreen extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: vehicleAsync.when(
-              data: (vehicle) => vehicle == null
+              data: (vehicle) => vehicle == null || learnedPending
                   ? const SizedBox.shrink()
                   : estimateRange(vehicle, learned: learned) != null
                   ? RangePredictionCard(vehicle: vehicle, learned: learned)

@@ -73,26 +73,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       data: LuxeTheme.of(context),
       child: Scaffold(
         backgroundColor: LuxeColors.background,
+        // QA 141: the same header as every other page (glass back button).
         appBar: Navigator.canPop(context)
-            ? AppBar(
-                backgroundColor: Colors.transparent,
-                surfaceTintColor: Colors.transparent,
-                elevation: 0,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  onPressed: () => Navigator.of(context).pop(),
-                  tooltip: 'Quay lại',
-                ),
-                title: const Text(
-                  'Lịch bảo dưỡng',
-                  style: TextStyle(
-                    color: LuxeColors.text,
-                    fontSize: 19,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                centerTitle: false,
-              )
+            ? const LuxeAppBar(title: 'Lịch bảo dưỡng')
             : null,
         extendBodyBehindAppBar: false,
         floatingActionButton: vehicleId.isEmpty

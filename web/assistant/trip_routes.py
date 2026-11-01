@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import math
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
-from .routing import RoutingUnavailable
+from .routing import RoutingUnavailable, TileProxy
 
 
 def _point(raw) -> dict | None:
@@ -26,8 +26,9 @@ def _point(raw) -> dict | None:
     return {"lat": lat, "lon": lon}
 
 
-def create_trip_route_blueprint(*, router, auth_resolver, entitlements=None):
+def create_trip_route_blueprint(*, router, auth_resolver, entitlements=None, tiles=None):
     bp = Blueprint("trip_routes", __name__)
+    tiles = tiles or TileProxy()
 
     def fail(status, code, message):
         return jsonify({"success": False, "code": code, "userMessage": message,
@@ -71,5 +72,22 @@ def create_trip_route_blueprint(*, router, auth_resolver, entitlements=None):
         if not items:
             return fail(404, "noRoute", "Không tìm thấy tuyến đường phù hợp.")
         return jsonify({"success": True, "data": {"items": items}})
+
+    @bp.get("/api/trip/tiles/<int:z>/<int:x>/<int:y>.png")
+    def tile(z, x, y):
+        # QA 141: the map through Pinova; carriers in Vietnam block the
+        # OpenStreetMap tile servers the app used to call.
+        _uid, error = gate()
+        if error:
+            return error
+        if not TileProxy.valid(z, x, y):
+            return fail(400, "invalidTile", "Ô bản đồ không hợp lệ.")
+        try:
+            body = tiles.tile(z, x, y)
+        except RoutingUnavailable:
+            return fail(503, "tileUnavailable", "Chưa tải được bản đồ lúc này.")
+        response = Response(body, mimetype="image/png")
+        response.headers["Cache-Control"] = "private, max-age=86400"
+        return response
 
     return bp

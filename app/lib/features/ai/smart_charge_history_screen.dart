@@ -12,7 +12,6 @@ import '../../core/services/app_error_reporter.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/utils/number_text.dart';
-import '../../data/services/charge_estimator.dart';
 import '../../core/widgets/adaptive_detail_rows.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
@@ -500,7 +499,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                           hasScrollBody: false,
                           child: _EmptyHistory(
                             isFiltered: _isFiltered,
-                            latestMonth: _isFiltered ? null : _latestSessionMonth,
+                            latestMonth: _isFiltered
+                                ? null
+                                : _latestSessionMonth,
                             onShowLatest: _showLatestMonth,
                             onStartCharging: widget.onStartCharging,
                             onClearFilter: () => setState(() {
@@ -1431,9 +1432,7 @@ class _EmptyHistory extends StatelessWidget {
               key: const ValueKey('history-show-latest-month'),
               onPressed: onShowLatest,
               icon: const Icon(Icons.history_rounded, size: 18),
-              label: Text(
-                'Xem tháng ${DateFormat('MM/yyyy').format(latest)}',
-              ),
+              label: Text('Xem tháng ${DateFormat('MM/yyyy').format(latest)}'),
             ),
           ],
         ),
@@ -1769,7 +1768,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
               children: [
                 HistoryStatusPill(label: stateLabel, color: statusColor),
                 Text(
-                  formatChargeDuration(historySessionDuration(_session)),
+                  historyDuration(historySessionDuration(_session)),
                   style: LuxeText.label,
                 ),
               ],
@@ -1882,7 +1881,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       (
         icon: Icons.timer_rounded,
         title: 'Thời gian sạc',
-        value: formatChargeDuration(duration),
+        value: historyDuration(duration),
         highlight: false,
       ),
       (

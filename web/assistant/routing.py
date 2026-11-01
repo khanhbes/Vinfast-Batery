@@ -123,3 +123,49 @@ class OsmRouter:
                     item["geometry"] = [[round(float(p[1]), 6), round(float(p[0]), 6)] for p in coords]
                 result.append(item)
             return list(self._remember(key, result))
+
+
+_TILE_URL = os.environ.get("MAP_TILE_URL", "").strip() or "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+_TILE_CACHE_SIZE = 600
+_TILE_MAX_ZOOM = 19
+
+
+class TileProxy:
+    """Map tiles for the trip planner through Pinova (QA 141).
+
+    Vietnamese carriers do not resolve ``*.openstreetmap.org`` (checked on
+    the owner's phone 01/11/2026), so the map was black. The server fetches
+    each tile once with Pinova's User-Agent and keeps the most used ones in
+    memory; ``MAP_TILE_URL`` switches to a commercial tile service without
+    an app update.
+    """
+
+    def __init__(self, session: requests.Session | None = None, url: str | None = None):
+        self._http = session or requests.Session()
+        self._url = url or _TILE_URL
+        self._lock = threading.Lock()
+        self._cache: OrderedDict[tuple[int, int, int], bytes] = OrderedDict()
+
+    @staticmethod
+    def valid(z: int, x: int, y: int) -> bool:
+        return 0 <= z <= _TILE_MAX_ZOOM and 0 <= x < 2 ** z and 0 <= y < 2 ** z
+
+    def tile(self, z: int, x: int, y: int) -> bytes:
+        key = (z, x, y)
+        with self._lock:
+            if key in self._cache:
+                self._cache.move_to_end(key)
+                return self._cache[key]
+        try:
+            response = self._http.get(self._url.format(z=z, x=x, y=y), headers=_HEADERS, timeout=8)
+            response.raise_for_status()
+            body = response.content
+        except requests.RequestException as error:
+            raise RoutingUnavailable("tileFailed") from error
+        if not body:
+            raise RoutingUnavailable("tileEmpty")
+        with self._lock:
+            self._cache[key] = body
+            while len(self._cache) > _TILE_CACHE_SIZE:
+                self._cache.popitem(last=False)
+        return body

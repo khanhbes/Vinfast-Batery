@@ -930,15 +930,22 @@ class LuxeSegmented<T> extends StatelessWidget {
                 child: FractionallySizedBox(
                   widthFactor: 1 / n,
                   heightFactor: 1,
+                  // QA 141: the chosen segment in the plan's colour; grey
+                  // on grey hid which one was picked.
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(99),
-                      gradient: const LinearGradient(
+                      gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Color(0x2EFFFFFF), Color(0x12FFFFFF)],
+                        colors: [
+                          context.planAccent.withValues(alpha: 0.30),
+                          context.planAccent.withValues(alpha: 0.12),
+                        ],
                       ),
-                      border: Border.all(color: LuxeColors.hairlineStrong),
+                      border: Border.all(
+                        color: context.planAccent.withValues(alpha: 0.6),
+                      ),
                     ),
                   ),
                 ),

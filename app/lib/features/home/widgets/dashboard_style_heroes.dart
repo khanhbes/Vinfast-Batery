@@ -12,23 +12,26 @@ import '../../../core/theme/plan_style.dart';
 /// What every Overview layout shows, from the vehicle's real data only
 /// (QA 131): a value the owner never entered stays null and shows "—".
 class HeroFigures {
-  HeroFigures(VehicleModel? v, TripModelParams? learned)
-    : name = v?.nickname?.trim().isNotEmpty == true
-          ? v!.nickname!.trim()
-          : (v?.modelName ?? 'Chưa có dữ liệu xe'),
-      plate = v?.licensePlate?.trim().isNotEmpty == true
-          ? v!.licensePlate!.trim()
-          : null,
-      percent = v?.hasBatteryData == true ? v!.currentBattery : null,
-      rangeKm = v != null && v.hasBatteryData
-          ? estimateRangeKm(v, learned: learned)?.round()
-          : null,
-      odoKm = v?.hasOdoData == true ? v!.currentOdo : null,
-      soh = v?.hasSohData == true ? v!.stateOfHealth.round() : null,
-      capacityWh = v != null && v.batteryCapacityWh > 0
-          ? v.batteryCapacityWh
-          : null,
-      updatedAt = v?.batteryDataUpdatedAt;
+  HeroFigures(
+    VehicleModel? v,
+    TripModelParams? learned, {
+    bool rangePending = false,
+  }) : name = v?.nickname?.trim().isNotEmpty == true
+           ? v!.nickname!.trim()
+           : (v?.modelName ?? 'Chưa có dữ liệu xe'),
+       plate = v?.licensePlate?.trim().isNotEmpty == true
+           ? v!.licensePlate!.trim()
+           : null,
+       percent = v?.hasBatteryData == true ? v!.currentBattery : null,
+       rangeKm = v != null && v.hasBatteryData && !rangePending
+           ? estimateRangeKm(v, learned: learned)?.round()
+           : null,
+       odoKm = v?.hasOdoData == true ? v!.currentOdo : null,
+       soh = v?.hasSohData == true ? v!.stateOfHealth.round() : null,
+       capacityWh = v != null && v.batteryCapacityWh > 0
+           ? v.batteryCapacityWh
+           : null,
+       updatedAt = v?.batteryDataUpdatedAt;
 
   final String name;
   final String? plate;
@@ -52,14 +55,22 @@ class HeroFigures {
 /// "Đồng hồ xe": the Overview drawn like the Feliz LCD cluster — battery %
 /// and its bars, estimated range, ODO, in seven-segment digits.
 class LcdClusterHero extends StatelessWidget {
-  const LcdClusterHero({super.key, required this.vehicle, this.learned});
+  const LcdClusterHero({
+    super.key,
+    required this.vehicle,
+    this.learned,
+    this.rangePending = false,
+  });
+
+  /// QA 141: the learned model has not answered yet; range shows "—".
+  final bool rangePending;
 
   final VehicleModel? vehicle;
   final TripModelParams? learned;
 
   @override
   Widget build(BuildContext context) {
-    final f = HeroFigures(vehicle, learned);
+    final f = HeroFigures(vehicle, learned, rangePending: rangePending);
     final percent = f.percent;
     return Semantics(
       container: true,
@@ -251,14 +262,22 @@ class _BatteryBars extends StatelessWidget {
 
 /// "Gọn": no large photo, a grid of the vehicle's figures.
 class CompactMetricsHero extends StatelessWidget {
-  const CompactMetricsHero({super.key, required this.vehicle, this.learned});
+  const CompactMetricsHero({
+    super.key,
+    required this.vehicle,
+    this.learned,
+    this.rangePending = false,
+  });
+
+  /// QA 141: the learned model has not answered yet; range shows "—".
+  final bool rangePending;
 
   final VehicleModel? vehicle;
   final TripModelParams? learned;
 
   @override
   Widget build(BuildContext context) {
-    final f = HeroFigures(vehicle, learned);
+    final f = HeroFigures(vehicle, learned, rangePending: rangePending);
     final cells = [
       ('Pin hiện tại', f.percent == null ? '—' : '${f.percent}%', true),
       (
@@ -381,8 +400,12 @@ class MinimalHero extends StatelessWidget {
     super.key,
     required this.vehicle,
     this.learned,
+    this.rangePending = false,
     required this.onCharge,
   });
+
+  /// QA 141: the learned model has not answered yet; range shows "—".
+  final bool rangePending;
 
   final VehicleModel? vehicle;
   final TripModelParams? learned;
@@ -390,7 +413,7 @@ class MinimalHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final f = HeroFigures(vehicle, learned);
+    final f = HeroFigures(vehicle, learned, rangePending: rangePending);
     final percent = f.percent;
     final color = percent == null
         ? LuxeColors.platinumMid

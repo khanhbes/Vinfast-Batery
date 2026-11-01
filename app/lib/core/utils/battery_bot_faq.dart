@@ -11,6 +11,24 @@ class BatteryBotFaq {
     'Vì sao nút sạc bị khóa?',
   ];
 
+  /// QA 141: the how-to suggestions are answered on the phone at once (the
+  /// AI took about 12 s for a fixed answer). "Vì sao nút sạc bị khóa?"
+  /// depends on the live state, so it still goes to Pinova Bot.
+  static const quickAnswers = {
+    'Xem pin ở đâu?':
+        'Mức pin và quãng đường ước tính ở đầu tab Tổng quan. Dung lượng '
+        'pin còn lại ở Tiện ích → Sức khỏe pin. Muốn cập nhật % pin, bấm '
+        '"Cập nhật % pin & ODO" ở Tổng quan.',
+    'Làm sao dừng sạc?':
+        'Bấm Dừng sạc trên thẻ đang sạc ở tab Sạc pin hoặc trên thông báo '
+        'sạc (cả ở màn khóa), hoặc nhắn mình "dừng sạc". Ổ Shelly cũng tự '
+        'ngắt theo giờ đã hẹn.',
+    'Kết nối Shelly':
+        'Vào Cài đặt → Sạc thông minh Shelly. App tìm ổ trong mạng nhà; '
+        'không thấy thì kết nối qua Shelly Cloud hoặc nhập mã 6 ký tự do '
+        'quản trị viên cấp.',
+  };
+
   static const _vietnameseLetters = {
     'a': 'àáạảãâầấậẩẫăằắặẳẵ',
     'e': 'èéẹẻẽêềếệểễ',

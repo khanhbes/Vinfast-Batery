@@ -49,8 +49,7 @@ class DiagnosticCheck {
 class DiagnosticsProbe {
   const DiagnosticsProbe();
 
-  Future<String> appVersion() async =>
-      await installedVersion ?? 'không rõ';
+  Future<String> appVersion() async => await installedVersion ?? 'không rõ';
 
   bool isAndroid() {
     try {

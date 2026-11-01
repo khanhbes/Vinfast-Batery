@@ -25,7 +25,6 @@ import '../achievements/models/achievement.dart';
 import '../achievements/services/achievement_signals.dart';
 import 'services/learning_flow.dart';
 import '../achievements/widgets/achievement_unlock_ceremony.dart';
-import '../achievements/widgets/achievements_teaser_card.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'controllers/smart_charging_controller.dart';
 import 'smart_charge_history_screen.dart';
@@ -45,6 +44,7 @@ import '../../data/models/app_appearance.dart';
 import 'widgets/edit_stop_at_sheet.dart';
 import 'widgets/edit_target_sheet.dart';
 import 'widgets/prediction_card_v2.dart';
+import 'widgets/push_off_notice.dart';
 import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
@@ -85,6 +85,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   Timer? _verifiedTimer;
 
   StreamSubscription<ShellyConnectionSnapshot>? _connectionEvents;
+
+  /// QA 141: switching Sạc AI ↔ Theo giờ starts at the top of the page.
+  final ScrollController _scroll = ScrollController();
 
   @override
   void initState() {
@@ -167,6 +170,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
 
   @override
   void dispose() {
+    _scroll.dispose();
     _connectionEvents?.cancel();
     _verifiedTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -236,6 +240,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       smartChargingControllerProvider(args),
       (previous, next) => _showStateNotices(previous, next),
     );
+    ref.listen<ChargeSection>(chargeSectionProvider, (previous, next) {
+      if (previous != next && _scroll.hasClients) _scroll.jumpTo(0);
+    });
     ref.listen<int>(currentTabProvider, (previous, next) {
       if (next == 1) {
         controller.refresh();
@@ -274,6 +281,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 backgroundColor: LuxeColors.raised,
                 onRefresh: () => controller.refresh(force: true),
                 child: ListView(
+                  controller: _scroll,
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
                   children: [
                     StreamBuilder<ShellyConnectionSnapshot>(
@@ -289,6 +297,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       ),
                     ),
                     const SizedBox(height: 16),
+                    const PushOffNotice(),
                     // A failed read when no charge runs: one notice with
                     // retry, the same as the app bar strip (QA 130).
                     if (state.gatewayError != null &&
@@ -412,60 +421,63 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                               ],
                             ),
                     ),
-                    const SizedBox(height: 32),
-                    LuxeReveal(
-                      index: 4,
-                      child: RecentSessionsSectionV2(
-                        sessions: state.history,
-                        syncedAt: state.historySyncedAt,
-                        onViewAll: () {
-                          AchievementSignals.instance.emit(
-                            AchievementEvents.historyViewed,
-                          );
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => Consumer(
-                                builder: (context, routeRef, _) =>
-                                    SmartChargeHistoryScreen(
-                                      controller: controller,
-                                      ownerUid: routeRef.watch(
-                                        currentUidProvider,
+                    // QA 141: inside the tab, Lịch sử is its own section.
+                    if (!widget.embedded) ...[
+                      const SizedBox(height: 32),
+                      LuxeReveal(
+                        index: 4,
+                        child: RecentSessionsSectionV2(
+                          sessions: state.history,
+                          syncedAt: state.historySyncedAt,
+                          onViewAll: () {
+                            AchievementSignals.instance.emit(
+                              AchievementEvents.historyViewed,
+                            );
+                            Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => Consumer(
+                                  builder: (context, routeRef, _) =>
+                                      SmartChargeHistoryScreen(
+                                        controller: controller,
+                                        ownerUid: routeRef.watch(
+                                          currentUidProvider,
+                                        ),
+                                        initialItems: state.history,
+                                        onStartCharging: () =>
+                                            Navigator.of(context).maybePop(),
                                       ),
-                                      initialItems: state.history,
-                                      onStartCharging: () =>
-                                          Navigator.of(context).maybePop(),
-                                    ),
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                        onOpen: (session) => showModalBottomSheet<void>(
-                          context: context,
-                          isScrollControlled: true,
-                          useSafeArea: true,
-                          backgroundColor: Colors.transparent,
-                          barrierColor: luxeSheetBarrier,
-                          builder: (_) => FractionallySizedBox(
-                            heightFactor: .96,
-                            child: ClipRRect(
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(28),
-                              ),
-                              child: Consumer(
-                                builder: (context, routeRef, _) =>
-                                    SmartChargeSessionDetailScreen(
-                                      controller: controller,
-                                      ownerUid: routeRef.watch(
-                                        currentUidProvider,
+                            );
+                          },
+                          onOpen: (session) => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            useSafeArea: true,
+                            backgroundColor: Colors.transparent,
+                            barrierColor: luxeSheetBarrier,
+                            builder: (_) => FractionallySizedBox(
+                              heightFactor: .96,
+                              child: ClipRRect(
+                                borderRadius: const BorderRadius.vertical(
+                                  top: Radius.circular(28),
+                                ),
+                                child: Consumer(
+                                  builder: (context, routeRef, _) =>
+                                      SmartChargeSessionDetailScreen(
+                                        controller: controller,
+                                        ownerUid: routeRef.watch(
+                                          currentUidProvider,
+                                        ),
+                                        session: session,
                                       ),
-                                      session: session,
-                                    ),
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -738,16 +750,6 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             ),
           ),
         ],
-        const SizedBox(height: 18),
-        LuxeReveal(
-          index: 4,
-          child: Consumer(
-            builder: (context, ref, _) => AchievementsTeaserCard(
-              state: ref.watch(achievementsControllerProvider),
-              onTap: _openAchievements,
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -781,6 +783,34 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       ),
       onOff: () => _emergencyOff(controller),
       onOpenSetup: () => _openSetup(controller),
+      estimate: (length) => _timedEstimate(state, length),
+    );
+  }
+
+  /// QA 141: the % a timed charge reaches, and when the battery is full if
+  /// that comes first (the server stops a full battery on every session).
+  TimedChargeEstimate? _timedEstimate(
+    SmartChargingUiState state,
+    Duration length,
+  ) {
+    final current = state.draft.currentSoc;
+    final learned = ref
+        .read(learnedModelsProvider(widget.vehicleId))
+        .valueOrNull;
+    final capacity = state.draft.estimatedCapacityWh;
+    final whPerPct =
+        learned?.whPerPct ??
+        (capacity > 0 ? capacity / 100 / ChargeEstimator.efficiency : null);
+    final powerW = learned?.powerW ?? state.preferences?.chargePowerW;
+    if (whPerPct == null || whPerPct <= 0 || powerW == null || powerW <= 0) {
+      return null;
+    }
+    final pctPerHour = powerW / whPerPct;
+    final gained = pctPerHour * length.inSeconds / 3600;
+    final toFull = (100 - current).clamp(0, 100);
+    return TimedChargeEstimate(
+      endSoc: math.min(100.0, current + gained).round(),
+      fullAfter: Duration(seconds: (toFull / pctPerHour * 3600).round()),
     );
   }
 

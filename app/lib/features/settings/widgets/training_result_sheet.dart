@@ -59,15 +59,13 @@ class TrainingResultSheet extends StatelessWidget {
             '(−$better%). Đã dùng bản mới.';
       }
       if (e.currentSawTest) {
-        return 'Bản mới gần bằng bản đang dùng (${pct(next)} so với ${pct(now)}). '
-            'Chênh lệch nằm trong mức cho phép vì bản đang dùng đã học chính '
-            'dữ liệu kiểm tra, nên bản mới được dùng.';
+        return 'Bản mới gần bằng bản đang dùng nên đã được dùng.';
       }
-      return 'Bản mới tương đương bản đang dùng (${pct(next)} so với '
-          '${pct(now)}) trên dữ liệu mới nên đã được dùng.';
+      // QA 141: plain words here; the figures are in "Xem đánh giá chi tiết".
+      return 'Bản mới cho kết quả tương đương bản đang dùng nên đã được dùng.';
     }
-    return 'Bản mới chưa tốt hơn (${pct(next)} so với ${pct(now)}) nên vẫn '
-        'giữ bản đang dùng. Dữ liệu vẫn được lưu cho lần sau.';
+    return 'Bản mới chưa tốt hơn nên vẫn giữ bản đang dùng. Dữ liệu vẫn '
+        'được lưu cho lần sau.';
   }
 
   @override

@@ -15,8 +15,16 @@ import '../../../data/models/vehicle_model.dart';
 /// every screen, otherwise a platinum line-art scooter whose battery glows
 /// with the charge), the name, plate and the battery reading.
 class LuxeVehicleHero extends StatefulWidget {
-  const LuxeVehicleHero({super.key, required this.vehicle, this.learned});
+  const LuxeVehicleHero({
+    super.key,
+    required this.vehicle,
+    this.learned,
+    this.rangePending = false,
+  });
   final VehicleModel? vehicle;
+
+  /// QA 141: the learned model has not answered yet; range shows "—".
+  final bool rangePending;
 
   /// The owner's trained trip model: same km/% as every other screen.
   final TripModelParams? learned;
@@ -75,7 +83,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
     // without battery data used to show the model defaults "100% · ~120 km"
     // (Task 125). One field, the same the Charge tab and BatteryBot write.
     final percent = v?.hasBatteryData == true ? v?.currentBattery : null;
-    final estimate = v == null || percent == null
+    final estimate = v == null || percent == null || widget.rangePending
         ? null
         : estimateRangeKm(v, learned: widget.learned);
     final range = estimate?.round();

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -9,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
@@ -87,6 +90,12 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   _ActiveTrip? _activeTrip;
   bool _savingTrip = false;
 
+  /// QA 141: map tiles come through Pinova with the owner's token
+  /// (carriers in Vietnam block the OpenStreetMap tile servers).
+  Map<String, String>? _tileHeaders;
+  int _tileErrors = 0;
+  bool _tilesFailed = false;
+
   PlannedRoute? get _route => _routes.isEmpty
       ? null
       : _routes[_routeIndex.clamp(0, _routes.length - 1)];
@@ -124,6 +133,30 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     }
   }
 
+  Future<void> _loadTileAuth({bool refresh = false}) async {
+    try {
+      if (Firebase.apps.isEmpty) return;
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken(
+        refresh,
+      );
+      if (token == null || !mounted) return;
+      setState(() => _tileHeaders = {'Authorization': 'Bearer $token'});
+    } on Object {
+      if (mounted) setState(() => _tilesFailed = true);
+    }
+  }
+
+  void _onTileError(TileImage tile, Object error, StackTrace? stack) {
+    _tileErrors++;
+    // One retry with a fresh token (an hour-old one expires), then say so.
+    if (_tileErrors == 3) unawaited(_loadTileAuth(refresh: true));
+    if (_tileErrors >= 8 && !_tilesFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _tilesFailed = true);
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -133,6 +166,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
     if (widget.initialDistanceKm != null) {
       _distanceController.text = widget.initialDistanceKm!.toStringAsFixed(1);
     }
+    unawaited(_loadTileAuth());
     unawaited(_loadLearning());
     unawaited(_loadTrainedModel());
     unawaited(_loadSaved());
@@ -803,12 +837,15 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                     },
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.bes.vinbatery',
-                      tileBuilder: darkModeTileBuilder,
-                    ),
+                    if (_tileHeaders case final headers?)
+                      TileLayer(
+                        urlTemplate:
+                            '${AppConstants.apiBaseUrl}/api/trip/tiles/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.bes.vinbatery',
+                        tileProvider: NetworkTileProvider(headers: headers),
+                        errorTileCallback: _onTileError,
+                        tileBuilder: darkModeTileBuilder,
+                      ),
                     if (_route != null)
                       PolylineLayer(
                         polylines: [
@@ -855,6 +892,20 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                   ),
                 ),
               const Positioned(left: 12, top: 12, child: _MapHint()),
+              if (_tilesFailed)
+                const Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 36,
+                  child: LuxeNotice(
+                    key: ValueKey('trip-map-unavailable'),
+                    icon: Icons.map_rounded,
+                    color: LuxeColors.champagne,
+                    message:
+                        'Chưa tải được bản đồ. Bạn vẫn chọn điểm bằng ô tìm '
+                        'kiếm hoặc nhập quãng đường bên dưới.',
+                  ),
+                ),
               // Required credit for OpenStreetMap data and tiles.
               Positioned(
                 right: 8,

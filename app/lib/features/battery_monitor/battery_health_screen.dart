@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers/app_providers.dart';
 import '../../core/services/pinova_api.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/number_text.dart';
@@ -9,6 +10,7 @@ import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
 import 'charge_habits_screen.dart';
+import 'widgets/health_trend_chart.dart';
 import '../../core/theme/plan_style.dart';
 
 /// What `/api/learning/<vehicle>/health` returns (QA 135).
@@ -171,16 +173,11 @@ class _Body extends StatelessWidget {
         _Hero(health: health, value: best),
         if (health.trend.length >= 2) ...[
           const LuxeSectionLabel('Theo từng lần sạc'),
-          LuxeSparkline(
-            points: [for (final (_, v) in health.trend) v],
-            height: 90,
-            color: LuxeColors.champagne,
-            semanticLabel: '% pin còn lại theo từng lần sạc',
-          ),
+          HealthTrendChart(points: health.trend),
         ],
         const LuxeSectionLabel('Bài kiểm tra pin'),
         if (health.full)
-          _TestCard(health: health)
+          _TestCard(health: health, vehicleId: vehicleId)
         else
           PremiumLocked(
             feature: PremiumFeature.batteryHealth,
@@ -225,7 +222,7 @@ class _Hero extends StatelessWidget {
         color: LuxeColors.champagne,
         message:
             'Xe chưa có dung lượng pin danh định trong danh mục, nên chưa tính '
-            'được % pin chai.',
+            'được sức khỏe pin.',
       );
     }
     if (v == null) {
@@ -295,12 +292,23 @@ class _Hero extends StatelessWidget {
   }
 }
 
-class _TestCard extends StatelessWidget {
-  const _TestCard({required this.health});
+class _TestCard extends ConsumerWidget {
+  const _TestCard({required this.health, required this.vehicleId});
   final BatteryHealth health;
+  final String vehicleId;
+
+  /// QA 141: step 3 opens the Charge tab with 100% already set.
+  void _chargeToFull(BuildContext context, WidgetRef ref) {
+    ref.read(pendingChargeTargetSocProvider.notifier).state = (
+      vehicleId: vehicleId,
+      targetSoc: 100,
+    );
+    Navigator.of(context).popUntil((route) => route.isFirst);
+    openChargeControl(ref, ai: true);
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final test = health.test;
     final max = health.testMaxStartPct.round();
     final steps = [
@@ -318,7 +326,14 @@ class _TestCard extends StatelessWidget {
     return LuxeSettingsGroup(
       children: [
         for (final (i, (text, icon)) in steps.indexed)
-          LuxeSettingsRow(icon: icon, title: '${i + 1}. $text'),
+          LuxeSettingsRow(
+            key: i == 2 ? const ValueKey('health-test-charge') : null,
+            icon: icon,
+            title: '${i + 1}. $text',
+            onTap: i == 2 && vehicleId.isNotEmpty
+                ? () => _chargeToFull(context, ref)
+                : null,
+          ),
         if (test != null)
           LuxeSettingsRow(
             key: const ValueKey('health-test-result'),

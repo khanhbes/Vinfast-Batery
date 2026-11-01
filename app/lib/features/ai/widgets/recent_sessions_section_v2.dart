@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/utils/number_text.dart';
+import 'history_luxe_widgets.dart';
 import '../../../data/models/smart_charging_session.dart';
 import '../../../core/theme/plan_style.dart';
 
@@ -118,9 +120,8 @@ class _SessionTile extends StatelessWidget {
     final duration = (session.stoppedAt ?? session.updatedAt).difference(
       session.startedAt ?? session.createdAt,
     );
-    final energy = session.energyUsedWh >= 1000
-        ? '${(session.energyUsedWh / 1000).toStringAsFixed(2)} kWh'
-        : '${session.energyUsedWh.toStringAsFixed(0)} Wh';
+    // QA 141: kWh like History (was "867 Wh" here, "0.87 kWh" there).
+    final energy = '${formatKwh(session.energyUsedWh / 1000)} kWh';
     final (label, color) = switch (session.state) {
       ChargingSessionState.completed => ('Hoàn thành', LuxeColors.emerald),
       ChargingSessionState.cancelled => ('Đã dừng', LuxeColors.platinumMid),
@@ -202,7 +203,7 @@ class _SessionTile extends StatelessWidget {
                     _LevelBar(start: session.startSoc / 100, end: endSoc / 100),
                     const SizedBox(height: 6),
                     Text(
-                      '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())} · ${_compactDuration(duration)} · $energy',
+                      '${DateFormat('dd/MM · HH:mm').format(session.createdAt.toLocal())} · ${historyDuration(duration)} · $energy',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -268,12 +269,4 @@ class _LevelBar extends StatelessWidget {
       },
     ),
   );
-}
-
-String _compactDuration(Duration value) {
-  final minutes = value.inMinutes.clamp(0, 10 * 60);
-  final hours = minutes ~/ 60;
-  final remaining = minutes % 60;
-  if (hours == 0) return '$remaining phút';
-  return remaining == 0 ? '$hours giờ' : '$hours giờ $remaining phút';
 }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/luxe_theme.dart';
+import '../../core/widgets/luxe_kit.dart';
 import 'controllers/achievements_controller.dart';
 import 'models/achievement.dart';
 import 'services/achievement_engine.dart';
@@ -160,12 +161,16 @@ class _AchievementsScreenState extends ConsumerState<AchievementsScreen> {
     padding: const EdgeInsets.fromLTRB(8, 4, 16, 6),
     child: Row(
       children: [
-        IconButton(
-          tooltip: 'Quay lại',
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: const Icon(Icons.arrow_back_rounded),
+        // QA 141: the glass back button every other page uses.
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: LuxeCircleButton(
+            icon: Icons.arrow_back_rounded,
+            tooltip: 'Quay lại',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 10),
         const Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

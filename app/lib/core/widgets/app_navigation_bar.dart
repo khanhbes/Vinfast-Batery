@@ -82,6 +82,9 @@ class AppNavigationBar extends StatelessWidget {
                           label: destinations[i].$2,
                           hint: 'Chuyển sang màn hình ${destinations[i].$2}',
                           onTap: () => onSelected(i),
+                          // QA 141: one node per tab (the InkWell inside was
+                          // a second, unlabeled button for TalkBack).
+                          excludeSemantics: true,
                           child: KeyedSubtree(
                             key: ValueKey('navigation-destination-$i'),
                             child: _Destination(
