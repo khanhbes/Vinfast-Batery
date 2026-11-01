@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 142. Task Completion Log — Khung quét theo dòng xe (Feliz 2025: % pin, ODO, nhiệt độ pin) + Pinova Bot: quy tắc ứng xử do máy chủ quản (01/11/2026) — Code + test mới đạt; chưa chạy toàn bộ test, chưa build, chưa deploy
+## 142. Task Completion Log — Khung quét theo dòng xe (Feliz 2025: % pin, ODO, nhiệt độ pin) + Pinova Bot: quy tắc ứng xử do máy chủ quản (01/11/2026) — Test đạt, API đã deploy, APK 1.3.11+214 đã cài OnePlus (02/11)
 
 **Chủ app chọn:** cảnh báo nhiệt độ pin 45 °C (champagne) / 55 °C (đỏ), chỉ cảnh báo, vẫn cho bật sạc; quy tắc bot do máy chủ quản, gửi email thật; chống viết lách chữ tục, giả admin/hệ thống, spam, đòi dữ liệu người khác.
 
@@ -30,7 +30,11 @@
 - App: `AssistantTurn.lockedUntil` từ `assistantLock`, băng "Pinova Bot tạm khóa tới HH:mm" trên ô nhập.
 - Test: `web/tests/test_qa142_conduct.py` (3 lần → khóa thật, app không reset được, không hứa email khi không gửi, 30 ngày reset, viết lách, mẹo, spam); `test_pinova_suite.py` + `test_assistant.py` vẫn đạt.
 
-**Còn mở:** chạy toàn bộ test, build APK, deploy API; thử quét trên xe thật với khung mới.
+**Kiểm chứng:** backend 811 pass / 15 skip; Flutter 1321 pass / 213 skip (1 bản giả lập `addBatteryReading` thêm `batteryTempC`). Gate task156 (worktree sạch `2a33121`): Linux 808 pass, boot Pass, worker smoke Pass. API `vinfast-api@sha256:6ef76bee…8163d2a9`, revision `vinfast-api--api106-1101164915`, health/ready 200, `noRelayCalls` (`docs/qa_evidence/app-review-2026-10-05/qa142-rollout-20261101.json`). Worker không đổi (chỉ giới hạn ODO trong `service.py`, chưa cần).
+
+APK 1.3.11+214 SHA-256 `835e708c…73fcbc2d`, đã `adb install -r` lên OnePlus 8bdf16d1 (versionCode 214); bản 1.3.10+213 không cài riêng (gộp vào bản này).
+
+**Còn mở:** thử quét trên xe thật với khung mới; email cảnh báo cần `ACS_CONNECTION_STRING` + `SUPPORT_SENDER_EMAIL` trên API (đã có cho phiếu hỗ trợ).
 
 ## 141. Task Completion Log — Rà soát UI/UX + hiệu năng trên OnePlus 1.3.9+212 và sửa toàn bộ (01/11/2026) — Test đạt, API đã deploy, APK 1.3.10+213 đã build (chờ cài OnePlus)
 

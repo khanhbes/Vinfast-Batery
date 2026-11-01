@@ -1,0 +1,19 @@
+{
+  "command": [
+    "C:\\Users\\khanh\\AppData\\Local\\Programs\\DockerDesktop\\resources\\bin\\docker.exe",
+    "build",
+    "-f",
+    "web/Dockerfile.api",
+    "-t",
+    "vinfast-api-qa:task156",
+    "web"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\qa142-api-build-20261101.log",
+  "processId": 30616,
+  "timeoutSeconds": 1500,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 48.92
+}
