@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -73,6 +74,26 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     vsync: this,
     duration: const Duration(milliseconds: 750),
   );
+
+  /// Ultra (QA 140): an aurora ring turns round the button while it is
+  /// held and while the ON command runs; never at rest.
+  late final AnimationController _spin = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1800),
+  );
+
+  void _syncSpin() {
+    final on =
+        (_pressed || _submitting) &&
+        PlanMotion.of(context).running &&
+        !MediaQuery.disableAnimationsOf(context);
+    if (on && !_spin.isAnimating) {
+      _spin.repeat();
+    } else if (!on && _spin.isAnimating) {
+      _spin.stop();
+      _spin.value = 0;
+    }
+  }
 
   /// The owner's last charge length, kept when the section is rebuilt after
   /// a charge ends and across app starts (QA 130); a new visit offers the
@@ -184,6 +205,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   }
 
   void _syncPulse() {
+    _syncSpin();
     // Pulse only while the command is really in flight; "ready" is a state,
     // not an activity (LUXE motion rule, Task 125).
     if (!MediaQuery.disableAnimationsOf(context) && _submitting) {
@@ -225,6 +247,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     WidgetsBinding.instance.removeObserver(this);
     _pulse.dispose();
     _ripple.dispose();
+    _spin.dispose();
     super.dispose();
   }
 
@@ -364,6 +387,18 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
             child: Stack(
               alignment: Alignment.center,
               children: [
+                AnimatedBuilder(
+                  animation: _spin,
+                  builder: (context, _) => _spin.isAnimating
+                      ? CustomPaint(
+                          size: const Size.square(176),
+                          painter: _AuroraRingPainter(
+                            _spin.value,
+                            plan.accentColors,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
                 // Two halo rings travelling outward while the command runs.
                 if (_submitting && !reduced)
                   AnimatedBuilder(
@@ -405,8 +440,10 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                   child: InkWell(
                     key: const ValueKey('timed-charge-start-button'),
                     onTap: enabled ? _start : null,
-                    onHighlightChanged: (pressed) =>
-                        setState(() => _pressed = pressed),
+                    onHighlightChanged: (pressed) {
+                      setState(() => _pressed = pressed);
+                      _syncSpin();
+                    },
                     customBorder: const CircleBorder(),
                     child: AnimatedScale(
                       scale: _pressed && !reduced ? 0.95 : 1.0,
@@ -611,6 +648,54 @@ class _PowerFace extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// Ultra: a turning ring of the plan's aurora just outside the button.
+class _AuroraRingPainter extends CustomPainter {
+  _AuroraRingPainter(this.t, this.colors);
+  final double t;
+  final List<Color> colors;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero);
+    final rect = Rect.fromCircle(center: c, radius: 70);
+    final turn = t * 2 * math.pi;
+    final shader = SweepGradient(
+      colors: [...colors, colors.first],
+      transform: GradientRotation(turn),
+    ).createShader(rect);
+    canvas.drawCircle(
+      c,
+      70,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 6
+        ..shader = shader
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+    );
+    canvas.drawCircle(
+      c,
+      70,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..shader = shader,
+    );
+    // A spark riding the ring.
+    final spark = c + Offset(math.cos(turn), math.sin(turn)) * 70;
+    canvas.drawCircle(
+      spark,
+      4,
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.85)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_AuroraRingPainter old) =>
+      old.t != t || !listEquals(old.colors, colors);
 }
 
 class _HaloPainter extends CustomPainter {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -56,6 +57,34 @@ class _LuxeSocDialState extends State<LuxeSocDial>
     vsync: this,
     duration: const Duration(milliseconds: 2400),
   );
+
+  /// Ultra's current in the charge window (QA 140): runs while a knob is
+  /// dragged and [_energyAfter] after release, only with Ultra effects.
+  late final AnimationController _energy = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
+  static const _energyAfter = Duration(seconds: 3);
+  Timer? _energyStop;
+
+  bool get _ultraEffects => PlanMotion.of(context).running && !_reduced;
+
+  void _energize() {
+    if (!_ultraEffects) return;
+    _energyStop?.cancel();
+    if (!_energy.isAnimating) _energy.repeat();
+  }
+
+  void _relaxEnergy() {
+    _energyStop?.cancel();
+    if (!_energy.isAnimating) return;
+    _energyStop = Timer(_energyAfter, () {
+      if (!mounted) return;
+      _energy.stop();
+      setState(() {});
+    });
+  }
+
   // Values glide to external changes (presets, sheet); drags are direct.
   late final AnimationController _glide = AnimationController(
     vsync: this,
@@ -136,6 +165,8 @@ class _LuxeSocDialState extends State<LuxeSocDial>
 
   @override
   void dispose() {
+    _energyStop?.cancel();
+    _energy.dispose();
     _enter.dispose();
     _flow.dispose();
     _glide.dispose();
@@ -218,6 +249,7 @@ class _LuxeSocDialState extends State<LuxeSocDial>
     }
     HapticFeedback.selectionClick();
     _glide.stop();
+    _energize();
     _move(global);
   }
 
@@ -246,7 +278,10 @@ class _LuxeSocDialState extends State<LuxeSocDial>
     }
   }
 
-  void _release() => setState(() => _active = null);
+  void _release() {
+    _relaxEnergy();
+    setState(() => _active = null);
+  }
 
   void _tick(double from, double to) {
     if ((from ~/ 5) != (to ~/ 5)) {
@@ -303,10 +338,11 @@ class _LuxeSocDialState extends State<LuxeSocDial>
                 children: [
                   ExcludeSemantics(
                     child: AnimatedBuilder(
-                      animation: Listenable.merge([_enter, _flow]),
+                      animation: Listenable.merge([_enter, _flow, _energy]),
                       builder: (context, _) => CustomPaint(
                         painter: LuxeDialPainter(
                           accent: PlanStyle.of(context).accentColors,
+                          energy: _energy.isAnimating ? _energy.value : null,
                           current: _shownCurrent,
                           target: _full ? null : _shownTarget,
                           enter: _enter.value,
@@ -602,6 +638,7 @@ class LuxeDialPainter extends CustomPainter {
     this.enabled = true,
     this.charging = false,
     this.accent = defaultAccent,
+    this.energy,
   });
 
   final double current;
@@ -626,6 +663,11 @@ class LuxeDialPainter extends CustomPainter {
 
   /// Read-only charging look: no knobs, a live head on the fill.
   final bool charging;
+
+  /// Ultra (QA 140): 0..1 phase of the current running through the charge
+  /// window while a knob is dragged (and briefly after) or while charging;
+  /// null otherwise. Only set with Ultra effects on and motion allowed.
+  final double? energy;
 
   static const _start = math.pi * 0.75;
   static const _sweep = math.pi * 1.5;
@@ -801,8 +843,61 @@ class LuxeDialPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round
           ..shader = shader,
       );
+      // Ultra: comet streaks of the aurora running current → target.
+      final phase = energy;
+      if (phase != null && enabled && e > 0.9) {
+        final span = target! - current;
+        final n = (span / 8).clamp(2, 8).round();
+        final tail = math.max(2.5, span * 0.14);
+        for (var k = 0; k < n; k++) {
+          final t = (phase + k / n) % 1.0;
+          final headPct = current + span * t;
+          final tailPct = math.max(current, headPct - tail);
+          final fade = math.sin(t * math.pi);
+          final color = accent[k % accent.length];
+          final a1 = _start + _sweep * tailPct / 100;
+          final a2 = _start + _sweep * headPct / 100;
+          if (a2 - a1 > 0.001) {
+            canvas.drawArc(
+              rect,
+              a1,
+              a2 - a1,
+              false,
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = trackW * 0.7
+                ..strokeCap = StrokeCap.round
+                ..shader = ui.Gradient.sweep(
+                  c,
+                  [
+                    color.withValues(alpha: 0),
+                    color.withValues(alpha: 0.95 * fade),
+                  ],
+                  const [0.0, 1.0],
+                  TileMode.clamp,
+                  a1,
+                  a2,
+                )
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+            );
+          }
+          final head = at(headPct);
+          canvas.drawCircle(
+            head,
+            trackW * 0.7,
+            Paint()
+              ..color = color.withValues(alpha: 0.55 * fade)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+          );
+          canvas.drawCircle(
+            head,
+            trackW * 0.2,
+            Paint()..color = Colors.white.withValues(alpha: fade),
+          );
+        }
+      }
       // Energy particles running from current toward target.
-      if (enabled && e > 0.9) {
+      if (enabled && e > 0.9 && phase == null) {
         final span = target! - current;
         final n = (span / 12).clamp(1, 6).round();
         for (var k = 0; k < n; k++) {
@@ -932,5 +1027,6 @@ class LuxeDialPainter extends CustomPainter {
       old.active != active ||
       old.enabled != enabled ||
       old.charging != charging ||
+      old.energy != energy ||
       !listEquals(old.accent, accent);
 }

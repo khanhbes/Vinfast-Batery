@@ -9,6 +9,7 @@ import 'core/providers/appearance_provider.dart';
 import 'core/providers/entitlement_provider.dart';
 import 'core/theme/luxe_theme.dart';
 import 'core/theme/plan_style.dart';
+import 'features/premium/plan_transition_overlay.dart';
 import 'core/widgets/app_popup.dart';
 import 'data/services/notification_accent.dart';
 import 'data/services/notification_service.dart';
@@ -159,7 +160,10 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
             PlanStyle.forTier(tier).isUltra &&
             effects &&
             !MediaQuery.disableAnimationsOf(context),
-        child: child ?? const SizedBox.shrink(),
+        // QA 140: a short animation once when the plan changes.
+        child: ready
+            ? PlanTransitionHost(child: child ?? const SizedBox.shrink())
+            : child ?? const SizedBox.shrink(),
       ),
       home: const AuthGate(),
     );

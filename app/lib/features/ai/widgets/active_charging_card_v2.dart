@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
 import '../../../core/widgets/seven_segment_text.dart';
 import '../../../data/models/app_appearance.dart';
 import 'luxe_soc_dial.dart';
@@ -346,6 +347,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
 
   Widget _dial(int current, int target) => LayoutBuilder(
     builder: (context, c) {
+      final ultra = PlanMotion.of(context).running && !_reduced;
       final size = math.min(c.maxWidth, 300.0);
       return Center(
         child: SizedBox.square(
@@ -363,6 +365,12 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                       enter: _enter.value,
                       flow: _flow.value,
                       charging: true,
+                      // QA 140: Ultra's current runs through the window
+                      // while the charge is real (the card's own clock).
+                      accent: ultra
+                          ? PlanStyle.of(context).accentColors
+                          : LuxeDialPainter.defaultAccent,
+                      energy: ultra ? _flow.value : null,
                     ),
                   ),
                 ),

@@ -504,6 +504,7 @@ void main() {
         'lib/features/ai/smart_charging_control_screen.dart', // relay ON
         'lib/features/ai/widgets/active_charging_card_v2.dart', // charging
         'lib/features/ai/widgets/breathing_bot_avatar.dart', // streaming
+        'lib/features/ai/widgets/luxe_soc_dial.dart', // Ultra: knob dragged (QA 140)
         'lib/features/ai/widgets/streaming_text_widget.dart', // streaming
         'lib/features/ai/widgets/timed_charging_section_v2.dart', // sending
         'lib/features/ai/widgets/typing_indicator_dots.dart', // typing
