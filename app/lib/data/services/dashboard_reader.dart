@@ -25,10 +25,14 @@ class DashboardReading {
     this.rawText = '',
     this.frames = 0,
     this.aiAssisted = false,
+    this.tempC,
   });
 
   final int? soc;
   final double? odoKm;
+
+  /// Battery temperature on the cluster, °C (QA 142).
+  final int? tempC;
   final List<int> socCandidates;
   final List<double> odoCandidates;
 
@@ -135,7 +139,7 @@ abstract final class DashboardReadingParser {
       text = text.replaceAll(RegExp(r'[.,]'), '');
     }
     final value = double.tryParse(text);
-    if (value == null || !value.isFinite || value < 0 || value > 500000) {
+    if (value == null || !value.isFinite || value < 0 || value > 999999) {
       return null;
     }
     return value;
@@ -199,6 +203,7 @@ abstract final class DashboardOcr {
       odoFromLabel: layout.odoConfident || text.odoFromLabel,
       rawText: text.rawText,
       frames: frames,
+      tempC: layout.tempC,
     );
   }
 }
@@ -256,6 +261,7 @@ class DashboardReader {
         }.take(4).toList(),
         odoFromLabel: segments.odoFromLabel || text.odoFromLabel,
         rawText: text.rawText,
+        tempC: segments.tempC ?? text.tempC,
       );
     } finally {
       await recognizer.close();
@@ -334,6 +340,7 @@ class DashboardReader {
         socCandidates: layout.socCandidates,
         odoCandidates: layout.odoCandidates,
         odoFromLabel: layout.odoConfident,
+        tempC: layout.tempC,
       );
     } on Object {
       return null;

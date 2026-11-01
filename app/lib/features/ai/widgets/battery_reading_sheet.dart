@@ -8,7 +8,13 @@ import '../../../data/services/dashboard_reader.dart';
 import '../dashboard_scan_screen.dart';
 
 /// What the owner confirmed: battery % and/or ODO, and where it came from.
-typedef BatteryReadingInput = ({double? soc, double? odoKm, String source});
+/// QA 142: [tempC] is the battery temperature the scan read (°C).
+typedef BatteryReadingInput = ({
+  double? soc,
+  double? odoKm,
+  String source,
+  int? tempC,
+});
 
 /// Reads the dashboard (live scan or photo); injectable for tests.
 typedef DashboardReadFn =
@@ -157,8 +163,8 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
     if (odoText.isNotEmpty) {
       odo = _number(odoText);
       final previous = widget.currentOdoKm;
-      if (odo == null || odo < 0 || odo > 500000) {
-        odoError = 'Nhập số km từ 0 đến 500.000.';
+      if (odo == null || odo < 0 || odo > 999999) {
+        odoError = 'Nhập số km từ 0 đến 999 999.';
       } else if (previous != null && previous > 0 && odo < previous - 0.5) {
         odoError = 'ODO không thể nhỏ hơn lần trước (${previous.round()} km).';
       }
@@ -182,6 +188,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
       soc: soc,
       odoKm: odo,
       source: fromPhoto ? 'photo' : 'manual',
+      tempC: read?.tempC,
     );
     final save = widget.onSave;
     if (save == null) {
@@ -305,6 +312,10 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
                   ],
                 ),
               ),
+          ],
+          if (read?.tempC case final temp?) ...[
+            const SizedBox(height: 10),
+            BatteryTempLine(key: const ValueKey('reading-temp'), tempC: temp),
           ],
           const SizedBox(height: 16),
           TextField(

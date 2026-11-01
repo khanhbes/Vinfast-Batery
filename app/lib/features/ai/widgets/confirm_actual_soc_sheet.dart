@@ -130,8 +130,8 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
     if (raw.isNotEmpty) {
       odo = double.tryParse(raw);
       final previous = widget.currentOdoKm;
-      if (odo == null || !odo.isFinite || odo < 0 || odo > 500000) {
-        setState(() => _odoError = 'Nhập số km từ 0 đến 500.000.');
+      if (odo == null || !odo.isFinite || odo < 0 || odo > 999999) {
+        setState(() => _odoError = 'Nhập số km từ 0 đến 999 999.');
         return false;
       }
       if (previous != null && odo < previous) {

@@ -263,7 +263,7 @@ def validate_action(name: str, args: dict, context: dict) -> dict | None:
         percent = _clamp_int(args.get("percent"), 0, 100)
         return {"percent": percent} if percent is not None else None
     if name == "update_odometer":
-        km = _clamp_int(args.get("km"), 0, 500000)
+        km = _clamp_int(args.get("km"), 0, 999999)
         return {"km": km} if km is not None else None
     if name == "select_vehicle":
         wanted = str(args.get("vehicle_name") or "").strip()
@@ -459,7 +459,8 @@ class AssistantEngine:
     def __init__(self, *, gemini: GeminiClient, knowledge: KnowledgeBase, memory: AssistantMemory,
                  live_reader=None, history_reader=None, clock=None, router=None, charge_estimator=None,
                  trip_params_reader=None, entitlements=None, health_reader=None,
-                 night_reader=None, config_store=None):
+                 night_reader=None, config_store=None, conduct_store=None, mailer=None):
+        from .conduct import ConductStore, SpamGuard
         from .config_store import PinovaConfigStore
         from .prompt_assembler import PromptAssembler
 
@@ -479,6 +480,17 @@ class AssistantEngine:
         self.health_reader = health_reader
         self.night_reader = night_reader
         self.config_store = config_store or PinovaConfigStore()
+        # QA 142: conduct records per account (Firestore with the memory's
+        # db), the spam window and the warning-email sender.
+        self.conduct = conduct_store or ConductStore(getattr(memory, "db", None))
+        self.spam = SpamGuard()
+        if mailer is None:
+            try:
+                from support.mailer import SupportMailer
+                mailer = SupportMailer()
+            except Exception:
+                mailer = None
+        self.mailer = mailer
         self.prompt_assembler = PromptAssembler()
         self._last_prompt_trace: dict | None = None
 
@@ -712,6 +724,60 @@ class AssistantEngine:
                     "actions": [], "source": "assistant", "sensitive": True}
         return None
 
+    def conduct_gate(self, uid: str, message, *, email: str | None = None,
+                     context: dict | None = None) -> dict | None:
+        """QA 142: answers that never reach the quota or the model — the
+        account's lock, the spam window, tricks (refused, no strike) and
+        conduct violations (strike recorded by the server, email at 2/3).
+        None lets the message through."""
+        from .conduct import TRICK_REPLIES, lock_reply, obfuscated_profanity, spam_reply, trick_kind
+        from .guardrails import check_conduct_and_policy_violation
+
+        message = str(message or "").strip()[:MAX_MESSAGE]
+        until = self.conduct.locked_until(uid)
+        if until is not None:
+            return lock_reply(until)
+        wait = self.spam.wait_seconds(uid)
+        if wait:
+            return spam_reply(wait)
+        trick = trick_kind(message)
+        if trick:
+            return {"reply": TRICK_REPLIES[trick], "actions": [], "source": "conduct_trick",
+                    "guardrailReason": f"trick_{trick}"}
+        version_cfg = self.config_store.get_version(None)
+        record = self.conduct.get(uid)
+        strike = min(3, int(record.get("strikeCount") or 0) + 1)
+        can_email = bool(email) and self.mailer is not None and getattr(self.mailer, "can_send", False)
+        media = (context or {}).get("mediaAttachmentType") if isinstance(context, dict) else None
+        block = check_conduct_and_policy_violation(
+            message, {"conductStrike": strike, "mediaAttachmentType": media},
+            version_cfg.get("guardrails"), version_cfg.get("versionId"),
+            warning_email=can_email, force_profanity=obfuscated_profanity(message))
+        if block is None:
+            return None
+        if not can_email:
+            # No email can go out: promise a warning, not an email.
+            block["reply"] = (str(block.get("reply") or "")
+                              .replace("gửi **email cảnh báo**", "ghi **cảnh báo** vào tài khoản")
+                              .replace("an official **warning email**", "an account **warning**")
+                              .replace("a **warning email**", "an account **warning**"))
+        info = block.get("conductViolation") or {}
+        sent = False
+        if strike >= 2 and can_email:
+            sent = self.mailer.send_to(
+                email, "Pinova: cảnh báo vi phạm Quy tắc Cộng đồng",
+                ("Chào bạn,\n\nTài khoản Pinova của bạn vừa vi phạm Quy tắc Cộng đồng khi trò chuyện với "
+                 f"Pinova Bot ({info.get('categoryLabelVi', 'vi phạm')}, lần {strike}/3). "
+                 + ("Pinova Bot đã tạm khóa 30 phút với tài khoản này. " if strike >= 3 else
+                    "Lần vi phạm tiếp theo sẽ tạm khóa Pinova Bot 30 phút. ")
+                 + "Điều khiển sạc ở tab Sạc pin và mục Trợ giúp vẫn hoạt động bình thường.\n\n"
+                   "Nếu bạn cho rằng đây là nhầm lẫn, hãy gửi phiếu ở Cài đặt → Trợ giúp.\n\nPinova"))
+        saved = self.conduct.record_violation(uid, info.get("category") or "violation", email_sent=sent)
+        info["warningEmailSent"] = sent
+        if saved.get("lockedUntil") and strike >= 3:
+            block["assistantLock"] = {"until": saved["lockedUntil"], "reason": "conduct"}
+        return block
+
     def chat(self, uid: str, message: str, history: list[dict] | None, context: dict | None,
              *, version_id: str | None = None, dry_run: bool = False, include_trace: bool = False) -> dict:
         from .guardrails import (
@@ -723,7 +789,12 @@ class AssistantEngine:
         )
 
         message = str(message or "").strip()[:MAX_MESSAGE]
-        context = context if isinstance(context, dict) else {}
+        context = dict(context) if isinstance(context, dict) else {}
+        # QA 142: a user's request never sets its own strike; only the
+        # admin evaluation (dry run / trace) replays one.
+        admin_eval = dry_run or include_trace
+        if not admin_eval:
+            context.pop("conductStrike", None)
         version_cfg = self.config_store.get_version(version_id)
         kill_switch = self.config_store.get_kill_switch()
 
@@ -781,10 +852,13 @@ class AssistantEngine:
 
         # 4b. Pinova 3.1 Conduct, Obscenity, Sensitive Media & 3-Strike Policy Enforcement (VI & EN)
         conduct_ctx = dict(context)
-        if "conductStrike" not in conduct_ctx and hasattr(self.config_store, "get_conduct_record"):
+        # Real chats were checked by conduct_gate (route) before the quota.
+        if not admin_eval:
+            conduct_ctx = None
+        if conduct_ctx is not None and "conductStrike" not in conduct_ctx and hasattr(self.config_store, "get_conduct_record"):
             rec = self.config_store.get_conduct_record(uid)
             conduct_ctx["conductStrike"] = min(3, int(rec.get("strikeCount") or 0) + 1)
-        conduct_block = check_conduct_and_policy_violation(
+        conduct_block = None if conduct_ctx is None else check_conduct_and_policy_violation(
             message,
             conduct_ctx,
             version_cfg.get("guardrails"),

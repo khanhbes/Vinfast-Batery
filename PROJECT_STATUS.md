@@ -12,6 +12,26 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 142. Task Completion Log — Khung quét theo dòng xe (Feliz 2025: % pin, ODO, nhiệt độ pin) + Pinova Bot: quy tắc ứng xử do máy chủ quản (01/11/2026) — Code + test mới đạt; chưa chạy toàn bộ test, chưa build, chưa deploy
+
+**Chủ app chọn:** cảnh báo nhiệt độ pin 45 °C (champagne) / 55 °C (đỏ), chỉ cảnh báo, vẫn cho bật sạc; quy tắc bot do máy chủ quản, gửi email thật; chống viết lách chữ tục, giả admin/hệ thống, spam, đòi dữ liệu người khác.
+
+**Quét đồng hồ:**
+- `DashboardTemplate` (`app/lib/data/services/dashboard_templates.dart`): khung kính và vùng % pin, ODO, °C, vùng tốc độ bỏ qua, đo trên ảnh Feliz 2025 của chủ xe; `forModel` theo dòng xe đang chọn (Feliz từ 2025, không phải Feliz S/Lite/Neo), xe khác vẫn khung trơn.
+- Màn quét vẽ viền màn hình xe và nhãn từng vùng ("Căn viền màn hình xe trùng khung"), cửa sổ theo tỉ lệ 1.42; khung hình gửi isolate kèm vị trí kính trong ảnh cắt; `DashboardLayoutParser.parseTemplate` ghép số trong từng vùng trái → phải ("48 18" → 4818), kiểm khoảng: ODO 0–999 999, % 0–100, °C 0–100; số theo luật bố cục chỉ được nhận khi nằm sát đúng vùng (hết "168" thành ODO).
+- Nhiệt độ: `DashboardLayoutReading.tempC`, bỏ phiếu như % nhưng không giữ quá trình khóa; `BatteryTempLine` trên màn quét, sheet % pin & ODO và tab Sạc (lần quét ≤ 2 giờ, từ 45 °C).
+- Máy chủ: `POST /api/learning/<vid>/readings` nhận `batteryTempC` (0–100, lỗi `invalidTemp`), lưu vào số đọc và xe (`batteryTempC`, `batteryTempAt`); ODO tối đa 999 999 ở mọi chỗ (app, `learning.py`, `service.py`, bot `update_odometer`).
+- Test: `test/unit/qa142_dashboard_template_test.dart` (vùng, khoảng, chữ số mất, theo dòng xe, phiếu nhiệt độ), `test/unit/qa142_scan_fixture_test.dart` (6/6 ảnh thật: 68 %, 4818 km, 31 °C), `web/tests/test_qa142_battery_temp.py`.
+
+**Pinova Bot — quy tắc ứng xử (bản web 3.1 đã lên production qua commit 6e0e952 lúc deploy QA 141):**
+- Lỗ hổng của bản web: app tự gửi `conductStrike` để luôn ở lần 1; tạm khóa 30 phút chỉ ghi, không chặn; "đã gửi email cảnh báo" nhưng không có code gửi; mọi user chung một tài liệu `pinovaConfigStore/runtime_state` + file JSON trong container; chữ "Shelly 1" và tên xe viết cứng.
+- Sửa: `web/assistant/conduct.py` — `ConductStore` mỗi tài khoản `users/{uid}/assistantConduct/state` (bộ nhớ khi không có Firestore), 30 ngày sạch thì xóa; lần 3 khóa 30 phút, sau khóa vi phạm tiếp là khóa lại; `SpamGuard` 5 tin/30 giây; `fold` + danh sách từ lóng không bỏ dấu và danh sách có dấu (không bắt nhầm "các", "buổi", "đeo", "bộ máy", "50cc"); `trick_kind` (giả admin/hệ thống/developer, đòi dữ liệu người khác) từ chối, không tính lỗi.
+- `AssistantEngine.conduct_gate` chạy trong route trước quota và mô hình (sau SOS): khóa → spam → mẹo → vi phạm; email cảnh báo lần 2/3 gửi tới email tài khoản qua ACS (`SupportMailer.send_to`), câu trả lời chỉ nói "đã gửi email" khi gửi được; `conductStrike` từ app bị bỏ (chỉ trang quản trị chạy thử mới dùng).
+- App: `AssistantTurn.lockedUntil` từ `assistantLock`, băng "Pinova Bot tạm khóa tới HH:mm" trên ô nhập.
+- Test: `web/tests/test_qa142_conduct.py` (3 lần → khóa thật, app không reset được, không hứa email khi không gửi, 30 ngày reset, viết lách, mẹo, spam); `test_pinova_suite.py` + `test_assistant.py` vẫn đạt.
+
+**Còn mở:** chạy toàn bộ test, build APK, deploy API; thử quét trên xe thật với khung mới.
+
 ## 141. Task Completion Log — Rà soát UI/UX + hiệu năng trên OnePlus 1.3.9+212 và sửa toàn bộ (01/11/2026) — Test đạt, API đã deploy, APK 1.3.10+213 đã build (chờ cài OnePlus)
 
 **Cách rà:** mở app trên OnePlus (helper có chặn), đi qua Tổng quan, Sạc pin (3 mục), 7 màn Tiện ích, Cài đặt, Pinova Bot, quét đồng hồ; đo khung hình bằng SurfaceFlinger khi cuộn (Tổng quan, Lịch sử, Thành tựu 0% trễ; Sạc AI 2%). Chưa xem: Premium, Hồ sơ, Xe của tôi, Shelly, Giao diện, Trung tâm thông báo, Trợ giúp (dừng vì cuộc gọi đến).

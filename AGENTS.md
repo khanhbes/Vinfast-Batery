@@ -227,6 +227,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Lưới ô hai cột cao bằng nhau mỗi hàng (`IntrinsicHeight`); mỗi ô/tab là một nút TalkBack.
   - Bot hứa "mình sẽ mở …" mà không gọi `navigate` thì máy chủ gắn lệnh mở (`promised_navigation`).
 
+- **QA 142 (01/11/2026):**
+  - Quét đồng hồ theo dòng xe: `DashboardTemplate` (vùng %, ODO, °C, tốc độ bỏ qua); thêm dòng xe mới = thêm một mẫu + `forModel`. Khoảng: ODO 0–999 999, % 0–100, nhiệt độ pin 0–100 °C; cảnh báo 45 °C / 55 °C (`BatteryTempLine`), chỉ cảnh báo, không chặn bật sạc.
+  - Quy tắc ứng xử Pinova Bot chỉ do máy chủ quản (`assistant/conduct.py`, `users/{uid}/assistantConduct/state`): app không gửi được số lần vi phạm; khóa, spam, mẹo, vi phạm xử lý trước quota và mô hình; chỉ nói "đã gửi email" khi email thật sự gửi; SOS luôn trước mọi khóa.
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

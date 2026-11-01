@@ -20,6 +20,7 @@ import '../../core/services/pinova_api.dart';
 import '../../data/services/dashboard_ai_reader.dart';
 import '../../data/services/dashboard_layout_parser.dart';
 import '../../data/services/dashboard_reader.dart';
+import '../../data/services/dashboard_templates.dart';
 import '../../data/services/seven_segment_reader.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/services/screen_tour.dart';
@@ -37,7 +38,11 @@ Future<DashboardReading?> scanDashboard(
   double? lastOdoKm,
 }) async {
   final prior = odoBaseline(lastOdoKm, _vehicleOdo(context));
-  final scan = await DashboardScanScreen.open(context, lastOdoKm: prior);
+  final scan = await DashboardScanScreen.open(
+    context,
+    lastOdoKm: prior,
+    template: _vehicleTemplate(context),
+  );
   if (scan == null) return null;
   if (!scan.wantsGallery) return scan.reading;
   return DashboardReader().read(camera: false, lastOdoKm: prior);
@@ -51,6 +56,23 @@ double? odoBaseline(double? passed, double? vehicle) {
       if (v != null && v.isFinite && v > 0) v,
   ];
   return known.isEmpty ? null : known.reduce(math.max);
+}
+
+/// QA 142: the cluster frame of the selected vehicle's model (null: a
+/// plain window for models without one yet).
+DashboardTemplate? _vehicleTemplate(BuildContext context) {
+  try {
+    final vehicle = ProviderScope.containerOf(
+      context,
+      listen: false,
+    ).read(vehicleContextProvider).vehicle;
+    if (vehicle == null) return null;
+    return DashboardTemplate.forModel(
+      '${vehicle.vinfastModelId ?? ''} ${vehicle.modelName}',
+    );
+  } on Object {
+    return null; // no ProviderScope (widget tests)
+  }
 }
 
 double? _vehicleOdo(BuildContext context) {
@@ -84,19 +106,25 @@ class DashboardScanScreen extends StatefulWidget {
   const DashboardScanScreen({
     super.key,
     this.lastOdoKm,
+    this.template,
     this.loadCameras = availableCameras,
   });
 
   final double? lastOdoKm;
+
+  /// The cluster frame to line up (QA 142); null shows a plain window.
+  final DashboardTemplate? template;
   final Future<List<CameraDescription>> Function() loadCameras;
 
   static Future<DashboardScanResult?> open(
     BuildContext context, {
     double? lastOdoKm,
+    DashboardTemplate? template,
   }) => Navigator.of(context, rootNavigator: true).push(
     MaterialPageRoute<DashboardScanResult>(
       fullscreenDialog: true,
-      builder: (_) => DashboardScanScreen(lastOdoKm: lastOdoKm),
+      builder: (_) =>
+          DashboardScanScreen(lastOdoKm: lastOdoKm, template: template),
     ),
   );
 
@@ -132,6 +160,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   Size? _imageSize;
   Rect? _socBox;
   Rect? _odoBox;
+  Rect? _tempBox;
   Timer? _hintTimer;
   final _log = _ScanLog();
 
@@ -299,6 +328,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         : Size(image.width.toDouble(), image.height.toDouble());
     // The plane is only valid during this callback: copy what the isolate
     // reads (Android: just the luminance rows).
+    final guide = _guideRoi(_imageSize!);
     final job = _FrameJob(
       bytes: Platform.isAndroid
           ? Uint8List.fromList(
@@ -310,7 +340,9 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       bytesPerRow: plane.bytesPerRow,
       rotation: degrees,
       bgra: Platform.isIOS,
-      roi: _guideRoi(_imageSize!),
+      roi: guide?.roi,
+      window: guide?.window,
+      templateId: widget.template?.id,
     );
     _lastJob = job;
     final text = _noSegments >= 4 && _noSegments % 2 == 0
@@ -323,7 +355,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
 
   /// The guide window as fractions of the upright frame, with a margin
   /// (the preview is cover-fitted to the screen). Null before layout.
-  Rect? _guideRoi(Size upright) {
+  ({Rect roi, Rect window})? _guideRoi(Size upright) {
     final guide = _guideKey.currentContext?.findRenderObject();
     final stack = _stackKey.currentContext?.findRenderObject();
     if (guide is! RenderBox || stack is! RenderBox) return null;
@@ -331,6 +363,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     final screen = stack.size;
     final window = _GuidePainter.windowFor(
       guide.size,
+      widget.template,
     ).shift(guide.localToGlobal(Offset.zero, ancestor: stack));
     final scale = math.max(
       screen.width / upright.width,
@@ -351,7 +384,17 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       math.min(1, r.right + mx),
       math.min(1, r.bottom + my),
     );
-    return roi.width > 0.1 && roi.height > 0.05 ? roi : null;
+    if (roi.width <= 0.1 || roi.height <= 0.05) return null;
+    // QA 142: the template's glass inside the crop, for the zones.
+    return (
+      roi: roi,
+      window: Rect.fromLTRB(
+        (r.left - roi.left) / roi.width,
+        (r.top - roi.top) / roi.height,
+        (r.right - roi.left) / roi.width,
+        (r.bottom - roi.top) / roi.height,
+      ),
+    );
   }
 
   int? _rotationDegrees() {
@@ -393,6 +436,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   Future<void> _process(_FrameJob job, InputImage? text) async {
     final watch = Stopwatch()..start();
     final frame = await _FrameJob.read(job, widget.lastOdoKm);
+    if (frame.reading.tempC != null) _tempBox = frame.reading.tempBox;
     final hasDigits = frame.hasDigits;
     _noSegments = hasDigits ? 0 : _noSegments + 1;
     var reading = frame.reading;
@@ -488,6 +532,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       odoFromLabel: _vote.odoLocked != null,
       frames: _vote.needed,
       aiAssisted: _aiAssisted,
+      tempC: _vote.temp,
     );
     // A beat so the owner sees both values lock before the sheet returns.
     await Future<void>.delayed(const Duration(milliseconds: 550));
@@ -547,6 +592,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
               odoCandidates: read.odoCandidates,
               odoFromLabel: read.odoFromLabel,
               rawText: read.rawText,
+              tempC: read.tempC,
             );
           }
         } on Object catch (e) {
@@ -566,6 +612,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         odoFromLabel: read.odoFromLabel,
         rawText: read.rawText,
         aiAssisted: ai || _aiAssisted,
+        tempC: _vote.temp ?? read.tempC,
       );
       if (!reading.isEmpty) {
         _done = true;
@@ -605,6 +652,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
           soc: _vote.socLocked,
           odoKm: _vote.odoLocked,
           frames: _vote.needed,
+          tempC: _vote.temp,
         ),
       ),
     );
@@ -636,6 +684,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                           imageSize: _imageSize,
                           socBox: _socBox,
                           odoBox: _odoBox,
+                          tempBox: _tempBox,
                           socLocked: _vote.socLocked != null,
                           odoLocked: _vote.odoLocked != null,
                         ),
@@ -686,7 +735,10 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                   child: _problem == _CameraProblem.none
                       ? CustomPaint(
                           key: _guideKey,
-                          painter: _GuidePainter(ready: ready),
+                          painter: _GuidePainter(
+                            ready: ready,
+                            template: widget.template,
+                          ),
                           child: const SizedBox.expand(),
                         )
                       : _CameraProblemView(
@@ -698,6 +750,8 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                   socLocked: _vote.socLocked,
                   odoSeen: _vote.odoSeen,
                   odoLocked: _vote.odoLocked,
+                  tempC: _vote.temp,
+                  tempLocked: _vote.tempLocked != null,
                   scanning: ready && !_done,
                   capturing: _capturing,
                   note:
@@ -768,6 +822,8 @@ class DashboardScanPanel extends StatelessWidget {
     this.socLocked,
     this.odoSeen,
     this.odoLocked,
+    this.tempC,
+    this.tempLocked = false,
     this.scanning = false,
     this.capturing = false,
     this.note,
@@ -782,6 +838,10 @@ class DashboardScanPanel extends StatelessWidget {
   final int? socLocked;
   final double? odoSeen;
   final double? odoLocked;
+
+  /// Battery temperature read on the cluster (QA 142).
+  final int? tempC;
+  final bool tempLocked;
   final bool scanning;
   final bool capturing;
   final String? note;
@@ -845,6 +905,14 @@ class DashboardScanPanel extends StatelessWidget {
                 ),
               ],
             ),
+            if (tempC != null) ...[
+              const SizedBox(height: 10),
+              BatteryTempLine(
+                key: const ValueKey('scan-temp'),
+                tempC: tempC!,
+                confirmed: tempLocked,
+              ),
+            ],
             const SizedBox(height: 12),
             if (onOpenSettings != null) ...[
               FilledButton.icon(
@@ -1047,29 +1115,37 @@ class _ScanTile extends StatelessWidget {
   }
 }
 
-/// Dims the frame around a cluster-shaped window with platinum corners.
+/// Dims the frame around the viewfinder. With a template (QA 142) the
+/// window has the cluster's proportions and shows its glass and the zones
+/// of the battery %, ODO and temperature to line up; without one, a plain
+/// window with platinum corners.
 class _GuidePainter extends CustomPainter {
-  _GuidePainter({required this.ready});
+  _GuidePainter({required this.ready, this.template});
 
   final bool ready;
+  final DashboardTemplate? template;
 
   /// The window the owner aims at (also the part of the frame read).
-  static Rect windowFor(Size size) {
+  static Rect windowFor(Size size, [DashboardTemplate? template]) {
     final width = (size.width - 48).clamp(0.0, 420.0).toDouble();
-    final height = (width * 0.78)
-        .clamp(0.0, math.max(0.0, size.height - 32))
-        .toDouble();
+    final aspect = template?.aspect ?? 1 / 0.78;
+    var w = width;
+    var h = w / aspect;
+    final maxH = math.max(0.0, size.height - 72);
+    if (h > maxH) {
+      h = maxH;
+      w = h * aspect;
+    }
     return Rect.fromCenter(
       center: size.center(Offset.zero),
-      width: width,
-      height: height,
+      width: w,
+      height: h,
     );
   }
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = windowFor(size);
-    final width = rect.width;
+    final rect = windowFor(size, template);
     if (rect.width <= 0 || rect.height <= 0) return;
     final window = RRect.fromRectAndRadius(rect, const Radius.circular(26));
     canvas.drawPath(
@@ -1079,13 +1155,37 @@ class _GuidePainter extends CustomPainter {
         ..addRRect(window),
       Paint()..color = Colors.black.withValues(alpha: ready ? 0.45 : 0.0),
     );
+    final t = template;
+    if (t == null) {
+      _corners(canvas, window.outerRect);
+    } else {
+      _cluster(canvas, rect, t);
+    }
+    final hint = TextPainter(
+      text: TextSpan(
+        text: t == null
+            ? 'Đưa số % pin và ODO vào khung'
+            : 'Căn viền màn hình xe trùng khung · ${t.label}',
+        style: const TextStyle(color: LuxeColors.platinumHi, fontSize: 14),
+      ),
+      textAlign: TextAlign.center,
+      textDirection: TextDirection.ltr,
+      maxLines: 2,
+    )..layout(maxWidth: rect.width - 24);
+    final below = rect.bottom + 12;
+    final y = below + hint.height <= size.height
+        ? below
+        : rect.bottom - hint.height - 12;
+    hint.paint(canvas, Offset(size.width / 2 - hint.width / 2, y));
+  }
+
+  void _corners(Canvas canvas, Rect r) {
     final corner = Paint()
       ..color = LuxeColors.platinum.withValues(alpha: 0.85)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..strokeCap = StrokeCap.round;
     const arm = 26.0;
-    final r = window.outerRect;
     for (final (x, y, dx, dy) in [
       (r.left, r.top, 1.0, 1.0),
       (r.right, r.top, -1.0, 1.0),
@@ -1101,24 +1201,66 @@ class _GuidePainter extends CustomPainter {
         corner,
       );
     }
-    final hint = TextPainter(
-      text: const TextSpan(
-        text: 'Đưa số % pin và ODO vào khung',
-        style: TextStyle(color: LuxeColors.platinumHi, fontSize: 14),
-      ),
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-      maxLines: 2,
-    )..layout(maxWidth: width - 24);
-    final below = r.bottom + 12;
-    final y = below + hint.height <= size.height
-        ? below
-        : r.bottom - hint.height - 12;
-    hint.paint(canvas, Offset(size.width / 2 - hint.width / 2, y));
+  }
+
+  void _cluster(Canvas canvas, Rect r, DashboardTemplate t) {
+    Offset at(Offset f) =>
+        Offset(r.left + f.dx * r.width, r.top + f.dy * r.height);
+    Rect zone(Rect z) => Rect.fromLTRB(
+      r.left + z.left * r.width,
+      r.top + z.top * r.height,
+      r.left + z.right * r.width,
+      r.top + z.bottom * r.height,
+    );
+    final glass = Path()..addPolygon([for (final p in t.outline) at(p)], true);
+    canvas.drawPath(
+      glass,
+      Paint()
+        ..color = LuxeColors.platinumHi.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..strokeJoin = StrokeJoin.round,
+    );
+    final ignored = zone(t.ignore);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(ignored, const Radius.circular(8)),
+      Paint()
+        ..color = Colors.white.withValues(alpha: 0.18)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    for (final (z, label) in [
+      (t.soc, '% PIN'),
+      (t.odo, 'ODO'),
+      (t.temp, '°C PIN'),
+    ]) {
+      final box = zone(z);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(box, const Radius.circular(8)),
+        Paint()
+          ..color = LuxeColors.champagne.withValues(alpha: 0.85)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6,
+      );
+      final text = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(
+            color: LuxeColors.champagne,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.6,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      text.paint(canvas, Offset(box.left + 4, box.top - text.height - 2));
+    }
   }
 
   @override
-  bool shouldRepaint(_GuidePainter old) => old.ready != ready;
+  bool shouldRepaint(_GuidePainter old) =>
+      old.ready != ready || old.template != template;
 }
 
 /// Outlines where the % and ODO were found (image → preview coordinates).
@@ -1129,11 +1271,15 @@ class _FoundPainter extends CustomPainter {
     required this.odoBox,
     required this.socLocked,
     required this.odoLocked,
+    this.tempBox,
   });
 
   final Size? imageSize;
   final Rect? socBox;
   final Rect? odoBox;
+
+  /// QA 142: where the battery temperature was read.
+  final Rect? tempBox;
   final bool socLocked;
   final bool odoLocked;
 
@@ -1165,12 +1311,14 @@ class _FoundPainter extends CustomPainter {
 
     outline(socBox, socLocked);
     outline(odoBox, odoLocked);
+    outline(tempBox, false);
   }
 
   @override
   bool shouldRepaint(_FoundPainter old) =>
       old.socBox != socBox ||
       old.odoBox != odoBox ||
+      old.tempBox != tempBox ||
       old.socLocked != socLocked ||
       old.odoLocked != odoLocked ||
       old.imageSize != imageSize;
@@ -1263,6 +1411,8 @@ class _FrameJob {
     required this.rotation,
     required this.bgra,
     this.roi,
+    this.window,
+    this.templateId,
   });
 
   final Uint8List bytes;
@@ -1274,6 +1424,11 @@ class _FrameJob {
 
   /// The guide window (fractions of the upright frame); null = all of it.
   final Rect? roi;
+
+  /// QA 142: the template's glass as fractions of the crop, and which
+  /// template (by id: plain data crosses into the isolate).
+  final Rect? window;
+  final String? templateId;
 
   GrayCrop _crop({int maxSide = 720}) => GrayImage.crop(
     bytes,
@@ -1299,9 +1454,26 @@ class _FrameJob {
         final hasDigits = passes.any(
           (p) => p.any((t) => RegExp(r'\d').hasMatch(t.text)),
         );
+        final template = DashboardTemplate.byId(job.templateId);
+        final w = job.window;
+        final window = w == null
+            ? null
+            : Rect.fromLTRB(
+                w.left * crop.image.width,
+                w.top * crop.image.height,
+                w.right * crop.image.width,
+                w.bottom * crop.image.height,
+              );
         final r = DashboardLayoutParser.combine([
           for (final p in passes)
-            DashboardLayoutParser.parse(p, lastOdoKm: lastOdoKm),
+            template != null && window != null
+                ? DashboardLayoutParser.parseTemplate(
+                    p,
+                    template: template,
+                    window: window,
+                    lastOdoKm: lastOdoKm,
+                  )
+                : DashboardLayoutParser.parse(p, lastOdoKm: lastOdoKm),
         ]);
         return (
           reading: DashboardLayoutReading(
@@ -1313,6 +1485,9 @@ class _FrameJob {
             odoConfident: r.odoConfident,
             socCandidates: r.socCandidates,
             odoCandidates: r.odoCandidates,
+            tempC: r.tempC,
+            tempBox: r.tempBox == null ? null : crop.toFrame(r.tempBox!),
+            tempConfident: r.tempConfident,
           ),
           hasDigits: hasDigits,
         );
@@ -1325,4 +1500,47 @@ class _FrameJob {
   /// The guide window as a small grayscale PNG for the image model.
   static Uint8List png(_FrameJob job) =>
       DashboardAiReader.pngFor(job._crop(maxSide: 768).image);
+}
+
+/// Battery temperature read on the cluster with its warning (QA 142, the
+/// owner's thresholds): from 45 °C "pin nóng", from 55 °C "nguy hiểm".
+/// A warning only: charging stays the owner's decision.
+class BatteryTempLine extends StatelessWidget {
+  const BatteryTempLine({
+    super.key,
+    required this.tempC,
+    this.confirmed = true,
+  });
+
+  final int tempC;
+  final bool confirmed;
+
+  static const warnAt = 45;
+  static const dangerAt = 55;
+
+  static String? warningFor(int tempC) => tempC >= dangerAt
+      ? 'Pin quá nóng: không nên sạc. Để xe nguội ở nơi thoáng và đưa xe '
+            'đi kiểm tra nếu vẫn nóng.'
+      : tempC >= warnAt
+      ? 'Pin đang nóng: để nguội khoảng 30 phút trước khi sạc.'
+      : null;
+
+  @override
+  Widget build(BuildContext context) {
+    final warning = warningFor(tempC);
+    final color = tempC >= dangerAt
+        ? LuxeColors.danger
+        : tempC >= warnAt
+        ? LuxeColors.champagne
+        : LuxeColors.platinumMid;
+    return LuxeNotice(
+      icon: tempC >= warnAt
+          ? Icons.local_fire_department_rounded
+          : Icons.thermostat_rounded,
+      color: color,
+      message:
+          'Nhiệt độ pin $tempC °C${confirmed ? '' : ' (đang xác nhận)'}'
+          '${warning == null ? '' : '. $warning'}',
+    );
+  }
 }

@@ -1702,7 +1702,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         estimated = session.estimated_soc
         session.actual_end_soc = float(actual_soc)
         session.soc_error = round(float(estimated) - float(actual_soc), 1) if estimated is not None else None
-        if odo_km is not None and math.isfinite(odo_km) and 0 <= odo_km <= 500000:
+        if odo_km is not None and math.isfinite(odo_km) and 0 <= odo_km <= 999999:
             session.end_odo_km = float(odo_km)
         gain = session.actual_end_soc - session.start_soc
         if gain > 0 and session.energy_used_wh > 0:

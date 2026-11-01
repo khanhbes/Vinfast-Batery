@@ -45,6 +45,7 @@ import 'widgets/edit_stop_at_sheet.dart';
 import 'widgets/edit_target_sheet.dart';
 import 'widgets/prediction_card_v2.dart';
 import 'widgets/push_off_notice.dart';
+import 'dashboard_scan_screen.dart';
 import 'widgets/recent_sessions_section_v2.dart';
 import 'widgets/start_charge_confirmation_sheet.dart';
 import 'widgets/stop_charging_confirmation_sheet.dart';
@@ -298,6 +299,14 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                     ),
                     const SizedBox(height: 16),
                     const PushOffNotice(),
+                    // QA 142: a hot battery from the last scan (2 hours).
+                    if (_recentHotBattery(ref) case final temp?) ...[
+                      BatteryTempLine(
+                        key: const ValueKey('charge-battery-hot'),
+                        tempC: temp,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     // A failed read when no charge runs: one notice with
                     // retry, the same as the app bar strip (QA 130).
                     if (state.gatewayError != null &&
@@ -785,6 +794,20 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       onOpenSetup: () => _openSetup(controller),
       estimate: (length) => _timedEstimate(state, length),
     );
+  }
+
+  /// The battery temperature of the last dashboard scan when it is at
+  /// least [BatteryTempLine.warnAt] and under two hours old (QA 142).
+  int? _recentHotBattery(WidgetRef ref) {
+    final vehicle = ref.watch(vehicleProvider(widget.vehicleId)).valueOrNull;
+    final temp = vehicle?.batteryTempC;
+    final at = vehicle?.batteryTempAt;
+    if (temp == null || at == null || temp < BatteryTempLine.warnAt) {
+      return null;
+    }
+    return DateTime.now().difference(at) <= const Duration(hours: 2)
+        ? temp
+        : null;
   }
 
   /// QA 141: the % a timed charge reaches, and when the battery is full if

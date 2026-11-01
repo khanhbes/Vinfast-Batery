@@ -76,6 +76,25 @@ class SupportMailer:
     def configured(self) -> bool:
         return bool(self.endpoint and self._key and self.sender and self.recipients)
 
+    @property
+    def can_send(self) -> bool:
+        """ACS and a sender are set (a user email needs no admin list)."""
+        return bool(self.endpoint and self._key and self.sender)
+
+    def send_to(self, address: str, subject: str, text: str) -> bool:
+        """QA 142: one email to one account owner (Pinova Bot warnings)."""
+        if not self.can_send or "@" not in str(address or ""):
+            return False
+        message = {
+            "senderAddress": self.sender,
+            "recipients": {"to": [{"address": str(address).strip()}]},
+            "content": {"subject": subject[:200], "plainText": text[:20000]},
+        }
+        if self.background:
+            threading.Thread(target=self._post, args=(message,), daemon=True).start()
+            return True
+        return self._post(message)
+
     def send(self, subject: str, text: str, on_done=None) -> bool:
         """Queue (background) or send; ``on_done(ok)`` gets the real result."""
         if not self.configured:

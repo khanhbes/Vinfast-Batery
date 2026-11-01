@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'dashboard_templates.dart';
+
 /// One piece of recognised text and where it sits in the (upright) image.
 class OcrToken {
   const OcrToken(this.text, this.box);
@@ -23,10 +25,18 @@ class DashboardLayoutReading {
     this.odoConfident = false,
     this.socCandidates = const [],
     this.odoCandidates = const [],
+    this.tempC,
+    this.tempBox,
+    this.tempConfident = false,
   });
 
   final int? soc;
   final double? odoKm;
+
+  /// Battery temperature on the cluster ("31°C"), 0–100 (QA 142).
+  final int? tempC;
+  final Rect? tempBox;
+  final bool tempConfident;
 
   /// Where the numbers were found (upright image coordinates), to draw
   /// them over the camera preview.
@@ -119,7 +129,7 @@ abstract final class DashboardLayoutParser {
       if (socBoxes.contains(n.box) || n.inlinePercent) continue;
       if (isSpeed(n) || isTemp(n)) continue;
       final value = double.tryParse(n.digits!);
-      if (value == null || value < 0 || value > 500000) continue;
+      if (value == null || value < 0 || value > maxOdoKm) continue;
       final digitCount = n.digits!.replaceAll('.', '').length;
       var score = 0.0;
       var anchored = false;
@@ -195,6 +205,19 @@ abstract final class DashboardLayoutParser {
         odos.length == 1 &&
         odo.value >= 100 &&
         odo.value == odo.value.roundToDouble();
+
+    // QA 142: the battery temperature ("31°C"), 0–100.
+    _Item? temp;
+    for (final n in numbers) {
+      if (!isTemp(n) || n.digits!.contains('.') || n.digits!.length > 3) {
+        continue;
+      }
+      final value = int.tryParse(n.digits!);
+      if (value != null && value <= 100) {
+        temp = n;
+        break;
+      }
+    }
     return DashboardLayoutReading(
       soc: soc?.value,
       odoKm: odo?.value,
@@ -204,6 +227,110 @@ abstract final class DashboardLayoutParser {
       odoConfident: odo != null && ((odo.anchored && odo.score >= 3) || lone),
       socCandidates: {for (final s in socs) s.value}.toList(),
       odoCandidates: {for (final o in odos) o.value}.take(4).toList(),
+      tempC: temp == null ? null : int.parse(temp.digits!),
+      tempBox: temp?.box,
+      tempConfident: temp != null,
+    );
+  }
+
+  /// Highest values a cluster shows (QA 142): ODO 0–999 999 km, battery and
+  /// temperature 0–100.
+  static const maxOdoKm = 999999.0;
+
+  /// Reads the numbers by zone when the owner lined the cluster up with
+  /// [template] (QA 142). [window] is the template's glass inside the
+  /// image the [tokens] come from. Each zone's digits are joined left to
+  /// right ("48 18" → 4818) and range-checked; a zone that read nothing
+  /// keeps what the layout rules found ([parse]).
+  static DashboardLayoutReading parseTemplate(
+    List<OcrToken> tokens, {
+    required DashboardTemplate template,
+    required Rect window,
+    double? lastOdoKm,
+  }) {
+    final layout = parse(tokens, lastOdoKm: lastOdoKm);
+    Rect zone(Rect z) => Rect.fromLTRB(
+      window.left + z.left * window.width,
+      window.top + z.top * window.height,
+      window.left + z.right * window.width,
+      window.top + z.bottom * window.height,
+    );
+    final ignore = zone(template.ignore);
+    ({String digits, Rect box})? read(Rect area) {
+      final inside = [
+        for (final t in tokens)
+          if (area.contains(t.box.center) &&
+              !ignore.contains(t.box.center) &&
+              RegExp(r'\d').hasMatch(t.text))
+            t,
+      ]..sort((a, b) => a.box.left.compareTo(b.box.left));
+      if (inside.isEmpty) return null;
+      final digits = inside
+          .map((t) => t.text.replaceAll(RegExp(r'\D'), ''))
+          .join();
+      if (digits.isEmpty) return null;
+      var box = inside.first.box;
+      for (final t in inside.skip(1)) {
+        box = box.expandToInclude(t.box);
+      }
+      return (digits: digits, box: box);
+    }
+
+    final socRead = read(zone(template.soc));
+    final odoRead = read(zone(template.odo));
+    final tempRead = read(zone(template.temp));
+
+    int? percent(String? digits) {
+      if (digits == null || digits.isEmpty || digits.length > 3) return null;
+      final value = int.tryParse(digits);
+      return value != null && value <= 100 ? value : null;
+    }
+
+    final soc = percent(socRead?.digits);
+    final temp = percent(tempRead?.digits);
+    double? odo;
+    final odoDigits = odoRead?.digits;
+    if (odoDigits != null && odoDigits.length <= 6) {
+      final value = double.tryParse(odoDigits);
+      final last = lastOdoKm;
+      // The odometer never goes back; a short read of a long ODO ("48"
+      // of "4818") is a lost digit, not a reading.
+      final shrunk =
+          value != null &&
+          last != null &&
+          last >= 100 &&
+          odoDigits.length < last.round().toString().length;
+      if (value != null &&
+          value <= maxOdoKm &&
+          !shrunk &&
+          (last == null || last <= 0 || value >= last - 1)) {
+        odo = value;
+      }
+    }
+    // A layout-rule number only counts near its own zone: "168" in the %
+    // zone is not an ODO because no other number was found.
+    final slack = window.shortestSide * 0.06;
+    bool near(Rect? box, Rect z) =>
+        box != null && zone(z).inflate(slack).contains(box.center);
+    final layoutSoc = near(layout.socBox, template.soc) ? layout.soc : null;
+    final layoutOdo = near(layout.odoBox, template.odo) ? layout.odoKm : null;
+    final layoutTemp = near(layout.tempBox, template.temp)
+        ? layout.tempC
+        : null;
+    return DashboardLayoutReading(
+      soc: soc ?? layoutSoc,
+      odoKm: odo ?? layoutOdo,
+      socBox: soc != null ? socRead!.box : layout.socBox,
+      odoBox: odo != null ? odoRead!.box : layout.odoBox,
+      // Inside its zone a number is as good as one next to its label.
+      socConfident: soc != null || (layoutSoc != null && layout.socConfident),
+      odoConfident: odo != null || (layoutOdo != null && layout.odoConfident),
+      socCandidates: {?soc, ?layoutSoc}.toList(),
+      odoCandidates: {?odo, ?layoutOdo}.toList(),
+      tempC: temp ?? layoutTemp,
+      tempBox: temp != null ? tempRead!.box : layout.tempBox,
+      tempConfident:
+          temp != null || (layoutTemp != null && layout.tempConfident),
     );
   }
 
@@ -223,6 +350,10 @@ abstract final class DashboardLayoutParser {
       for (final p in passes)
         if (p.odoKm != null) (p.odoKm!, p.odoConfident, p.odoBox),
     ], _odoDigits);
+    final temp = _consensus<int>([
+      for (final p in passes)
+        if (p.tempC != null) (p.tempC!, p.tempConfident, p.tempBox),
+    ], (v) => '$v');
     return DashboardLayoutReading(
       soc: soc?.value,
       odoKm: odo?.value,
@@ -234,6 +365,9 @@ abstract final class DashboardLayoutParser {
       odoCandidates: {
         for (final p in passes) ...p.odoCandidates,
       }.take(4).toList(),
+      tempC: temp?.value,
+      tempBox: temp?.box,
+      tempConfident: temp?.confident ?? false,
     );
   }
 
@@ -482,6 +616,12 @@ class DashboardScanVote {
   final int needed;
   final List<int?> _socs = [];
   final List<double?> _odos = [];
+  final List<int?> _temps = [];
+
+  /// Battery temperature (QA 142): voted like the %, but the scan finishes
+  /// on % and ODO; an unlocked temperature hands over its latest reading.
+  int? tempLocked;
+  int? tempSeen;
 
   int? socLocked;
   double? odoLocked;
@@ -498,7 +638,13 @@ class DashboardScanVote {
     odoSeen = reading.odoKm ?? odoSeen;
     socLocked ??= _winner(_socs);
     odoLocked ??= _winner(_odos);
+    _push(_temps, reading.tempC);
+    tempSeen = reading.tempC ?? tempSeen;
+    tempLocked ??= _winner(_temps);
   }
+
+  /// The temperature to hand over: locked, else the latest seen.
+  int? get temp => tempLocked ?? tempSeen;
 
   bool get bothLocked => socLocked != null && odoLocked != null;
   bool get anyLocked => socLocked != null || odoLocked != null;
@@ -506,10 +652,13 @@ class DashboardScanVote {
   void reset() {
     _socs.clear();
     _odos.clear();
+    _temps.clear();
     socLocked = null;
     odoLocked = null;
     socSeen = null;
     odoSeen = null;
+    tempLocked = null;
+    tempSeen = null;
   }
 
   void _push<T>(List<T?> list, T? value) {

@@ -141,6 +141,7 @@ class HybridAssistantEngine implements LocalChatEngine {
       return const LocalChatReply('Tài khoản đã thay đổi. Hãy hỏi lại.');
     }
     if (turn.memoryChanged) onMemoryChanged?.call();
+    if (turn.lockedUntil != null) AssistantLock.until.value = turn.lockedUntil;
     _remember('user', message);
     _remember('assistant', turn.reply);
     if (turn.actions.isEmpty) {

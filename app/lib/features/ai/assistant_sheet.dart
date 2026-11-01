@@ -21,6 +21,7 @@ import 'models/chat_message.dart';
 import 'models/chat_session.dart';
 import 'models/function_call_action.dart';
 import 'models/proactive_suggestion.dart';
+import 'services/assistant_api.dart';
 import 'services/behavior_sync_service.dart';
 import 'services/behavior_tracker.dart';
 import 'services/chat_api_service.dart';
@@ -1403,6 +1404,28 @@ class _InteractiveAssistantSheetState
                               ),
                             )
                           : const SizedBox(width: double.infinity),
+                    ),
+                    // QA 142: the server's lock (3 strikes), with its end.
+                    ValueListenableBuilder<DateTime?>(
+                      valueListenable: AssistantLock.until,
+                      builder: (context, until, _) =>
+                          until == null || !until.isAfter(DateTime.now())
+                          ? const SizedBox.shrink()
+                          : Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                              child: LuxeNotice(
+                                key: const ValueKey('assistant-locked'),
+                                icon: Icons.lock_clock_rounded,
+                                color: LuxeColors.danger,
+                                message:
+                                    'Pinova Bot tạm khóa tới '
+                                    '${until.hour.toString().padLeft(2, '0')}:'
+                                    '${until.minute.toString().padLeft(2, '0')} '
+                                    'vì vi phạm Quy tắc Cộng đồng. Tab Sạc pin '
+                                    'và Trợ giúp vẫn dùng bình thường; báo '
+                                    'cháy, khói vẫn được trả lời.',
+                              ),
+                            ),
                     ),
                     // Input dock: one glass capsule holding field, mic and send.
                     Padding(

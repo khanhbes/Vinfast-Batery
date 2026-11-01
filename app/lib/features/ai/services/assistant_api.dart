@@ -1,11 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/app_constants.dart';
+
+/// QA 142: when Pinova Bot is locked for this account (server-owned; the
+/// sheet shows it above the input).
+abstract final class AssistantLock {
+  static final until = ValueNotifier<DateTime?>(null);
+}
 
 /// One server turn of BatteryBot v2 (Task 124).
 class AssistantTurn {
@@ -15,7 +23,12 @@ class AssistantTurn {
     this.memoryChanged = false,
     this.remainingToday,
     this.card,
+    this.lockedUntil,
   });
+
+  /// QA 142: the server locked Pinova Bot for this account until then
+  /// (Community rules, 3 strikes).
+  final DateTime? lockedUntil;
 
   final String reply;
   final List<AssistantAction> actions;
@@ -191,6 +204,11 @@ class AssistantApi {
       remainingToday: (data['remainingToday'] as num?)?.toInt(),
       card: data['card'] is Map
           ? Map<String, dynamic>.from(data['card'] as Map)
+          : null,
+      lockedUntil: data['assistantLock'] is Map
+          ? DateTime.tryParse(
+              '${(data['assistantLock'] as Map)['until']}',
+            )?.toLocal()
           : null,
     );
   }

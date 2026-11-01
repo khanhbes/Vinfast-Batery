@@ -44,6 +44,13 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         if early:
             left = max(0, quota.limit_for(uid) - quota.used_today(uid))
             return jsonify({"success": True, "data": {**early, "remainingToday": left}})
+        # QA 142: lock, spam, tricks and violations are answered before
+        # the quota and the model.
+        _uid, email, _role = auth_resolver()
+        gated = engine.conduct_gate(uid, body.get("message"), email=email, context=body.get("context"))
+        if gated:
+            left = max(0, quota.limit_for(uid) - quota.used_today(uid))
+            return jsonify({"success": True, "data": {**gated, "remainingToday": left}})
         allowed, remaining = quota.take(uid)
         if not allowed:
             return fail(429, "ASSISTANT_QUOTA", "Bạn đã dùng hết lượt trò chuyện hôm nay. Pinova Bot chuyển sang chế độ cơ bản.")

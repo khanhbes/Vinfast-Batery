@@ -65,8 +65,15 @@ def check_conduct_and_policy_violation(
     context: dict[str, Any] | None = None,
     policy: dict[str, Any] | None = None,
     version_id: str | None = None,
+    *,
+    warning_email: bool = True,
+    force_profanity: bool = False,
 ) -> dict[str, Any] | None:
-    """Pinova 3.1 Conduct, Sensitive Content, Obscenity & 3-Strike Policy Enforcement (VI & EN)."""
+    """Pinova 3.1 Conduct, Sensitive Content, Obscenity & 3-Strike Policy Enforcement (VI & EN).
+
+    QA 142: ``warning_email`` says whether the strike-2/3 email can really be
+    sent (ACS configured and an account email known); the reply never claims
+    an email that was not sent."""
     pol = policy or default_guardrail_policy()
     conduct_cfg = pol.get("conductPolicy") or {}
     if conduct_cfg.get("enabled") is False:
@@ -92,7 +99,7 @@ def check_conduct_and_policy_violation(
         category = "policy_violation"
         category_label_vi = "Vi phạm chính sách an toàn & pháp luật"
         category_label_en = "Safety & general policy violation"
-    elif _PROFANITY_ABUSE_PATTERN.search(text):
+    elif _PROFANITY_ABUSE_PATTERN.search(text) or force_profanity:
         category = "profanity_abuse"
         category_label_vi = "Ngôn từ xúc phạm / Chửi bậy"
         category_label_en = "Profanity & abusive language"
@@ -142,12 +149,12 @@ def check_conduct_and_policy_violation(
                 f"I understand it can be frustrating when something goes wrong with your scooter or charger. "
                 f"However, please keep our conversation **respectful** under the **Pinova Community Guidelines** — "
                 f"a 2nd violation triggers an official **warning email**, and a 3rd violation temporarily suspends Pinova Bot for **{temp_disable_min} minutes**. "
-                f"Tell me what issue you're having with **VinFast Feliz 2025** or **Shelly 1** so I can help fix it right away!"
+                f"Tell me what issue you're having with your scooter or **Shelly** outlet so I can help fix it right away!"
                 if lang == "en"
                 else f"Mình hiểu có thể bạn đang sốt ruột khi xe hoặc ổ cắm sạc gặp sự cố nên mới nặng lời. "
                 f"Tuy nhiên, bạn vui lòng giữ ngôn từ **lịch sự** theo **Quy tắc Cộng đồng Pinova** nhé — "
                 f"nếu tái phạm lần 2 hệ thống sẽ gửi **email cảnh báo**, và lần 3 sẽ **tạm khóa** trợ lý trong **{temp_disable_min} phút**. "
-                f"Hiện tại xe **VinFast Feliz 2025** hay ổ cắm **Shelly 1** đang gặp trục trặc gì, bạn nói rõ để mình kiểm tra và hỗ trợ ngay nhé!"
+                f"Hiện tại xe hay ổ cắm **Shelly** đang gặp trục trặc gì, bạn nói rõ để mình kiểm tra và hỗ trợ ngay nhé!"
             )
         elif category == "obscene_sexual":
             reply = (
@@ -173,13 +180,28 @@ def check_conduct_and_policy_violation(
             reply = (
                 f"I cannot provide instructions that violate safety policies or laws (such as stealing electricity, bypassing meters, or hotwiring vehicles). "
                 f"Please consider this a **first reminder** — repeated **chính sách** violations will result in a **warning email** (**email cảnh báo**) or a **{temp_disable_min}-minute suspension** (**tạm khóa**). "
-                f"If you want to optimize your charging cost safely on **Shelly 1**, I'd be happy to help!"
+                f"If you want to optimize your charging cost safely with your **Shelly** outlet, I'd be happy to help!"
                 if lang == "en"
                 else f"Mình không thể hướng dẫn các thao tác vi phạm pháp luật và **chính sách** an toàn chung (như câu trộm điện, đấu tắt công-tơ hay bẻ khóa xe) vì rất nguy hiểm cháy nổ. "
                 f"Đây là lời **nhắc nhở lần đầu**; nếu tiếp tục yêu cầu nội dung vi phạm, hệ thống sẽ gửi **email cảnh báo** hoặc **tạm khóa** trợ lý trong **{temp_disable_min} phút**. "
-                f"Nếu bạn muốn tiết kiệm chi phí sạc hợp lệ, mình có thể giúp tính toán lịch sạc tối ưu trên **Shelly 1** ngay nhé!"
+                f"Nếu bạn muốn tiết kiệm chi phí sạc hợp lệ, mình có thể giúp tính toán lịch sạc tối ưu với ổ **Shelly** ngay nhé!"
             )
         actions: list[dict[str, Any]] = []
+
+    elif strike == 2 and not warning_email:
+        penalty_action = "warning_recorded"
+        warning_email_sent = False
+        disabled_minutes = 0
+        reply = (
+            f"⚠️ **2nd Policy Warning**: a second violation (**{category_label_en}**) was recorded on your account. "
+            f"One more (Strike 3) suspends Pinova Bot for **{temp_disable_min} minutes**. "
+            f"Please keep our conversation respectful and focused on your vehicle."
+            if lang == "en"
+            else f"⚠️ **Cảnh báo vi phạm lần 2**: hệ thống đã ghi cảnh báo vào tài khoản "
+            f"(**{category_label_vi}**). Nếu tái phạm thêm **1 lần nữa**, Pinova Bot sẽ **tạm khóa "
+            f"{temp_disable_min} phút**. Rất mong bạn hợp tác để mình tiếp tục hỗ trợ xe và sạc nhé."
+        )
+        actions = []
 
     elif strike == 2:
         penalty_action = "warning_email_sent"
@@ -201,16 +223,16 @@ def check_conduct_and_policy_violation(
 
     else:  # strike >= 3
         penalty_action = "chatbot_temp_disabled"
-        warning_email_sent = True
+        warning_email_sent = warning_email
         disabled_minutes = temp_disable_min
         reply = (
             f"🔒 **Pinova Bot Temporarily Suspended for {temp_disable_min} Minutes (Tạm khóa {temp_disable_min} phút)**: "
-            f"Due to 3 consecutive policy violations (**{category_label_en}**), Pinova Bot chat has been temporarily disabled for **{temp_disable_min} phút** and a notification email has been sent. "
+            f"Due to 3 consecutive policy violations (**{category_label_en}**), Pinova Bot chat has been temporarily disabled for **{temp_disable_min} phút**{' and a notification email has been sent' if warning_email else ''}. "
             f"You can still control charging directly in the **Charge** tab or contact **Support**, and **Emergency SOS** (fire/smoke/electric shock) remains active 24/7 for your safety."
             if lang == "en"
             else f"🔒 **Tạm khóa Pinova Bot ({temp_disable_min} phút)**: "
             f"Do tài khoản đã vi phạm Quy tắc Cộng đồng & Chính sách sử dụng **3 lần liên tiếp** (**{category_label_vi}**), "
-            f"hệ thống đã **tạm khóa** quyền trò chuyện với Pinova Bot trong **{temp_disable_min} phút** và gửi thông báo tới email của bạn. "
+            f"hệ thống đã **tạm khóa** quyền trò chuyện với Pinova Bot trong **{temp_disable_min} phút**{' và gửi thông báo tới email của bạn' if warning_email else ''}. "
             f"Trong thời gian này, bạn vẫn có thể điều khiển sạc trực tiếp tại tab **Sạc pin**, gửi phiếu **Hỗ trợ**, và kênh cấp cứu **SOS** (bốc khói/cháy nổ/giật điện) vẫn luôn hoạt động 24/7 để bảo vệ an toàn."
         )
         actions = [

@@ -25,6 +25,10 @@ from . import charge_model
 from .habits import charge_habits
 
 
+# QA 142: the cluster shows up to six ODO digits.
+MAX_ODO_KM = 999999
+
+
 class _LazyTripModel:
     """assistant.trip_model is imported on first use: the worker image ships
     only shelly/ and never needs the trip model."""
@@ -158,11 +162,15 @@ class VehicleLearningMixin:
                             with_status: bool = True) -> dict:
         vehicle = self._owned_vehicle(uid, vehicle_id)
         soc = _float(body.get("soc"), 0, 100) if body.get("soc") not in (None, "") else None
-        odo = _float(body.get("odoKm"), 0, 500000) if body.get("odoKm") not in (None, "") else None
+        odo = _float(body.get("odoKm"), 0, MAX_ODO_KM) if body.get("odoKm") not in (None, "") else None
+        # QA 142: battery temperature read on the cluster (0–100 °C).
+        temp = _float(body.get("batteryTempC"), 0, 100) if body.get("batteryTempC") not in (None, "") else None
         if body.get("soc") not in (None, "") and soc is None:
             raise self._learning_error("invalidSoc", "% pin phải từ 0 đến 100.")
         if body.get("odoKm") not in (None, "") and odo is None:
             raise self._learning_error("invalidOdo", "ODO không hợp lệ.")
+        if body.get("batteryTempC") not in (None, "") and temp is None:
+            raise self._learning_error("invalidTemp", "Nhiệt độ pin phải từ 0 đến 100 °C.")
         if soc is None and odo is None:
             raise self._learning_error("readingEmpty", "Nhập % pin hoặc ODO.")
         source = str(body.get("source") or "manual")
@@ -174,7 +182,7 @@ class VehicleLearningMixin:
             at = now
         previous = self.repository.battery_readings(uid, vehicle_id, limit=5)
         last_odo = next((float(item["odoKm"]) for item in previous if item.get("odoKm") is not None), None)
-        current_odo = _float(vehicle.get("currentOdo"), 0, 500000)
+        current_odo = _float(vehicle.get("currentOdo"), 0, MAX_ODO_KM)
         floor = max([value for value in (last_odo, current_odo) if value is not None], default=None)
         if odo is not None and floor is not None and odo < floor - 0.5:
             raise self._learning_error(
@@ -186,6 +194,8 @@ class VehicleLearningMixin:
             "source": source, "sessionId": str(body.get("sessionId") or "") or None,
             "createdAt": _iso(now),
         }
+        if temp is not None:
+            reading["batteryTempC"] = round(temp)
         saved = self.repository.add_battery_reading(uid, vehicle_id, reading)
         fields = {"lastReadingAt": _iso(at)}
         if soc is not None:
@@ -196,6 +206,8 @@ class VehicleLearningMixin:
                            "batteryDataSource": f"reading_{source}"})
         if odo is not None:
             fields.update({"currentOdo": int(round(odo)), "hasOdoData": True})
+        if temp is not None:
+            fields.update({"batteryTempC": int(round(temp)), "batteryTempAt": at})
         updater = getattr(self.repository, "update_vehicle_fields", None)
         if updater is not None:
             updater(uid, vehicle_id, fields)

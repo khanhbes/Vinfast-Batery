@@ -40,6 +40,10 @@ class VehicleModel {
   final DateTime? batteryDataUpdatedAt;
   final String? batteryDataSource;
 
+  /// Battery temperature from the last dashboard scan, and when (QA 142).
+  final int? batteryTempC;
+  final DateTime? batteryTempAt;
+
   VehicleModel({
     required this.vehicleId,
     this.vehicleName = '',
@@ -71,6 +75,8 @@ class VehicleModel {
     this.hasOdoData = true,
     this.batteryDataUpdatedAt,
     this.batteryDataSource,
+    this.batteryTempC,
+    this.batteryTempAt,
   });
 
   static DateTime? _asDate(dynamic value) {
@@ -222,6 +228,8 @@ class VehicleModel {
         data['batteryDataUpdatedAt'] ?? data['lastReadingAt'],
       ),
       batteryDataSource: data['batteryDataSource'] as String?,
+      batteryTempC: (data['batteryTempC'] as num?)?.round(),
+      batteryTempAt: _asDate(data['batteryTempAt']),
     );
   }
 
@@ -384,6 +392,8 @@ class VehicleModel {
       hasOdoData: hasOdoData ?? this.hasOdoData,
       batteryDataUpdatedAt: batteryDataUpdatedAt ?? this.batteryDataUpdatedAt,
       batteryDataSource: batteryDataSource ?? this.batteryDataSource,
+      batteryTempC: batteryTempC,
+      batteryTempAt: batteryTempAt,
     );
   }
 }

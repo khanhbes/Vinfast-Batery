@@ -957,6 +957,7 @@ class ServerSmartChargerService {
     double? odoKm,
     required String source,
     String? sessionId,
+    int? batteryTempC,
   }) async => BatteryReadingResult.fromJson(
     await _request(
       'POST',
@@ -966,6 +967,7 @@ class ServerSmartChargerService {
         'odoKm': ?odoKm,
         'source': source,
         'sessionId': ?sessionId,
+        'batteryTempC': ?batteryTempC,
       },
     ),
   );
