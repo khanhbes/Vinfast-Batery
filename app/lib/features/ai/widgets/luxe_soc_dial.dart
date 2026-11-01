@@ -67,7 +67,7 @@ class _LuxeSocDialState extends State<LuxeSocDial>
   static const _energyAfter = Duration(seconds: 3);
   Timer? _energyStop;
 
-  bool get _ultraEffects => PlanMotion.of(context).running && !_reduced;
+  bool get _ultraEffects => PlanMotion.effectsOf(context) && !_reduced;
 
   void _energize() {
     if (!_ultraEffects) return;

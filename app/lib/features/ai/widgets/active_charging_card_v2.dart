@@ -347,7 +347,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
 
   Widget _dial(int current, int target) => LayoutBuilder(
     builder: (context, c) {
-      final ultra = PlanMotion.of(context).running && !_reduced;
+      final ultra = PlanMotion.effectsOf(context) && !_reduced;
       final size = math.min(c.maxWidth, 300.0);
       return Center(
         child: SizedBox.square(

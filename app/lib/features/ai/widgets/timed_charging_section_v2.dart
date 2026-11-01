@@ -85,7 +85,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   void _syncSpin() {
     final on =
         (_pressed || _submitting) &&
-        PlanMotion.of(context).running &&
+        PlanMotion.effectsOf(context) &&
         !MediaQuery.disableAnimationsOf(context);
     if (on && !_spin.isAnimating) {
       _spin.repeat();

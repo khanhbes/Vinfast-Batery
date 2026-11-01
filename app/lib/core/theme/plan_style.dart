@@ -15,12 +15,17 @@ abstract final class PlanColors {
   static const steel = Color(0xFF8FA9D6);
   static const steelText = Color(0xFFB4C6E6);
 
-  static const violet = Color(0xFF8B5CF6);
-  static const lavender = Color(0xFFB4A2FF);
-  static const cyan = Color(0xFF22D3EE);
+  // QA 140 (owner's choice): Ultra takes Viber-like pink → violet → blue
+  // instead of the violet/cyan/emerald aurora.
+  static const pink = Color(0xFFF27FE0);
+  static const violet = Color(0xFFA66CFF);
+  static const lavender = Color(0xFFB98BFF);
+  static const blue = Color(0xFF6C74FF);
+  static const cyan = blue;
 
-  /// One aurora loop; drawn mirrored so it flows without a seam.
-  static const aurora = [violet, cyan, LuxeColors.emerald];
+  /// Ultra's gradient; drawn mirrored so it flows without a seam where it
+  /// moves (the Premium page only, QA 140).
+  static const aurora = [pink, violet, blue];
 
   /// Text on silver or aurora fills (≥4.5:1 on every stop).
   static const ink = Color(0xFF0B0C14);
@@ -88,11 +93,11 @@ class PlanStyle extends ThemeExtension<PlanStyle> {
     tier: PlanTier.ultra,
     accent: PlanColors.lavender,
     accentColors: PlanColors.aurora,
-    glassColors: [Color(0x188B5CF6), Color(0x0A22D3EE)],
-    glassBorder: Color(0x40A99BFF),
-    ambient: Color(0xFF17132B),
-    glow: PlanColors.cyan,
-    glowAlt: PlanColors.violet,
+    glassColors: [Color(0x1AA66CFF), Color(0x0AF27FE0)],
+    glassBorder: Color(0x40B98BFF),
+    ambient: Color(0xFF19122C),
+    glow: PlanColors.violet,
+    glowAlt: PlanColors.pink,
   );
 
   static PlanStyle forTier(PlanTier tier) => switch (tier) {
@@ -121,7 +126,20 @@ class PlanMotion extends InheritedWidget {
     required this.phase,
     required this.running,
     required super.child,
+    this.effects = false,
   });
+
+  /// QA 140: Ultra's effects on interaction and on real activity (dragging
+  /// a knob, holding the charge button, Pinova Bot answering, charging),
+  /// separate from the ambient colour flow, which now runs only where Ultra
+  /// is advertised (the Premium page).
+  final bool effects;
+
+  /// Ultra + effects on + motion allowed, in a shown subtree.
+  static bool effectsOf(BuildContext context) {
+    final motion = context.dependOnInheritedWidgetOfExactType<PlanMotion>();
+    return (motion?.effects ?? false) && TickerMode.valuesOf(context).enabled;
+  }
 
   /// 0..1, one loop every [PlanMotionHost.period].
   final ValueListenable<double> phase;
@@ -142,7 +160,9 @@ class PlanMotion extends InheritedWidget {
 
   @override
   bool updateShouldNotify(PlanMotion oldWidget) =>
-      running != oldWidget.running || phase != oldWidget.phase;
+      running != oldWidget.running ||
+      effects != oldWidget.effects ||
+      phase != oldWidget.phase;
 }
 
 class PlanMotionHost extends StatefulWidget {
@@ -151,9 +171,13 @@ class PlanMotionHost extends StatefulWidget {
     required this.running,
     required this.child,
     this.period = defaultPeriod,
+    this.effects = false,
   });
 
   final bool running;
+
+  /// See [PlanMotion.effects].
+  final bool effects;
   final Widget child;
 
   /// One colour loop.
@@ -214,8 +238,12 @@ class _PlanMotionHostState extends State<PlanMotionHost>
   }
 
   @override
-  Widget build(BuildContext context) =>
-      PlanMotion(phase: _phase, running: widget.running, child: widget.child);
+  Widget build(BuildContext context) => PlanMotion(
+    phase: _phase,
+    running: widget.running,
+    effects: widget.effects,
+    child: widget.child,
+  );
 }
 
 /// Builds [builder] with the Ultra clock: every frame of the clock when it

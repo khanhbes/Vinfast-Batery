@@ -155,8 +155,11 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
 
       scaffoldMessengerKey: AppPopup.messengerKey,
       navigatorKey: AppPopup.navigatorKey,
+      // QA 140: no ambient colour flow across the app (the Premium page has
+      // its own); Ultra's effects stay on interaction and real activity.
       builder: (context, child) => PlanMotionHost(
-        running:
+        running: false,
+        effects:
             PlanStyle.forTier(tier).isUltra &&
             effects &&
             !MediaQuery.disableAnimationsOf(context),

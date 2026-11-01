@@ -173,6 +173,16 @@ abstract final class LuxeTheme {
     return base.copyWith(
       extensions: [plan],
       colorScheme: scheme,
+      // QA 140: touch, press, hover and the scroll thumb in the plan's
+      // colour (Ultra: Viber-like violet), never a stray Material grey.
+      splashColor: accent.withValues(alpha: 0.14),
+      highlightColor: accent.withValues(alpha: 0.08),
+      hoverColor: accent.withValues(alpha: 0.06),
+      focusColor: accent.withValues(alpha: 0.16),
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStatePropertyAll(accent.withValues(alpha: 0.45)),
+        radius: const Radius.circular(8),
+      ),
       scaffoldBackgroundColor: LuxeColors.background,
       canvasColor: LuxeColors.background,
       textTheme: text,

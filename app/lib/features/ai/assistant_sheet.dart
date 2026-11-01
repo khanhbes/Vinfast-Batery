@@ -1796,7 +1796,7 @@ class _PlanEdgeState extends State<_PlanEdge>
   );
 
   void _sync() {
-    final run = widget.active && PlanMotion.of(context).running;
+    final run = widget.active && PlanMotion.effectsOf(context);
     if (run && !_flow.isAnimating) {
       _flow.repeat();
     } else if (!run && _flow.isAnimating) {

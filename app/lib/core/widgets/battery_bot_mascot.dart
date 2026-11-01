@@ -209,6 +209,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
               scale: tapScale * breathingScale,
               child: CustomPaint(
                 size: Size(avatarSize, avatarSize),
+                foregroundPainter: _PlanAccessoryPainter(PlanStyle.of(context)),
                 painter: _BatteryBotAvatarPainter(
                   mood: widget.mood,
                   pulse: pulseVal,
@@ -304,6 +305,9 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
                 scale: tapScale * breathingScale,
                 child: CustomPaint(
                   size: Size(width, height),
+                  foregroundPainter: _PlanAccessoryPainter(
+                    PlanStyle.of(context),
+                  ),
                   painter: _BatteryBotPainter(
                     mood: widget.mood,
                     pulse: pulseVal,
@@ -493,7 +497,11 @@ class _BatteryBotPainter extends CustomPainter {
       final orbPaint = Paint()
         ..shader =
             RadialGradient(
-              colors: [Colors.white, glowColor, const Color(0xFF047857)],
+              colors: [
+                Colors.white,
+                glowColor,
+                Color.lerp(glowColor, Colors.black, 0.6)!,
+              ],
               stops: const [0.1, 0.6, 1.0],
             ).createShader(
               Rect.fromCircle(center: Offset(x, rodTop), radius: glowRadius),
@@ -547,13 +555,14 @@ class _BatteryBotPainter extends CustomPainter {
 
     // Khối thân chính với gradient công nghệ hiện đại
     final bodyPaint = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Color(0xFF1E293B), // Titanium slate
-          Color(0xFF0F172A), // Dark slate
-          Color(0xFF064E3B), // Deep emerald shade
+          const Color(0xFF1E293B), // Titanium slate
+          const Color(0xFF0F172A), // Dark slate
+          // The plan's colour deep in shadow (QA 140; was emerald).
+          Color.lerp(accent, const Color(0xFF0F172A), 0.72)!,
         ],
         stops: [0.0, 0.55, 1.0],
       ).createShader(bodyRect);
@@ -1061,10 +1070,14 @@ class _BatteryBotAvatarPainter extends CustomPainter {
 
     // 2. Nền khung avatar kim loại tối màu
     final bgPaint = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [Color(0xFF1E293B), Color(0xFF0F172A), Color(0xFF064E3B)],
+        colors: [
+          const Color(0xFF1E293B),
+          const Color(0xFF0F172A),
+          Color.lerp(accent, const Color(0xFF0F172A), 0.72)!,
+        ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius - 1.5, bgPaint);
 
@@ -1078,7 +1091,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
         colors: [
           accent,
           Color.lerp(accent, Colors.black, 0.25)!,
-          Color(0xFF047857),
+          Color.lerp(accent, Colors.black, 0.6)!,
         ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius - 1.5, borderPaint);
@@ -1181,4 +1194,109 @@ class _BatteryBotAvatarPainter extends CustomPainter {
         oldDelegate.pulse != pulse ||
         oldDelegate.eyeOpen != eyeOpen;
   }
+}
+
+/// Pinova Bot's look per plan (QA 140, drawn so it stays sharp at every
+/// size): Free is the plain platinum bot; Pro wears a brushed steel ring and
+/// a small badge; Ultra a soft halo in its pink-violet-blue gradient and a
+/// four-point sparkle, like its plan mark.
+class _PlanAccessoryPainter extends CustomPainter {
+  _PlanAccessoryPainter(this.plan);
+  final PlanStyle plan;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = size.shortestSide;
+    final c = size.center(Offset.zero);
+    if (plan.isPro) {
+      final rect = Rect.fromCircle(center: c, radius: s * 0.47);
+      canvas.drawArc(
+        rect,
+        math.pi * 1.1,
+        math.pi * 0.8,
+        false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.2, s * 0.025)
+          ..strokeCap = StrokeCap.round
+          ..shader = LinearGradient(
+            colors: plan.accentColors,
+          ).createShader(rect),
+      );
+      _badge(canvas, Offset(c.dx + s * 0.33, c.dy + s * 0.33), s * 0.09);
+    } else if (plan.isUltra) {
+      final rect = Rect.fromCircle(center: c, radius: s * 0.48);
+      canvas.drawCircle(
+        c,
+        s * 0.48,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = math.max(1.4, s * 0.03)
+          ..shader = SweepGradient(
+            colors: [...plan.accentColors, plan.accentColors.first],
+          ).createShader(rect)
+          ..maskFilter = MaskFilter.blur(
+            BlurStyle.normal,
+            math.max(1, s * 0.03),
+          ),
+      );
+      _sparkle(canvas, Offset(c.dx + s * 0.34, c.dy - s * 0.34), s * 0.13);
+      _sparkle(canvas, Offset(c.dx + s * 0.44, c.dy - s * 0.14), s * 0.055);
+    }
+  }
+
+  void _badge(Canvas canvas, Offset at, double r) {
+    canvas.drawCircle(
+      at,
+      r,
+      Paint()
+        ..shader = LinearGradient(
+          colors: plan.accentColors,
+        ).createShader(Rect.fromCircle(center: at, radius: r)),
+    );
+    final check = Path()
+      ..moveTo(at.dx - r * 0.45, at.dy)
+      ..lineTo(at.dx - r * 0.1, at.dy + r * 0.35)
+      ..lineTo(at.dx + r * 0.5, at.dy - r * 0.35);
+    canvas.drawPath(
+      check,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = math.max(1, r * 0.28)
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..color = PlanColors.ink,
+    );
+  }
+
+  /// A four-point star with concave sides.
+  void _sparkle(Canvas canvas, Offset at, double r) {
+    final k = r * 0.28;
+    final star = Path()
+      ..moveTo(at.dx, at.dy - r)
+      ..quadraticBezierTo(at.dx + k * 0.3, at.dy - k * 0.3, at.dx + r, at.dy)
+      ..quadraticBezierTo(at.dx + k * 0.3, at.dy + k * 0.3, at.dx, at.dy + r)
+      ..quadraticBezierTo(at.dx - k * 0.3, at.dy + k * 0.3, at.dx - r, at.dy)
+      ..quadraticBezierTo(at.dx - k * 0.3, at.dy - k * 0.3, at.dx, at.dy - r)
+      ..close();
+    final rect = Rect.fromCircle(center: at, radius: r);
+    canvas.drawPath(
+      star,
+      Paint()
+        ..color = plan.accentColors.first.withValues(alpha: 0.5)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, r * 0.35),
+    );
+    canvas.drawPath(
+      star,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+          colors: plan.accentColors,
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PlanAccessoryPainter old) => old.plan.tier != plan.tier;
 }
