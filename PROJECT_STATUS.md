@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 143. Task Completion Log — Kiểm thử toàn luồng bằng tài khoản mới trên Xiaomi (BA/DA/tester, 02/11/2026) — Đã sửa toàn bộ (APK 1.3.14+217)
+## 143. Task Completion Log — Kiểm thử toàn luồng bằng tài khoản mới trên Xiaomi (BA/DA/tester, 02/11/2026) — Đã sửa toàn bộ, API đã deploy (3 lần), Firestore đã cập nhật, kiểm lại trên OnePlus (APK 1.3.16+219)
 
 **Build:** 1.3.12+215 (`flutter build apk --profile`, thiếu `APP_API_BASE_URL` → app chỉ báo "Chưa liên lạc được máy chủ"; không dùng) rồi 1.3.13+216 với `--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io`, SHA-256 `EA3793B2…63E22E19`, `adb install -r` lên Xiaomi 7b20a377 (versionCode 216). Tài khoản test `pinova.qa.20261102@example.com` (Free, không Shelly, không lệnh relay nào). Bàn phím Gboard Telex: gõ ADB "exx" để ra "ex".
 
@@ -47,7 +47,24 @@
 
 **Kiểm thử:** `python -m pytest tests` 838 đạt, 15 bỏ qua (mới: `tests/test_qa143_fixes.py`); `flutter test` 1 327 đạt, 213 bỏ qua (mới: `test/unit/qa143_fixes_test.dart`; `qa137_live_values_test` cập nhật giá làm tròn); `dart analyze` sạch.
 
-**Còn mở:** deploy API và chạy `qa143_catalog_specs.py` trên production (chờ chủ app); tài khoản test giữ lại để kiểm tra lại.
+**Deploy & kiểm lại (02/11/2026, chủ app duyệt deploy, cập nhật Firestore, kiểm lại bằng tài khoản test trên OnePlus):**
+- Gate task157 (worktree sạch `570641c`): Linux 831 pass / 20 skip, boot Pass, worker smoke Pass → API `vinfast-api@sha256:6fab6de0…`, revision `vinfast-api--api106-1102093215`, health/ready 200, `noRelayCalls`.
+- Firestore: `qa143_catalog_specs.py` chạy thử rồi ghi thật trong container API (35 lượt ghi: `VehicleCatalog` + revision lịch sử cho 11 dòng xe, `VinFastModelSpecs`, 2 xe Feliz 2025 đổi 1.35 → 1.34 km/1 %; không xe nào có giá trị tự sửa). `az containerapp exec` bị 429 (retry-after 600 s) khi gọi dồn; az CLI trên Windows lỗi cp1252 khi in tiếng Việt → chạy lệnh trong container với `env PYTHONIOENCODING=ascii:backslashreplace`.
+- Kiểm lại trên OnePlus (chủ app tắt bong bóng chat, mình đăng xuất tài khoản chủ app và đăng nhập tài khoản test): đạt. Tổng quan 101 km ở 80 %, km/1 % thành 1.34 ngay sau khi cập nhật danh mục; tab Sạc không còn báo lỗi máy chủ; Sạc AI và Theo giờ cùng "đầy lúc 18:10", không còn "máy chủ tự ngắt"; Gara SoH "—", ODO nhóm nghìn; Thông số: ODO 1 234 567 bị chặn, ODO nhỏ hơn phải xác nhận; Sức khỏe pin và Giám sát pin mở cho Free; Premium "khoảng 21.000đ/37.000đ"; đổi tài khoản về Tổng quan; hộp thoại đăng xuất báo phiên sạc vẫn chạy; vi phạm lần 3 giữ chat mở; form Đăng ký tự xóa lỗi.
+- Lỗi mới tìm thấy khi kiểm lại, đã sửa (deploy task158 `vinfast-api--api106-1102102039`, task159 `vinfast-api--api106-1102103901`; APK 1.3.15+218 rồi 1.3.16+219 đã cài OnePlus):
+  - App nuốt câu SOS: hành động `stop_charging` đi qua `_act`, tài khoản không có Shelly thì cả câu trả lời bị thay bằng "Hãy kết nối Shelly…" (kể cả khi bot đang khóa). Sửa: `AssistantTurn.emergency` (từ `emergencyBypass`) luôn giữ câu SOS, thẻ dừng chỉ khi có phiên.
+  - Câu SOS hứa "lệnh dừng sạc và phiếu báo kỹ thuật bên dưới" khi không có: câu mới có điều kiện, app thêm "Hiện không có phiên sạc nào cần dừng".
+  - Mã Admin sai vẫn hiện danh sách Wi-Fi: `redeemCode` phát `connectionFailed` lên trạng thái dùng chung. Sửa: phát lại trạng thái cũ, chỉ bước nhập mã báo lỗi.
+  - Bot gọi số định mức là "dữ liệu học được": app gửi `kmPerPercentSource` (catalog/learned) và `rangeKm` từ `estimateRange`, prompt nói rõ nghĩa.
+  - Thông số xe: "Hủy" để lại ODO chưa lưu → khôi phục giá trị đã lưu; so ODO với giá trị vừa lưu; nhóm nghìn Wh/Ah, thêm quãng đường công bố và tốc độ tối đa, bỏ id nguồn thô, "Công suất định mức/tối đa".
+  - Đăng nhập: "Nhập mật khẩu" không tự mất khi đã gõ → tự kiểm lại sau lần bấm đầu.
+  - Lỗi ODO bị cắt "Nế…" → tối đa 3 dòng; gợi ý ghi đúng tên màn "Cài đặt → Xe của tôi → Thông số chi tiết" (cả kiến thức bot).
+  - Nhãn PRO đè chữ ở thẻ dung lượng Tổng quan; nút bot che nút "Dự đoán thời gian sạc"; tour Tiện ích ghi cả Sức khỏe pin là Pro; mốc bảo dưỡng "dự kiến" dùng emerald (đổi sang steel); thêm luật test cấm mã hex emerald ngoài palette.
+- Kiểm thử: backend 839 pass / 15 skip; Flutter 1331 pass / 213 skip (thêm test SOS hybrid, mã Admin, luật hex emerald); gate task158/task159 Linux 832 pass / 20 skip.
+
+**Còn mở:**
+- `/api/learning/<vid>/status` chậm: Log Analytics 90 phút, trung vị 7,8 s, tối đa 8,6 s (n = 10). Tổng quan hiện "— km" và AI cá nhân xoay khoảng 8–10 s mỗi lần mở app. Nguyên nhân: khoảng 7 lượt đọc Firestore nối tiếp (xe, hồ sơ AI ×2, `tripSamples`, `ChargeLogs`, `smartChargingSessions`, quyền gói); kết quả rỗng không được cache. Đề xuất: đọc song song và cache ngắn hạn kết quả rỗng trên máy chủ; app nhớ kết quả học gần nhất theo xe.
+- Tài khoản test còn SĐT "Chưa cập nhật" (bị ghi đè trước bản sửa). OnePlus đang đăng nhập tài khoản test; chủ app tự đăng nhập lại.
 
 ## 142. Task Completion Log — Khung quét theo dòng xe (Feliz 2025: % pin, ODO, nhiệt độ pin) + Pinova Bot: quy tắc ứng xử do máy chủ quản (01/11/2026) — Test đạt, API đã deploy, APK 1.3.11+214 đã cài OnePlus (02/11)
 

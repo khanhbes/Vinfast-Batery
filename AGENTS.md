@@ -239,7 +239,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Chưa liên kết Shelly (`/live` 404 `notConfigured`) không phải lỗi máy chủ: không thông báo mất kết nối, không thử lại.
   - Đăng xuất: đặt lại tab/xe qua `ProviderScope.containerOf` trước khi `await signOut` (màn bị gỡ khi AuthGate dựng lại).
   - Danh mục xe theo số VinFast công bố (30 km/h, 65 kg, 1 pin): km/1 % = quãng đường / 100; `batteryChemistry` (LFP/Lead-acid/Li-ion). Firestore: `web/scripts/qa143_catalog_specs.py` (mặc định chạy thử, chỉ đổi giá trị còn đúng số cũ).
-  - `LuxeGlass(selected)` và các mã hex emerald cũ dùng màu nhấn gói. Build Android profile/release thiếu `APP_API_BASE_URL` bị dừng (`-PallowMissingApiUrl=true` để bỏ qua).
+  - `LuxeGlass(selected)` và các mã hex emerald cũ dùng màu nhấn gói (test cấm hex `0x..34D399` ngoài `core/theme/`). Build Android profile/release thiếu `APP_API_BASE_URL` bị dừng (`-PallowMissingApiUrl=true` để bỏ qua).
+  - SOS trong app: `AssistantTurn.emergency` (từ `emergencyBypass`) luôn giữ câu an toàn của máy chủ; thẻ dừng sạc chỉ khi có phiên, không thì ghi rõ "không có phiên sạc nào cần dừng". Câu SOS không hứa thẻ/phiếu "bên dưới".
+  - `ShellyConnectionCoordinator.redeemCode` sai mã: phát lại trạng thái trước, chỉ trả snapshot lỗi cho bước nhập mã (không đổi trạng thái liên kết dùng chung).
+  - Ngữ cảnh bot: `rangeKm` + `kmPerPercent` + `kmPerPercentSource` (catalog/learned) lấy từ `estimateRange`; bot không gọi số định mức là "đã học".
+  - Form Đăng nhập/Đăng ký tự kiểm lại sau lần bấm đầu (`AutovalidateMode.onUserInteraction`). Màn có nút bot nổi chừa ≥ 128 dp cuối danh sách.
 
 ### 3.7. BatteryBot (trợ lý AI)
 
