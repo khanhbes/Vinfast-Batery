@@ -1,3 +1,4 @@
+import java.util.Base64
 import java.util.Properties
 
 plugins {
@@ -39,7 +40,7 @@ val allowDebugSigning =
 val dartDefines = project.findProperty("dart-defines")?.toString().orEmpty()
     .split(",")
     .filter { it.isNotBlank() }
-    .map { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) }
+    .map { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }
 val hasApiBaseUrl = dartDefines.any {
     it.startsWith("APP_API_BASE_URL=") && it.substringAfter("=").isNotBlank()
 }
