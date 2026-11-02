@@ -149,7 +149,13 @@ class HybridAssistantEngine implements LocalChatEngine {
       // QA 143: the safety steps stay on screen. The stop action used to go
       // through _act, whose "no Shelly" text replaced the whole SOS reply.
       final stop = await local.reply('dừng sạc');
-      return LocalChatReply(turn.reply, action: stop.action);
+      return LocalChatReply(
+        stop.action == null
+            ? '${turn.reply}\n\nHiện không có phiên sạc nào cần dừng trên tài '
+                  'khoản này.'
+            : turn.reply,
+        action: stop.action,
+      );
     }
     if (turn.actions.isEmpty) {
       return LocalChatReply(turn.reply, card: turn.card);

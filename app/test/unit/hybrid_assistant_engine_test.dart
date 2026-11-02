@@ -126,6 +126,9 @@ void main() {
     // The local "no Shelly" answer used to replace the safety steps.
     expect(reply.text, contains('114'));
     expect(reply.text, isNot('FAQ answer'));
+    // No card below, so the reply says there is nothing to stop.
+    expect(reply.action, isNull);
+    expect(reply.text, contains('không có phiên sạc nào cần dừng'));
     expect(local.asked, ['dừng sạc']);
     expect(host.prepared, isEmpty);
   });

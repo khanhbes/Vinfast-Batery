@@ -220,7 +220,9 @@ def default_guardrail_policy() -> dict[str, Any]:
             "⚠️ **CẢNH BÁO AN TOÀN KHẨN CẤP**: Phát hiện dấu hiệu nguy hiểm về điện/nhiệt! "
             "Bạn hãy **ngắt cầu dao (aptomat) tổng ngay lập tức** nếu đảm bảo an toàn, **không chạm tay trần** vào ổ cắm hay xe, "
             "di chuyển mọi người ra xa khu vực tối thiểu 5 mét và gọi ngay **114** (Cứu hỏa) hoặc **115** (Cấp cứu). "
-            "Mình đã chuẩn bị sẵn lệnh dừng sạc khẩn cấp và phiếu báo đội kỹ thuật bên dưới."
+            # QA 143: no promise of a card the app may not show (no session).
+            "Nếu đang có phiên sạc, thẻ dừng sạc khẩn cấp hiện ngay bên dưới. "
+            "Khi đã an toàn, hãy báo đội kỹ thuật ở Cài đặt → Trợ giúp."
         ),
         "blockedInputPatterns": [
             r"(?i)\b(password|mật\s*khẩu|mat\s*khau|passcode|pin\s*code|otp)\b",

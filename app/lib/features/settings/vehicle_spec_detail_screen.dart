@@ -516,8 +516,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       if (spec.topSpeedKmh case final speed?)
         ('Tốc độ tối đa', '${n(speed)} km/h'),
       ('Sạc tối đa (W)', n(spec.maxChargePowerW)),
-      ('Motor định mức (W)', n(spec.ratedMotorPowerW)),
-      ('Motor peak (W)', n(spec.peakMotorPowerW)),
+      ('Công suất định mức (W)', n(spec.ratedMotorPowerW)),
+      ('Công suất tối đa (W)', n(spec.peakMotorPowerW)),
       ('Nguồn dữ liệu', 'Số liệu VinFast công bố'),
     ];
     return Column(

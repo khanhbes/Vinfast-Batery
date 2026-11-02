@@ -169,7 +169,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
       } else if (previous != null && previous > 0 && odo < previous - 0.5) {
         odoError =
             'ODO không thể nhỏ hơn lần trước (${groupThousands(previous.round())} km). '
-            'Nếu lần trước nhập nhầm, sửa ở Cài đặt → Gara xe → Thông số.';
+            'Nếu lần trước nhập nhầm, sửa ở Cài đặt → Xe của tôi → Thông số chi tiết.';
       }
     }
     if (socError == null && odoError == null && soc == null && odo == null) {

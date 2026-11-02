@@ -233,7 +233,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 
 - **QA 143 (02/11/2026, kiểm thử bằng tài khoản mới, chủ app duyệt sửa hết):**
   - SOS: `_EMERGENCY_PATTERN` (`assistant/guardrails.py`) ↔ `EmergencyText` (`core/utils/emergency_text.dart`, chế độ cơ bản trên máy) bắt cả từ đơn có dấu ("cháy", "khói", "nổ", "giật điện"); không dấu chỉ bắt cụm (vì "chay" = "chạy", "khoi" = "khỏi"); câu hỏi phòng ngừa không có dấu hiệu đang xảy ra thì bỏ qua. Lần vi phạm 3 không kèm hành động (không tự mở Trợ giúp).
-  - ODO một khoảng 0–999 999 km (`MAX_ODO_KM` server, `maxOdoKm` app). Sửa ODO nhỏ hơn số cũ chỉ ở Gara xe → Thông số, có hỏi lại.
+  - ODO một khoảng 0–999 999 km (`MAX_ODO_KM` server, `maxOdoKm` app). Sửa ODO nhỏ hơn số cũ chỉ ở Xe của tôi → Thông số chi tiết, có hỏi lại.
   - Khảo sát không ghi đè họ tên/SĐT đăng ký (`onboarding_identity` server, `AuthService.lastRegistration` app). `_ensureUserDoc` không ghi tên rỗng.
   - Quãng đường khi chưa nhập SoH = km/1 % danh mục (không nhân SoH); SoH chưa nhập hiện "—", không hiện 100. Bot nhận `rangeKm` đã học + trừ 5 %.
   - Chưa liên kết Shelly (`/live` 404 `notConfigured`) không phải lỗi máy chủ: không thông báo mất kết nối, không thử lại.

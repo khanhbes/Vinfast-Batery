@@ -139,7 +139,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
         setState(
           () => _odoError =
               'ODO không thể nhỏ hơn lần trước (${groupThousands(previous.round())} km). '
-              'Nếu lần trước nhập nhầm, sửa ở Cài đặt → Gara xe → Thông số.',
+              'Nếu lần trước nhập nhầm, sửa ở Cài đặt → Xe của tôi → Thông số chi tiết.',
         );
         return false;
       }

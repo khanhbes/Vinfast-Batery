@@ -84,7 +84,7 @@ BUILTIN: list[dict] = [
      "body": "Cài đặt → Xe của tôi để thêm xe, sửa thông tin (tên, biển số, ODO, dung lượng pin) và chọn xe đang dùng. Chọn xe nhanh bằng nút tên xe ở đầu màn hình. Mọi số liệu sạc, lịch sử, bảo dưỡng gắn theo xe đang chọn."},
     {"id": "specs", "title": "Thông số xe",
      "keywords": ["thông số", "dung lượng pin", "công suất sạc", "ảnh xe"],
-     "body": "Thông số xe lấy từ danh mục VinFast: dung lượng pin (Wh), công suất sạc, quãng đường công bố, hiệu suất. Xem ở Cài đặt → Gara xe → Thông số. Ảnh xe giống nhau ở Tổng quan, Gara và Thông số (không còn chế độ xoay 360°)."},
+     "body": "Thông số xe lấy từ danh mục VinFast: dung lượng pin (Wh), công suất sạc, quãng đường công bố, hiệu suất. Xem ở Cài đặt → Xe của tôi → Thông số chi tiết (cũng là nơi sửa ODO nhập nhầm). Ảnh xe giống nhau ở Tổng quan, Xe của tôi và Thông số chi tiết (không còn chế độ xoay 360°)."},
     {"id": "trip", "title": "Lộ trình: đi được tới đâu",
      "keywords": ["hành trình", "chuyến đi", "đi xa", "đủ pin", "lộ trình", "hao pin", "đi được không", "bao nhiêu km"],
      "body": "Lộ trình (Tổng quan → lối tắt, hoặc Tiện ích) ước tính % pin hao cho chuyến đi: chọn điểm đi (gõ hoặc 'Vị trí của tôi') và điểm đến trên OpenStreetMap, hoặc nhập số km; chọn tốc độ, thời tiết, số người, hàng, đường dốc, khứ hồi. App cho biết % khi tới nơi, kết luận đủ/sát/không đủ và gợi ý: sạc trước đến X% (mở tab Sạc đã điền mục tiêu), chạy chậm, tuyến ngắn hơn, sạc ở điểm đến. Mức hao dựa trên km cho 1% học từ ODO + % bạn nhập sau sạc, chưa đủ dữ liệu thì theo định mức dòng xe."},
