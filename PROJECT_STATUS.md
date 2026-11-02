@@ -12,6 +12,13 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 144. Task Completion Log — Mã giảm giá tới 100% (02/11/2026, chủ app yêu cầu) — Đã deploy API + trang Admin
+
+- Máy chủ (`web/billing/promos.py`): % giảm 1–100 (trước 1–90). `features.discounted`: mã 100% ra 0đ; mã nhỏ hơn vẫn sàn 1.000đ.
+- Trang Admin (`PremiumPlans.tsx`): ô và kiểm tra 1–100%. App (`premium_screen.dart`): giá 0đ hiện "Miễn phí", nút "Chọn … · miễn phí với mã" (lên điện thoại ở bản APK kế tiếp; thanh toán vẫn "sắp mở").
+- Test: `test_qa135_billing` (thêm mã 100% báo giá 0đ, 101% bị từ chối), `qa135_premium_test` (thêm "Miễn phí").
+- Gate task160 (worktree sạch `f5792fc`): Linux 833 pass / 20 skip, boot Pass, worker smoke Pass → API `vinfast-api@sha256:c8047794…`, revision `vinfast-api--api106-1102110417`, health/ready 200. Trang Admin: `07-build-admin.ps1 -Deploy` (npm ci, lint, build, quét artifact, swa deploy) exit 0; bundle trên `victorious-tree-076e47d00.6.azurestaticapps.net` có "từ 1% đến 100%".
+
 ## 143. Task Completion Log — Kiểm thử toàn luồng bằng tài khoản mới trên Xiaomi (BA/DA/tester, 02/11/2026) — Đã sửa toàn bộ, API đã deploy (3 lần), Firestore đã cập nhật, kiểm lại trên OnePlus (APK 1.3.16+219)
 
 **Build:** 1.3.12+215 (`flutter build apk --profile`, thiếu `APP_API_BASE_URL` → app chỉ báo "Chưa liên lạc được máy chủ"; không dùng) rồi 1.3.13+216 với `--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io`, SHA-256 `EA3793B2…63E22E19`, `adb install -r` lên Xiaomi 7b20a377 (versionCode 216). Tài khoản test `pinova.qa.20261102@example.com` (Free, không Shelly, không lệnh relay nào). Bàn phím Gboard Telex: gõ ADB "exx" để ra "ex".
