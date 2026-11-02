@@ -21,6 +21,7 @@ import '../../core/widgets/vehicle_photo.dart';
 import '../premium/premium_gate.dart';
 import '../../core/theme/plan_style.dart';
 import '../../data/services/vehicle_model_link_service.dart';
+import '../../core/utils/number_text.dart';
 
 /// Vehicle Garage Screen — LUXE (Task 119)
 /// - List user vehicles (active / archived)
@@ -264,7 +265,8 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
       photoUrl: VehicleImages.forVehicleMap(v),
       year: v['year'] is num ? (v['year'] as num).toInt() : null,
       battery: num2(v['batteryCapacity']),
-      soh: num2(v['stateOfHealth']),
+      // QA 143: a SoH nobody entered is not "100".
+      soh: v['hasSohData'] == false ? null : num2(v['stateOfHealth']),
       odo: num2(v['currentOdo']),
       level: num2(v['currentBattery']),
       licensePlate: v['licensePlate'] as String?,
@@ -448,7 +450,9 @@ class _VehicleCard extends StatelessWidget {
                                 style: LuxeText.label.copyWith(fontSize: 11.5),
                               ),
                               Text(
-                                odo == null ? '— km' : '${odo!.toInt()} km',
+                                odo == null
+                                    ? '— km'
+                                    : '${groupThousands(odo!.round())} km',
                                 style: const TextStyle(
                                   color: LuxeColors.text,
                                   fontSize: 14,

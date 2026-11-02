@@ -624,7 +624,7 @@ class _GaugePainter extends CustomPainter {
       Paint()
         ..shader = ui.Gradient.radial(c, r * 1.25, [
           accent.withValues(alpha: 0.10 * fill * (0.8 + 0.2 * breath)),
-          const Color(0x0034D399),
+          accent.withValues(alpha: 0.00),
         ]),
     );
 
@@ -1127,7 +1127,7 @@ class _BotScene extends StatelessWidget {
                                 alpha:
                                     0.12 + 0.05 * math.sin(loop * 2 * math.pi),
                               ),
-                              const Color(0x0034D399),
+                              context.planAccent.withValues(alpha: 0.00),
                             ],
                           ),
                         ),

@@ -768,7 +768,8 @@ class LuxeBackdrop extends StatelessWidget {
   }
 }
 
-/// Glass surface with a hairline border; [selected] lights the edge emerald.
+/// Glass surface with a hairline border; [selected] lights the edge in the
+/// plan accent.
 class LuxeGlass extends StatelessWidget {
   const LuxeGlass({
     super.key,
@@ -799,8 +800,13 @@ class LuxeGlass extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
+          // QA 143: a selected card is a choice, not a verified state, so it
+          // takes the plan accent (QA 140), not emerald.
           colors: selected
-              ? const [Color(0x2234D399), Color(0x0A34D399)]
+              ? [
+                  context.planAccent.withValues(alpha: 0.13),
+                  context.planAccent.withValues(alpha: 0.04),
+                ]
               : plan.glassColors,
         ),
         border: Border.all(
@@ -810,9 +816,9 @@ class LuxeGlass extends StatelessWidget {
           width: selected ? 1.3 : 1,
         ),
         boxShadow: selected
-            ? const [
+            ? [
                 BoxShadow(
-                  color: Color(0x2234D399),
+                  color: context.planAccent.withValues(alpha: 0.13),
                   blurRadius: 24,
                   spreadRadius: -4,
                 ),

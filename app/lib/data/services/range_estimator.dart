@@ -41,10 +41,12 @@ class RangeEstimate {
 
 /// `(SOC − reserve) × km/1 %`. The km/1 % is the owner's learned average
 /// when a trained trip model exists (it already reflects today's battery, so
-/// SoH is not applied again), otherwise catalog km/1 % × SoH.
+/// SoH is not applied again), otherwise catalog km/1 % × SoH, or the catalog
+/// km/1 % alone while the owner never entered a SoH (QA 143: a new account
+/// saw "— km" next to a 1.35 km/1 % tile, and the bot made up its own).
 ///
 /// Returns null when the vehicle lacks real battery data (or, without a
-/// learned model, SoH/efficiency data), so callers show "chưa đủ dữ liệu"
+/// learned model, catalog efficiency), so callers show "chưa đủ dữ liệu"
 /// instead of an invented number.
 RangeEstimate? estimateRange(
   VehicleModel vehicle, {
@@ -68,18 +70,8 @@ RangeEstimate? estimateRange(
       );
     }
   }
-  final efficiency = vehicle.defaultEfficiency;
-  final soh = vehicle.stateOfHealth;
-  if (!vehicle.hasSohData ||
-      !vehicle.hasEfficiencyData ||
-      !efficiency.isFinite ||
-      efficiency <= 0 ||
-      !soh.isFinite ||
-      soh < 0 ||
-      soh > 100) {
-    return null;
-  }
-  final perPct = efficiency * soh / 100;
+  final perPct = kmPerPctFor(vehicle, null);
+  if (perPct == null) return null;
   final km = usable * perPct;
   return RangeEstimate(
     km: km,
@@ -102,9 +94,9 @@ double? kmPerPctFor(VehicleModel vehicle, TripModelParams? learned) {
     return null;
   }
   final soh = vehicle.stateOfHealth;
-  return vehicle.hasSohData && soh.isFinite && soh > 0 && soh <= 100
-      ? efficiency * soh / 100
-      : efficiency;
+  if (!vehicle.hasSohData) return efficiency;
+  if (!soh.isFinite || soh <= 0 || soh > 100) return null;
+  return efficiency * soh / 100;
 }
 
 /// [estimateRange] in km only.

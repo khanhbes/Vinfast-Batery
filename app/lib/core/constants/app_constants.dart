@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 /// Hằng số toàn app
+/// QA 143: a scooter odometer has at most 6 digits; the same range on the
+/// server (onboarding, learning) and the dashboard scan.
+const int maxOdoKm = 999999;
+
 class AppConstants {
   AppConstants._();
 
@@ -82,7 +86,7 @@ class AppConstants {
   // Validation
   static const int batteryMin = 0;
   static const int batteryMax = 100;
-  static const int maxOdoDigits = 7;
+  static const int maxOdoDigits = 6;
 
   /// Absolute device-side Smart Charge safety window.
   static const int smartChargeMaxMinutes = 600;

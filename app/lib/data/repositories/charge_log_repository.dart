@@ -10,6 +10,7 @@ import '../../core/services/api_service.dart';
 import '../services/charge_history_quality.dart';
 import '../models/charge_log_model.dart';
 import '../models/vehicle_model.dart';
+import '../../core/utils/number_text.dart';
 
 /// Timeout chung cho mọi Firestore one-shot read trong repository này.
 /// Nếu mạng treo / cache offline rỗng → ném `TimeoutException` thay vì
@@ -349,7 +350,7 @@ class ChargeLogRepository {
       // Kiểm tra ODO trong transaction để tránh race condition
       if (newOdo < currentVehicle.currentOdo) {
         throw Exception(
-          'ODO ($newOdo km) phải ≥ ODO hiện tại (${currentVehicle.currentOdo} km)',
+          'ODO (${groupThousands(newOdo)} km) phải ≥ ODO hiện tại (${groupThousands(currentVehicle.currentOdo)} km)',
         );
       }
 

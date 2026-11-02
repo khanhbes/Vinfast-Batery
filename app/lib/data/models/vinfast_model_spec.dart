@@ -217,7 +217,8 @@ class VinFastModelSpec {
       description:
           (selectedLocale['description'] ?? fallbackLocale['description'])
               as String?,
-      batteryChemistry: battery['chemistry'] as String?,
+      batteryChemistry:
+          (battery['chemistry'] ?? data['batteryChemistry']) as String?,
       connector: charging['connector'] as String?,
       rangeTestCycle: performance['rangeTestCycle'] as String?,
       usableCapacityWh: optDouble(battery['usableCapacityWh']),

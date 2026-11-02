@@ -10,6 +10,8 @@ import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../core/widgets/vehicle_photo.dart';
 import '../../core/theme/plan_style.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
+import '../../core/utils/number_text.dart';
+import '../../core/constants/app_constants.dart' show maxOdoKm;
 
 /// Vehicle Spec Detail Screen — PLAN #5
 /// Shows detailed spec sheet and allows editing
@@ -58,8 +60,10 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     _batteryCapCtrl = TextEditingController(
       text: '${(v['batteryCapacity'] ?? 0).toInt()}',
     );
+    // QA 143: a SoH nobody entered is not "100".
+    final soh = v['stateOfHealth'];
     _sohCtrl = TextEditingController(
-      text: '${(v['stateOfHealth'] ?? 100).toInt()}',
+      text: v['hasSohData'] != false && soh is num ? '${soh.round()}' : '',
     );
     _odoCtrl = TextEditingController(text: '${(v['currentOdo'] ?? 0).toInt()}');
     _efficiencyCtrl = TextEditingController(
@@ -92,6 +96,32 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   }
 
   Future<void> _saveChanges() async {
+    // QA 143: the same ranges as the server; SoH is saved only when typed.
+    final sohText = _sohCtrl.text.trim();
+    final soh = sohText.isEmpty ? null : int.tryParse(sohText);
+    if (sohText.isNotEmpty && (soh == null || soh < 1 || soh > 100)) {
+      AppPopup.showMessage('SoH phải từ 1 đến 100%.');
+      return;
+    }
+    final odo = int.tryParse(_odoCtrl.text.trim().replaceAll(' ', ''));
+    if (odo == null || odo < 0 || odo > maxOdoKm) {
+      AppPopup.showMessage('ODO phải từ 0 đến 999 999 km.');
+      return;
+    }
+    final oldOdo = widget.vehicleData['currentOdo'];
+    if (oldOdo is num && odo < oldOdo) {
+      // The one place an ODO may go down: fixing a number typed by mistake.
+      final fix = await showLuxeConfirm(
+        context,
+        title: 'Sửa ODO nhỏ hơn số cũ?',
+        message:
+            'ODO đã lưu là ${groupThousands(oldOdo.round())} km. Chỉ sửa '
+            'khi lần trước nhập nhầm; lịch bảo dưỡng tính lại theo số mới.',
+        confirmLabel: 'Sửa ODO',
+        danger: false,
+      );
+      if (fix != true || !mounted) return;
+    }
     setState(() => _isSaving = true);
 
     try {
@@ -100,8 +130,10 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
         updates: {
           'nickname': _modelCtrl.text.trim(),
           'licensePlate': _licensePlateCtrl.text.trim(),
-          'stateOfHealth': double.tryParse(_sohCtrl.text) ?? 100,
-          'currentOdo': double.tryParse(_odoCtrl.text) ?? 0,
+          if (soh != null) 'stateOfHealth': soh.toDouble(),
+          if (soh != null) 'hasSohData': true,
+          'currentOdo': odo.toDouble(),
+          'hasOdoData': true,
         },
       );
 
@@ -240,6 +272,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 _SpecRow(
                   label: 'SoH (%)',
                   controller: _sohCtrl,
+                  hint: 'Chưa nhập',
                   isEditing: _isEditing,
                   icon: Icons.favorite_outline_rounded,
                   keyboardType: TextInputType.number,
@@ -297,7 +330,9 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                   runSpacing: 6,
                   children: [
                     LuxeTag(_yearCtrl.text),
-                    LuxeTag('${_batteryCapCtrl.text} Wh'),
+                    LuxeTag(
+                      '${groupThousands(int.tryParse(_batteryCapCtrl.text) ?? 0)} Wh',
+                    ),
                     LuxeTag(_batteryTypeCtrl.text, color: LuxeColors.steel),
                   ],
                 ),
@@ -314,7 +349,9 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                 : (soh ?? 0) < 90
                 ? LuxeColors.champagne
                 : context.planAccent,
-            semanticLabel: 'Sức khỏe pin ${_sohCtrl.text} phần trăm',
+            semanticLabel: soh == null
+                ? 'Sức khỏe pin chưa nhập'
+                : 'Sức khỏe pin ${_sohCtrl.text} phần trăm',
             child: ExcludeSemantics(
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -323,7 +360,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${_sohCtrl.text}%',
+                        soh == null ? '—' : '${_sohCtrl.text}%',
                         style: const TextStyle(
                           color: LuxeColors.text,
                           fontSize: 19,
@@ -402,9 +439,10 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                         textAlign: TextAlign.right,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           isDense: true,
-                          contentPadding: EdgeInsets.symmetric(
+                          hintText: row.hint,
+                          contentPadding: const EdgeInsets.symmetric(
                             vertical: 10,
                             horizontal: 10,
                           ),
@@ -415,7 +453,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                         alignment: Alignment.centerRight,
                         child: Text(
                           row.controller.text.isEmpty
-                              ? '—'
+                              ? row.hint ?? '—'
                               : row.controller.text,
                           textAlign: TextAlign.right,
                           style: const TextStyle(
@@ -496,6 +534,7 @@ class _SpecRow {
   final bool isEditing;
   final IconData icon;
   final TextInputType keyboardType;
+  final String? hint;
 
   const _SpecRow({
     required this.label,
@@ -503,5 +542,6 @@ class _SpecRow {
     required this.isEditing,
     required this.icon,
     this.keyboardType = TextInputType.text,
+    this.hint,
   });
 }

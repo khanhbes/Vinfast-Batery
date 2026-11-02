@@ -89,12 +89,15 @@ class _DeleteAccountSheetState extends ConsumerState<DeleteAccountSheet> {
       ApiService().delete('/api/account', {'confirm': 'XOA TAI KHOAN'});
 
   Future<void> _leave() async {
+    // QA 143: sign-out unmounts this sheet; reset through the container.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final navigator = Navigator.of(context, rootNavigator: true);
     await AuthService().signOut();
-    if (!mounted) return;
-    ref.read(selectedVehicleIdProvider.notifier).state = '';
-    ref.read(currentTabProvider.notifier).state = 0;
+    container.read(selectedVehicleIdProvider.notifier).state = '';
+    container.read(currentTabProvider.notifier).state = AppTab.overview;
     AppPopup.showSuccess('Đã xóa tài khoản Pinova.');
-    Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+    if (!navigator.mounted) return;
+    navigator.pushAndRemoveUntil(
       MaterialPageRoute<void>(builder: (_) => const AuthGate()),
       (_) => false,
     );

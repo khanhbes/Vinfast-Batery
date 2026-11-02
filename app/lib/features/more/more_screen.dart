@@ -96,24 +96,33 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
     final confirmed = await showLuxeConfirm(
       context,
       title: 'Đăng xuất',
+      // QA 143: signing out sends no OFF; the server keeps managing a
+      // running charge and the outlet timer still stops it.
       message:
-          'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản trên thiết bị này?',
+          'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản trên thiết bị này? '
+          'Phiên sạc đang chạy (nếu có) vẫn tiếp tục và tự ngắt theo hẹn giờ; '
+          'đăng nhập lại để theo dõi hoặc dừng.',
       confirmLabel: 'Đăng xuất',
     );
     if (confirmed != true || !mounted) return;
+    // QA 143: AuthGate rebuilds on sign-out and unmounts this screen before
+    // the await returns, so the reset after it never ran: the next account
+    // opened on Cài đặt and read the old vehicle (permission-denied).
+    final container = ProviderScope.containerOf(context, listen: false);
+    final navigator = Navigator.of(context, rootNavigator: true);
 
     final result = await _authService.signOut();
-    if (!mounted) return;
 
     if (result['success'] == true) {
-      ref.read(selectedVehicleIdProvider.notifier).state = '';
-      ref.read(currentTabProvider.notifier).state = 0;
-
-      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      container.read(selectedVehicleIdProvider.notifier).state = '';
+      container.read(currentTabProvider.notifier).state = AppTab.overview;
+      container.read(chargeSectionProvider.notifier).state = ChargeSection.ai;
+      if (!navigator.mounted) return;
+      navigator.pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const AuthGate()),
         (_) => false,
       );
-    } else {
+    } else if (mounted) {
       AppPopup.showError(result['error'] ?? 'Đăng xuất thất bại');
     }
   }
@@ -189,7 +198,9 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
         children: [
           const LuxeBackdrop(),
           ListView(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 40),
+            // QA 143: room under the version footer for the charging pill
+            // and the Pinova Bot button, which float above the list.
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 128),
             children: [
               LuxeReveal(
                 child: _ProfileCard(

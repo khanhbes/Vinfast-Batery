@@ -301,8 +301,8 @@ class ChatMessageBubble extends StatelessWidget {
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: context.planAccent,
-        side: const BorderSide(color: Color(0x8034D399)),
-        backgroundColor: const Color(0x1434D399),
+        side: BorderSide(color: context.planAccent.withValues(alpha: 0.50)),
+        backgroundColor: context.planAccent.withValues(alpha: 0.08),
         minimumSize: const Size(48, 48),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: const StadiumBorder(),

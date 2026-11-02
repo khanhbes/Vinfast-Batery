@@ -697,7 +697,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       rangeLabel: _rangeLabel(preview),
                       stopLine: preview.isTargetMode
                           ? 'Đạt khoảng ${currentTarget.round()}% lúc '
-                                '${_time(preview.effectiveStopAt)} · máy chủ tự ngắt'
+                                '${_time(preview.effectiveStopAt)}'
+                                // QA 143: only true with a Shelly linked.
+                                '${_hasShelly() ? ' · máy chủ tự ngắt' : ''}'
                           : null,
                     ),
                   ),
@@ -778,6 +780,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     return TimedChargingSectionV2(
       key: const ValueKey('timed-mode'),
       disabledReason:
+          // QA 143: say what is missing, not "chưa đọc được trạng thái".
+          (!connection.isLinked && connection.serverBinding == null
+              ? 'Chưa kết nối ổ sạc Shelly. Bấm Thiết lập để kết nối.'
+              : null) ??
           connection.controlBlockedMessage ??
           state.capabilities.controlBlockedMessage ??
           (!_sharedConnectionReady(connection)
@@ -828,12 +834,31 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     if (whPerPct == null || whPerPct <= 0 || powerW == null || powerW <= 0) {
       return null;
     }
-    final pctPerHour = powerW / whPerPct;
-    final gained = pctPerHour * length.inSeconds / 3600;
-    final toFull = (100 - current).clamp(0, 100);
+    // QA 143: the same model as Sạc AI (slower tail above 95 %); a plain
+    // line said "Pin đầy khoảng 03:18" next to "đạt 100% lúc 03:24".
+    final fullSeconds = ChargeEstimator.wallSeconds(
+      whPerPct: whPerPct,
+      powerW: powerW,
+      from: current,
+      to: 100,
+    );
+    final taperFrom = math.max(current, ChargeEstimator.cvStartSoc);
+    final fastSeconds =
+        math.max(0.0, taperFrom - current) * whPerPct / powerW * 3600;
+    final seconds = length.inSeconds.toDouble();
+    final double endSoc = seconds >= fullSeconds
+        ? 100
+        : seconds <= fastSeconds
+        ? current + seconds / 3600 * powerW / whPerPct
+        : taperFrom +
+              (seconds - fastSeconds) /
+                  3600 *
+                  powerW *
+                  ChargeEstimator.cvPowerFactor /
+                  whPerPct;
     return TimedChargeEstimate(
-      endSoc: math.min(100.0, current + gained).round(),
-      fullAfter: Duration(seconds: (toFull / pctPerHour * 3600).round()),
+      endSoc: math.min(100.0, endSoc).round(),
+      fullAfter: Duration(seconds: fullSeconds),
     );
   }
 
@@ -880,6 +905,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     }
     final gained = powerW * duration.inSeconds / 3600 / whPerPct;
     return math.min(100.0, current + gained).round();
+  }
+
+  bool _hasShelly() {
+    final connection = ShellyConnectionCoordinator.shared.current;
+    return connection.isLinked || connection.serverBinding != null;
   }
 
   ConnectionIssue _issueFor(SmartChargingUiState state) {
@@ -1601,7 +1631,7 @@ class _TargetPresets extends StatelessWidget {
           type: MaterialType.transparency,
           child: InkWell(
             borderRadius: BorderRadius.circular(16),
-            splashColor: const Color(0x1434D399),
+            splashColor: context.planAccent.withValues(alpha: 0.08),
             onTap: available
                 ? () {
                     HapticFeedback.selectionClick();

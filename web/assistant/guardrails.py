@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Any
 
 from .schemas import default_guardrail_policy, default_tool_definitions
@@ -235,16 +236,9 @@ def check_conduct_and_policy_violation(
             f"hệ thống đã **tạm khóa** quyền trò chuyện với Pinova Bot trong **{temp_disable_min} phút**{' và gửi thông báo tới email của bạn' if warning_email else ''}. "
             f"Trong thời gian này, bạn vẫn có thể điều khiển sạc trực tiếp tại tab **Sạc pin**, gửi phiếu **Hỗ trợ**, và kênh cấp cứu **SOS** (bốc khói/cháy nổ/giật điện) vẫn luôn hoạt động 24/7 để bảo vệ an toàn."
         )
-        actions = [
-            {
-                "name": "contact_support",
-                "args": {
-                    "category": "account",
-                    "subject": "Khiếu nại / Hỗ trợ khi Pinova Bot tạm khóa 30 phút",
-                    "message": "Yêu cầu xem xét lại trạng thái tạm khóa trợ lý Pinova Bot.",
-                },
-            }
-        ]
+        # QA 143: no action. contact_support opened Trợ giúp at once, closed
+        # the chat and the user never read why the bot was locked.
+        actions = []
 
     return {
         "reply": reply,
@@ -264,12 +258,49 @@ def check_conduct_and_policy_violation(
     }
 
 
+# QA 143: fire, smoke, explosion, shock and burning smell in plain words, not
+# only the fixed phrases of the policy list ("Xe bị cháy, có khói" was missed).
+# Single accented words are safe ("cháy" is not "chạy"); without accents only
+# phrases, because "chay" is also "chạy" and "khoi" is also "khỏi".
+_EMERGENCY_PATTERN = re.compile(
+    r"(?<!\w)(?:"
+    r"cháy|bốc\s*cháy|khói|khét|nổ|phát\s*nổ|chập(?:\s*điện|\s*cháy)?|tia\s*lửa|lửa|"
+    r"giật\s*điện|điện\s*giật|bị\s*giật|sốc\s*điện|phồng\s*pin|pin\s*(?:bị\s*)?phồng|"
+    r"boc\s*chay|boc\s*khoi|co\s*khoi|ra\s*khoi\s*den|mui\s*khet|bi\s*chay|chay\s*pin|pin\s*chay|"
+    r"chay\s*o\s*cam|o\s*cam\s*chay|chay\s*no|phat\s*no|no\s*pin|pin\s*no|chap\s*dien|"
+    r"dien\s*giat|giat\s*dien|bi\s*giat|soc\s*dien|tia\s*lua|phong\s*pin|pin\s*phong|"
+    r"fire|smoke|smoking|burning|explod\w*|sparks?|electric\s*shock"
+    r")(?!\w)",
+    re.IGNORECASE,
+)
+# A question about prevention is not an emergency when nothing is happening now.
+_EMERGENCY_HYPOTHETICAL = re.compile(
+    r"(?i)(phòng\s*cháy|chống\s*cháy|nguy\s*cơ|sợ|có\s*thể|liệu|có\s+bị\s+\w+\s+không|"
+    r"có\s+\w+\s+không|làm\s*sao\s*để\s*tránh|tránh|risk|prevent|could|might)"
+)
+_EMERGENCY_NOW = re.compile(
+    r"(?i)(đang|bị|rồi|có\s*khói|bốc|ngay|cứu|help|now|dang|roi|cuu)"
+)
+
+
+def _emergency_match(message: str, keywords: list[str]) -> str | None:
+    text = unicodedata.normalize("NFC", message or "").lower()
+    matched = next((kw for kw in keywords if unicodedata.normalize("NFC", kw.lower()) in text), None)
+    if matched:
+        return matched
+    found = _EMERGENCY_PATTERN.search(text)
+    if not found:
+        return None
+    if _EMERGENCY_HYPOTHETICAL.search(text) and not _EMERGENCY_NOW.search(text):
+        return None
+    return found.group(0)
+
+
 def check_emergency_sos(message: str, policy: dict[str, Any] | None = None) -> dict[str, Any] | None:
     """Rule 9 of Pinova Charter: Emergency safety signals never blocked by quota or plan tier."""
     pol = policy or default_guardrail_policy()
-    msg_lower = (message or "").lower()
     keywords = pol.get("emergencyKeywords") or default_guardrail_policy()["emergencyKeywords"]
-    matched = next((kw for kw in keywords if kw.lower() in msg_lower), None)
+    matched = _emergency_match(message, list(keywords))
     if not matched:
         return None
     reply = pol.get("emergencyResponseVi") or default_guardrail_policy()["emergencyResponseVi"]

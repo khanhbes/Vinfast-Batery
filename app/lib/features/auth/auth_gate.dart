@@ -502,6 +502,9 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
       Future.microtask(() {
         if (!mounted) return;
         ref.read(selectedVehicleIdProvider.notifier).state = '';
+        // QA 143: the next account starts on Tổng quan, not the last tab.
+        ref.read(currentTabProvider.notifier).state = AppTab.overview;
+        ref.read(chargeSectionProvider.notifier).state = ChargeSection.ai;
         ref.invalidate(restoreVehicleIdProvider);
         ref.invalidate(allVehiclesProvider);
         ref.invalidate(vehicleProvider);

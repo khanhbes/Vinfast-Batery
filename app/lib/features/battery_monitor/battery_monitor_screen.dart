@@ -12,8 +12,6 @@ import '../../core/widgets/vehicle_picker_sheet.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/charge_estimator.dart';
 import '../../data/services/range_estimator.dart';
-import '../../data/models/entitlement.dart';
-import '../premium/premium_gate.dart';
 import 'battery_health_screen.dart';
 import '../../core/theme/plan_style.dart';
 
@@ -137,20 +135,16 @@ class BatteryMonitorScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                   child: LuxeSettingsGroup(
                     children: [
-                      PremiumLocked(
-                        feature: PremiumFeature.batteryHealth,
-                        tagAlignment: AlignmentDirectional.centerEnd,
-                        tagPadding: const EdgeInsetsDirectional.only(end: 10),
-                        reserveTagSpace: true,
-                        child: LuxeSettingsRow(
-                          key: const ValueKey('monitor-battery-health'),
-                          icon: Icons.health_and_safety_rounded,
-                          title: 'Sức khỏe pin',
-                          subtitle:
-                              'Dung lượng pin còn lại, ước tính và bài kiểm tra',
-                          onTap: () =>
-                              BatteryHealthScreen.open(context, ref, vehicleId),
-                        ),
+                      // QA 143: open for every plan, as in Tiện ích (QA 140);
+                      // only the test and trends inside are Pro/Ultra.
+                      LuxeSettingsRow(
+                        key: const ValueKey('monitor-battery-health'),
+                        icon: Icons.health_and_safety_rounded,
+                        title: 'Sức khỏe pin',
+                        subtitle:
+                            'Dung lượng pin còn lại, ước tính và bài kiểm tra',
+                        onTap: () =>
+                            BatteryHealthScreen.open(context, ref, vehicleId),
                       ),
                     ],
                   ),
@@ -324,8 +318,9 @@ class _CurrentBatteryCard extends StatelessWidget {
           ]),
           const SizedBox(height: 12),
           const Text(
-            'Xe không kết nối pin (BMS) với app nên không có nhiệt độ hay dữ '
-            'liệu từng cell. Cập nhật % ở Tổng quan → "Cập nhật % pin & ODO".',
+            'Xe không kết nối pin (BMS) với app nên không có dữ liệu từng '
+            'cell. % pin, ODO và nhiệt độ pin (nếu đồng hồ xe hiển thị) là số '
+            'bạn nhập hoặc quét ở Tổng quan → "Cập nhật % pin & ODO".',
             style: LuxeText.caption,
           ),
         ],

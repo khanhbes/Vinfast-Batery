@@ -275,8 +275,11 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
     if (estimate == null) return null;
     final full = estimate.fullAfter;
     if (full != null && full < _length) {
-      return 'Pin đầy khoảng ${formatClock(widget.clock().add(full))}, '
-          'máy chủ tự ngắt khi pin đầy';
+      final at = formatClock(widget.clock().add(full));
+      // QA 143: "máy chủ tự ngắt" only when this account can charge.
+      return widget.readyForControl
+          ? 'Pin đầy khoảng $at, máy chủ tự ngắt khi pin đầy'
+          : 'Pin đầy khoảng $at';
     }
     return 'Ước tính pin khoảng ${estimate.endSoc}% lúc ngắt';
   }

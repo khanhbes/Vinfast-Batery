@@ -101,16 +101,23 @@ class AuthService {
   /// Dùng set(merge: true) để không ghi đè dữ liệu cũ nếu doc đã có.
   Future<void> _ensureUserDoc(User user) async {
     try {
+      // QA 143: never blank a saved name with an Auth profile that has none.
+      final displayName = user.displayName?.trim() ?? '';
       await _firestore.collection('users').doc(user.uid).set({
         'uid': user.uid,
         'email': user.email ?? '',
-        'name': user.displayName ?? '',
+        if (displayName.isNotEmpty) 'name': displayName,
         'updatedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('[AuthService] _ensureUserDoc failed (${e.runtimeType}).');
     }
   }
+
+  /// QA 143: name and phone typed on the register form, kept for this run.
+  /// AuthGate opens the survey as soon as Auth signs in, before [register]
+  /// has written them, and the survey used to commit "Bạn" and no phone.
+  static ({String uid, String name, String? phone})? lastRegistration;
 
   /// Stream auth state changes
   Stream<User?> get authStateChanges => _auth.authStateChanges();
@@ -139,6 +146,7 @@ class AuthService {
           'error': 'Chưa tạo được tài khoản. Hãy thử lại.',
         };
       }
+      lastRegistration = (uid: user.uid, name: name.trim(), phone: phone);
 
       // Server-side bootstrap continues in the background after Auth succeeds.
       const bootstrapPending = true;

@@ -155,12 +155,15 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
   }
 
   Future<void> _signOutAfterRefusal() async {
+    // QA 143: sign-out unmounts the shell; reset through the container.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final navigator = Navigator.of(context, rootNavigator: true);
     await AuthService().signOut();
-    if (!mounted) return;
-    ref.read(selectedVehicleIdProvider.notifier).state = '';
-    ref.read(currentTabProvider.notifier).state = AppTab.overview;
+    container.read(selectedVehicleIdProvider.notifier).state = '';
+    container.read(currentTabProvider.notifier).state = AppTab.overview;
+    if (!navigator.mounted) return;
     unawaited(
-      Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+      navigator.pushAndRemoveUntil(
         MaterialPageRoute<void>(builder: (_) => const AuthGate()),
         (_) => false,
       ),

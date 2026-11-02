@@ -231,6 +231,16 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Quét đồng hồ theo dòng xe: `DashboardTemplate` (vùng %, ODO, °C, tốc độ bỏ qua); thêm dòng xe mới = thêm một mẫu + `forModel`. Khoảng: ODO 0–999 999, % 0–100, nhiệt độ pin 0–100 °C; cảnh báo 45 °C / 55 °C (`BatteryTempLine`), chỉ cảnh báo, không chặn bật sạc.
   - Quy tắc ứng xử Pinova Bot chỉ do máy chủ quản (`assistant/conduct.py`, `users/{uid}/assistantConduct/state`): app không gửi được số lần vi phạm; khóa, spam, mẹo, vi phạm xử lý trước quota và mô hình; chỉ nói "đã gửi email" khi email thật sự gửi; SOS luôn trước mọi khóa.
 
+- **QA 143 (02/11/2026, kiểm thử bằng tài khoản mới, chủ app duyệt sửa hết):**
+  - SOS: `_EMERGENCY_PATTERN` (`assistant/guardrails.py`) ↔ `EmergencyText` (`core/utils/emergency_text.dart`, chế độ cơ bản trên máy) bắt cả từ đơn có dấu ("cháy", "khói", "nổ", "giật điện"); không dấu chỉ bắt cụm (vì "chay" = "chạy", "khoi" = "khỏi"); câu hỏi phòng ngừa không có dấu hiệu đang xảy ra thì bỏ qua. Lần vi phạm 3 không kèm hành động (không tự mở Trợ giúp).
+  - ODO một khoảng 0–999 999 km (`MAX_ODO_KM` server, `maxOdoKm` app). Sửa ODO nhỏ hơn số cũ chỉ ở Gara xe → Thông số, có hỏi lại.
+  - Khảo sát không ghi đè họ tên/SĐT đăng ký (`onboarding_identity` server, `AuthService.lastRegistration` app). `_ensureUserDoc` không ghi tên rỗng.
+  - Quãng đường khi chưa nhập SoH = km/1 % danh mục (không nhân SoH); SoH chưa nhập hiện "—", không hiện 100. Bot nhận `rangeKm` đã học + trừ 5 %.
+  - Chưa liên kết Shelly (`/live` 404 `notConfigured`) không phải lỗi máy chủ: không thông báo mất kết nối, không thử lại.
+  - Đăng xuất: đặt lại tab/xe qua `ProviderScope.containerOf` trước khi `await signOut` (màn bị gỡ khi AuthGate dựng lại).
+  - Danh mục xe theo số VinFast công bố (30 km/h, 65 kg, 1 pin): km/1 % = quãng đường / 100; `batteryChemistry` (LFP/Lead-acid/Li-ion). Firestore: `web/scripts/qa143_catalog_specs.py` (mặc định chạy thử, chỉ đổi giá trị còn đúng số cũ).
+  - `LuxeGlass(selected)` và các mã hex emerald cũ dùng màu nhấn gói. Build Android profile/release thiếu `APP_API_BASE_URL` bị dừng (`-PallowMissingApiUrl=true` để bỏ qua).
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

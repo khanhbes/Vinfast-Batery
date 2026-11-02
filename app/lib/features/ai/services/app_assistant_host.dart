@@ -124,7 +124,15 @@ class AppAssistantActionHost implements AssistantActionHost {
             'capacityWh': vehicle.batteryCapacityWh,
           if (vehicle.hasEfficiencyData)
             'kmPerPercent': vehicle.defaultEfficiency,
-          'rangeKm': estimateRangeKm(vehicle)?.round(),
+          // QA 143: the same range the Overview shows (learned km/1 % and
+          // the 5 % reserve), so the bot never computes its own.
+          'rangeKm': estimateRangeKm(
+            vehicle,
+            learned: ref
+                .read(learnedModelsProvider(vehicle.vehicleId))
+                .valueOrNull
+                ?.trip,
+          )?.round(),
           'targetSoc': ?target?.round(),
         },
       'vehicles': [

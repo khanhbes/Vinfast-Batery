@@ -98,7 +98,7 @@ class OnboardingDraft {
     finalizedAt: null,
     nickname: nickname?.trim(),
     licensePlate: licensePlate?.trim(),
-    initialOdo: initialOdo?.clamp(0, 9999999).toInt(),
+    initialOdo: initialOdo?.clamp(0, 999999).toInt(),
     shellyStatus: shellyStatus == 'connected' ? 'connected' : 'skipped',
     updatedAt: DateTime.now().toUtc(),
   );

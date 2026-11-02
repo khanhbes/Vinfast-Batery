@@ -6,6 +6,7 @@ import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_submit_button.dart';
 import '../../../data/services/dashboard_reader.dart';
 import '../dashboard_scan_screen.dart';
+import '../../../core/utils/number_text.dart';
 
 /// What the owner confirmed: battery % and/or ODO, and where it came from.
 /// QA 142: [tempC] is the battery temperature the scan read (°C).
@@ -166,7 +167,9 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
       if (odo == null || odo < 0 || odo > 999999) {
         odoError = 'Nhập số km từ 0 đến 999 999.';
       } else if (previous != null && previous > 0 && odo < previous - 0.5) {
-        odoError = 'ODO không thể nhỏ hơn lần trước (${previous.round()} km).';
+        odoError =
+            'ODO không thể nhỏ hơn lần trước (${groupThousands(previous.round())} km). '
+            'Nếu lần trước nhập nhầm, sửa ở Cài đặt → Gara xe → Thông số.';
       }
     }
     if (socError == null && odoError == null && soc == null && odo == null) {
@@ -322,7 +325,11 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
             key: const ValueKey('reading-soc'),
             controller: _soc,
             keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            // QA 143: "8031500" fit in the % field until Save.
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(3),
+            ],
             textInputAction: TextInputAction.next,
             onChanged: (_) {
               if (_socError != null) setState(() => _socError = null);
@@ -340,6 +347,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
             key: const ValueKey('reading-odo'),
             controller: _odo,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [LengthLimitingTextInputFormatter(8)],
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _save(),
             onChanged: (_) {
@@ -349,7 +357,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
               labelText: 'Số ODO (không bắt buộc)',
               hintText: widget.currentOdoKm == null || widget.currentOdoKm == 0
                   ? 'Ví dụ: 1250'
-                  : 'Lần trước: ${widget.currentOdoKm!.round()} km',
+                  : 'Lần trước: ${groupThousands(widget.currentOdoKm!.round())} km',
               suffixText: 'km',
               errorText: _odoError,
             ),
@@ -358,7 +366,10 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
           const LuxeNotice(
             icon: Icons.lock_outline_rounded,
             message:
-                'Ảnh được đọc ngay trên điện thoại, không gửi đi. Hai lần nhập '
+                // QA 143: the scan has a server fallback (QA 135).
+                'Ảnh được đọc trên điện thoại. Khi máy không đọc được, một ảnh '
+                'đen trắng vùng đồng hồ được gửi lên máy chủ để AI đọc và '
+                'không được lưu lại. Hai lần nhập '
                 'có cả % và ODO (không sạc ở giữa) thành một chuyến đi để AI '
                 'học hao pin của xe bạn.',
           ),

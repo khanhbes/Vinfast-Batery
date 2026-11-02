@@ -932,8 +932,8 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                           child: Container(
                             width: 6,
                             height: 6,
-                            decoration: const BoxDecoration(
-                              color: LuxeColors.emerald,
+                            decoration: BoxDecoration(
+                              color: context.planAccent,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -971,9 +971,11 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: LuxeColors.emeraldTint,
+                      color: context.planAccent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(CockpitRadius.full),
-                      border: Border.all(color: LuxeColors.emeraldSoft),
+                      border: Border.all(
+                        color: context.planAccent.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -981,18 +983,20 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                         Container(
                           width: 6,
                           height: 6,
-                          decoration: const BoxDecoration(
-                            color: LuxeColors.emerald,
+                          decoration: BoxDecoration(
+                            color: context.planAccent,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          'Sẵn sàng',
+                          // QA 143: a supported model, not a verified link: plan accent,
+                          // not emerald (QA 140).
+                          'Hỗ trợ',
                           style: CockpitTypography.label(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
-                            color: LuxeColors.emerald,
+                            color: context.planAccent,
                           ),
                         ),
                       ],

@@ -44,8 +44,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
+  /// QA 143: after the first submit each field re-checks as it is typed,
+  /// so a corrected field loses its red error.
+  bool _submitted = false;
+
   Future<void> _register() async {
-    if (_loading || !_formKey.currentState!.validate()) return;
+    if (_loading) return;
+    if (!_submitted) setState(() => _submitted = true);
+    if (!_formKey.currentState!.validate()) return;
     if (!_agreed) {
       setState(
         () => _error = 'Hãy đọc và đồng ý Chính sách bảo mật để đăng ký.',
@@ -139,183 +145,204 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const LuxeAuthHeading(
-                eyebrow: 'Tài khoản mới',
-                title: 'Tạo tài khoản',
-                caption: 'Nhập thông tin để bắt đầu quản lý pin xe điện.',
-                center: false,
-              ),
-              const SizedBox(height: 22),
-              LuxeAuthCard(
-                children: [
-                  TextFormField(
-                    controller: _nameCtrl,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.next,
-                    style: fieldStyle,
-                    decoration: _inputDecoration(
-                      label: 'Họ và tên',
-                      hint: 'Ví dụ: Nguyễn Văn A',
-                      prefixIcon: Icons.person_outline_rounded,
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Vui lòng nhập họ tên';
-                      }
-                      if (v.trim().length < 2) {
-                        return 'Họ tên quá ngắn';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    autocorrect: false,
-                    style: fieldStyle,
-                    decoration: _inputDecoration(
-                      label: 'Email',
-                      hint: 'name@example.com',
-                      prefixIcon: Icons.alternate_email_rounded,
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Vui lòng nhập email';
-                      }
-                      if (!v.contains('@') || !v.contains('.')) {
-                        return 'Email không hợp lệ';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    textInputAction: TextInputAction.next,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(11),
-                    ],
-                    style: fieldStyle,
-                    decoration: _inputDecoration(
-                      label: 'Số điện thoại',
-                      hint: '09xxxxxxxx',
-                      prefixIcon: Icons.phone_android_rounded,
-                    ),
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Vui lòng nhập số điện thoại';
-                      }
-                      if (v.trim().length < 9) {
-                        return 'Số điện thoại không hợp lệ';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _passCtrl,
-                    obscureText: _obscurePass,
-                    textInputAction: TextInputAction.next,
-                    style: fieldStyle,
-                    onChanged: (_) => setState(() {}),
-                    decoration: _inputDecoration(
-                      label: 'Mật khẩu',
-                      hint: 'Tối thiểu 6 ký tự',
-                      prefixIcon: Icons.lock_outline_rounded,
-                      suffix: _visibilityToggle(
-                        obscured: _obscurePass,
-                        showLabel: 'Hiện mật khẩu',
-                        hideLabel: 'Ẩn mật khẩu',
-                        onPressed: () =>
-                            setState(() => _obscurePass = !_obscurePass),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'Vui lòng nhập mật khẩu';
-                      }
-                      if (v.length < 6) {
-                        return 'Mật khẩu tối thiểu 6 ký tự';
-                      }
-                      return null;
-                    },
-                  ),
-                  LuxePasswordStrength(password: _passCtrl.text),
-                  const SizedBox(height: 14),
-                  TextFormField(
-                    controller: _confirmPassCtrl,
-                    obscureText: _obscureConfirm,
-                    textInputAction: TextInputAction.done,
-                    onFieldSubmitted: (_) => _register(),
-                    style: fieldStyle,
-                    decoration: _inputDecoration(
-                      label: 'Xác nhận mật khẩu',
-                      hint: 'Nhập lại mật khẩu',
-                      prefixIcon: Icons.lock_reset_rounded,
-                      suffix: _visibilityToggle(
-                        obscured: _obscureConfirm,
-                        showLabel: 'Hiện mật khẩu xác nhận',
-                        hideLabel: 'Ẩn mật khẩu xác nhận',
-                        onPressed: () =>
-                            setState(() => _obscureConfirm = !_obscureConfirm),
-                      ),
-                    ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) {
-                        return 'Vui lòng xác nhận mật khẩu';
-                      }
-                      if (v != _passCtrl.text) {
-                        return 'Mật khẩu không khớp';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              AnimatedSize(
-                duration: luxeDuration(context, 280),
-                curve: LuxeMotion.enter,
-                alignment: Alignment.topCenter,
-                child: _error == null
-                    ? const SizedBox(width: double.infinity)
-                    : Padding(
-                        padding: const EdgeInsets.only(bottom: 14),
-                        child: LuxeAuthError(_error!),
-                      ),
-              ),
-              PrivacyConsentCheckbox(
-                value: _agreed,
-                onChanged: (v) => setState(() {
-                  _agreed = v;
-                  if (v) _error = null;
-                }),
-              ),
-              const SizedBox(height: 10),
-              FilledButton(
-                onPressed: _loading || !_agreed ? null : _register,
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(54),
+          autovalidateMode: _submitted
+              ? AutovalidateMode.onUserInteraction
+              : AutovalidateMode.disabled,
+          onChanged: () {
+            if (_error != null && _agreed) setState(() => _error = null);
+          },
+          // QA 143: new-account hints, so the password manager offers to
+          // save this account instead of filling an old login.
+          child: AutofillGroup(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const LuxeAuthHeading(
+                  eyebrow: 'Tài khoản mới',
+                  title: 'Tạo tài khoản',
+                  caption: 'Nhập thông tin để bắt đầu quản lý pin xe điện.',
+                  center: false,
                 ),
-                child: _loading
-                    ? const LuxeButtonSpinner(semanticsLabel: 'Đang đăng ký')
-                    : const Text('Đăng ký'),
-              ),
-              const SizedBox(height: 10),
-              LuxeAuthLink(
-                prefix: 'Đã có tài khoản? ',
-                action: 'Đăng nhập',
-                onPressed: _loading ? null : () => Navigator.of(context).pop(),
-              ),
-            ],
+                const SizedBox(height: 22),
+                LuxeAuthCard(
+                  children: [
+                    TextFormField(
+                      controller: _nameCtrl,
+                      autofillHints: const [AutofillHints.name],
+                      textCapitalization: TextCapitalization.words,
+                      textInputAction: TextInputAction.next,
+                      style: fieldStyle,
+                      decoration: _inputDecoration(
+                        label: 'Họ và tên',
+                        hint: 'Ví dụ: Nguyễn Văn A',
+                        prefixIcon: Icons.person_outline_rounded,
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Vui lòng nhập họ tên';
+                        }
+                        if (v.trim().length < 2) {
+                          return 'Họ tên quá ngắn';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _emailCtrl,
+                      autofillHints: const [
+                        AutofillHints.newUsername,
+                        AutofillHints.email,
+                      ],
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      autocorrect: false,
+                      style: fieldStyle,
+                      decoration: _inputDecoration(
+                        label: 'Email',
+                        hint: 'name@example.com',
+                        prefixIcon: Icons.alternate_email_rounded,
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Vui lòng nhập email';
+                        }
+                        if (!v.contains('@') || !v.contains('.')) {
+                          return 'Email không hợp lệ';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _phoneCtrl,
+                      autofillHints: const [AutofillHints.telephoneNumber],
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.next,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(11),
+                      ],
+                      style: fieldStyle,
+                      decoration: _inputDecoration(
+                        label: 'Số điện thoại',
+                        hint: '09xxxxxxxx',
+                        prefixIcon: Icons.phone_android_rounded,
+                      ),
+                      validator: (v) {
+                        if (v == null || v.trim().isEmpty) {
+                          return 'Vui lòng nhập số điện thoại';
+                        }
+                        if (v.trim().length < 9) {
+                          return 'Số điện thoại không hợp lệ';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _passCtrl,
+                      autofillHints: const [AutofillHints.newPassword],
+                      obscureText: _obscurePass,
+                      textInputAction: TextInputAction.next,
+                      style: fieldStyle,
+                      onChanged: (_) => setState(() {}),
+                      decoration: _inputDecoration(
+                        label: 'Mật khẩu',
+                        hint: 'Tối thiểu 6 ký tự',
+                        prefixIcon: Icons.lock_outline_rounded,
+                        suffix: _visibilityToggle(
+                          obscured: _obscurePass,
+                          showLabel: 'Hiện mật khẩu',
+                          hideLabel: 'Ẩn mật khẩu',
+                          onPressed: () =>
+                              setState(() => _obscurePass = !_obscurePass),
+                        ),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) {
+                          return 'Vui lòng nhập mật khẩu';
+                        }
+                        if (v.length < 6) {
+                          return 'Mật khẩu tối thiểu 6 ký tự';
+                        }
+                        return null;
+                      },
+                    ),
+                    LuxePasswordStrength(password: _passCtrl.text),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _confirmPassCtrl,
+                      autofillHints: const [AutofillHints.newPassword],
+                      obscureText: _obscureConfirm,
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _register(),
+                      style: fieldStyle,
+                      decoration: _inputDecoration(
+                        label: 'Xác nhận mật khẩu',
+                        hint: 'Nhập lại mật khẩu',
+                        prefixIcon: Icons.lock_reset_rounded,
+                        suffix: _visibilityToggle(
+                          obscured: _obscureConfirm,
+                          showLabel: 'Hiện mật khẩu xác nhận',
+                          hideLabel: 'Ẩn mật khẩu xác nhận',
+                          onPressed: () => setState(
+                            () => _obscureConfirm = !_obscureConfirm,
+                          ),
+                        ),
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) {
+                          return 'Vui lòng xác nhận mật khẩu';
+                        }
+                        if (v != _passCtrl.text) {
+                          return 'Mật khẩu không khớp';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                AnimatedSize(
+                  duration: luxeDuration(context, 280),
+                  curve: LuxeMotion.enter,
+                  alignment: Alignment.topCenter,
+                  child: _error == null
+                      ? const SizedBox(width: double.infinity)
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: LuxeAuthError(_error!),
+                        ),
+                ),
+                PrivacyConsentCheckbox(
+                  value: _agreed,
+                  onChanged: (v) => setState(() {
+                    _agreed = v;
+                    if (v) _error = null;
+                  }),
+                ),
+                const SizedBox(height: 10),
+                FilledButton(
+                  onPressed: _loading || !_agreed ? null : _register,
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(54),
+                  ),
+                  child: _loading
+                      ? const LuxeButtonSpinner(semanticsLabel: 'Đang đăng ký')
+                      : const Text('Đăng ký'),
+                ),
+                const SizedBox(height: 10),
+                LuxeAuthLink(
+                  prefix: 'Đã có tài khoản? ',
+                  action: 'Đăng nhập',
+                  onPressed: _loading
+                      ? null
+                      : () => Navigator.of(context).pop(),
+                ),
+              ],
+            ),
           ),
         ),
       ],

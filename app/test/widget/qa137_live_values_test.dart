@@ -166,7 +166,7 @@ void main() {
     expect(fade.opacity, 1.0);
     expect(await running(reduceMotion: true), isFalse);
     // The price line says "khoảng", never "~".
-    expect(find.textContaining('khoảng 37.417đ mỗi tháng'), findsOneWidget);
+    expect(find.textContaining('khoảng 37.000đ mỗi tháng'), findsOneWidget);
     expect(find.textContaining('~'), findsNothing);
     await tester.pumpWidget(const SizedBox());
   });

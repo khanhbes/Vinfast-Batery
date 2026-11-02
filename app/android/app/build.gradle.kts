@@ -33,6 +33,28 @@ val allowDebugSigning =
         || project.findProperty("allowDebugSigning")?.toString()?.equals("true", ignoreCase = true) == true
         || project.findProperty("ALLOW_DEBUG_SIGNING")?.toString()?.equals("true", ignoreCase = true) == true
 
+// QA 143: a profile/release APK without APP_API_BASE_URL installs fine and
+// then only says "Chưa liên lạc được máy chủ". Stop the build instead.
+// Flutter passes --dart-define values base64-encoded in -Pdart-defines.
+val dartDefines = project.findProperty("dart-defines")?.toString().orEmpty()
+    .split(",")
+    .filter { it.isNotBlank() }
+    .map { String(java.util.Base64.getDecoder().decode(it), Charsets.UTF_8) }
+val hasApiBaseUrl = dartDefines.any {
+    it.startsWith("APP_API_BASE_URL=") && it.substringAfter("=").isNotBlank()
+}
+val allowMissingApiUrl =
+    project.findProperty("allowMissingApiUrl")?.toString()?.equals("true", ignoreCase = true) == true
+if (gradle.startParameter.taskNames.any {
+        it.contains("Release", ignoreCase = true) || it.contains("Profile", ignoreCase = true)
+    } && !hasApiBaseUrl && !allowMissingApiUrl) {
+    throw GradleException(
+        "APP_API_BASE_URL is not set. Build with " +
+            "--dart-define=APP_API_BASE_URL=https://<api-host> " +
+            "(or -PallowMissingApiUrl=true for a build that sets the server in the app)."
+    )
+}
+
 if (gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) } &&
     !hasReleaseSigning && !allowDebugSigning) {
     throw GradleException(

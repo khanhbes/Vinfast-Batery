@@ -73,7 +73,7 @@ def as_global_spec(item: dict) -> dict:
             "calculationCapacityWh": capacity,
             "capacityAh": item.get("nominalCapacityAh"),
             "voltageV": item.get("nominalVoltageV"),
-            "chemistry": "LFP",
+            "chemistry": item.get("batteryChemistry") or "LFP",
             "packCount": 1,
             "removable": False,
         },

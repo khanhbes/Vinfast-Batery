@@ -1176,9 +1176,11 @@ class _InteractiveAssistantSheetState
                                         alpha: 0.55,
                                       ),
                                     ),
-                                    boxShadow: const [
+                                    boxShadow: [
                                       BoxShadow(
-                                        color: Color(0x2834D399),
+                                        color: context.planAccent.withValues(
+                                          alpha: 0.16,
+                                        ),
                                         blurRadius: 16,
                                       ),
                                     ],

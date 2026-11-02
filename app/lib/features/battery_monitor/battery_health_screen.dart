@@ -181,6 +181,8 @@ class _Body extends StatelessWidget {
         else
           PremiumLocked(
             feature: PremiumFeature.batteryHealth,
+            // QA 143: the PRO tag sat on top of the text.
+            reserveTagSpace: true,
             child: const LuxeNotice(
               icon: Icons.science_rounded,
               message:
@@ -226,13 +228,17 @@ class _Hero extends StatelessWidget {
       );
     }
     if (v == null) {
-      return const LuxeNotice(
-        key: ValueKey('health-need-data'),
+      // QA 143: a Free plan has no test to point to, and the estimate comes
+      // from energy the Shelly outlet measured.
+      return LuxeNotice(
+        key: const ValueKey('health-need-data'),
         icon: Icons.hourglass_empty_rounded,
         color: LuxeColors.champagne,
-        message:
-            'Chưa đủ dữ liệu. Sau mỗi lần sạc, nhập % trên đồng hồ xe (hoặc '
-            'làm bài kiểm tra bên dưới) để app ước tính.',
+        message: health.full
+            ? 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly, nhập % trên '
+                  'đồng hồ xe (hoặc làm bài kiểm tra bên dưới) để app ước tính.'
+            : 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly, nhập % trên '
+                  'đồng hồ xe để app ước tính.',
       );
     }
     final fade = (100 - v.sohPct).clamp(0, 100);

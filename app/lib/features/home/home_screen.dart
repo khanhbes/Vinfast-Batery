@@ -223,14 +223,7 @@ class HomeScreen extends ConsumerWidget {
                                         vehicle: vehicle,
                                         learned: learned,
                                         rangePending: pending,
-                                        onCharge: () =>
-                                            ref
-                                                    .read(
-                                                      currentTabProvider
-                                                          .notifier,
-                                                    )
-                                                    .state =
-                                                1,
+                                        onCharge: () => openChargeControl(ref),
                                       ),
                                     },
                                   );
@@ -261,7 +254,9 @@ class HomeScreen extends ConsumerWidget {
                             ref: ref,
                           ),
 
-                        SliverToBoxAdapter(child: SizedBox(height: 100)),
+                        // QA 143: the last row ("Theo dõi pin") scrolls clear
+                        // of the Pinova Bot button and the charging pill.
+                        SliverToBoxAdapter(child: SizedBox(height: 150)),
                       ],
                     ),
                   ),

@@ -224,7 +224,8 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
   }
 
   // QA 141: two decimals like History.
-  static String _kwh(double v) => v == 0 ? '0' : formatKwh(v);
+  // QA 143: "0.00" like Lịch sử, not "0".
+  static String _kwh(double v) => formatKwh(v);
 }
 
 class _Figure extends StatelessWidget {

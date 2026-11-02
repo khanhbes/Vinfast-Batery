@@ -24,6 +24,8 @@ import '../../data/repositories/vehicle_spec_repository.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../../core/widgets/vehicle_photo.dart';
 import '../../core/theme/plan_style.dart';
+import '../../core/utils/number_text.dart';
+import '../../core/constants/app_constants.dart';
 
 /// Onboarding keeps the existing draft/validation contract in a calm step UI.
 class OnboardingChatScreen extends ConsumerStatefulWidget {
@@ -353,8 +355,22 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       }
     }
 
+    _useRegistrationIdentity();
+  }
+
+  /// QA 143: the name and phone from the register form win over the
+  /// placeholder; the survey may open before registration saved them.
+  void _useRegistrationIdentity() {
+    final current = AuthService().currentUser;
+    final typed = AuthService.lastRegistration;
+    if (typed != null && typed.uid == current?.uid) {
+      if (_userName.isEmpty || _userName == 'Bạn') _userName = typed.name;
+      final phone = typed.phone?.trim() ?? '';
+      if ((_userPhone ?? '').isEmpty && phone.isNotEmpty) _userPhone = phone;
+    }
     if (_userName.isEmpty) {
-      _userName = currentUser?.displayName ?? 'Bạn';
+      final display = current?.displayName?.trim() ?? '';
+      _userName = display.isNotEmpty ? display : 'Bạn';
     }
   }
 
@@ -403,7 +419,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
                 odoText.isNotEmpty) &&
             (odoText.isEmpty ||
                 (int.tryParse(odoText) != null &&
-                    int.parse(odoText) <= 9999999));
+                    int.parse(odoText) <= maxOdoKm));
       case 3:
         final dob = _dobCtrl.text.trim();
         return dob.isNotEmpty &&
@@ -642,13 +658,30 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     final odo = skipDetails || odoText.isEmpty ? null : int.tryParse(odoText);
     if (!skipDetails &&
         odoText.isNotEmpty &&
-        (odo == null || odo < 0 || odo > 9999999)) {
+        (odo == null || odo < 0 || odo > maxOdoKm)) {
       return;
     }
 
     final user = AuthService().currentUser;
     final uid = user?.uid ?? (kDebugMode ? 'debug-preview-user' : null);
     if (uid == null) return;
+    if (_userName == 'Bạn' || (_userPhone ?? '').isEmpty) {
+      // Registration has finished by now: read the saved profile again.
+      OnboardingProgress? status;
+      try {
+        status = await ref
+            .read(onboardingServiceProvider)
+            .fetchOnboardingStatus();
+      } on Object {
+        status = null;
+      }
+      if (!mounted) return;
+      if (status != null) {
+        if (status.name.trim().isNotEmpty) _userName = status.name.trim();
+        if (status.phone.trim().isNotEmpty) _userPhone = status.phone.trim();
+      }
+      _useRegistrationIdentity();
+    }
     _draft ??= OnboardingDraft.create(
       uid: uid,
       name: _userName,
@@ -1070,7 +1103,10 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           gradient: RadialGradient(
             center: const Alignment(-0.3, -0.4),
             colors: active
-                ? const [Color(0x4434D399), Color(0x1434D399)]
+                ? [
+                    context.planAccent.withValues(alpha: 0.27),
+                    context.planAccent.withValues(alpha: 0.08),
+                  ]
                 : const [Color(0x24FFFFFF), Color(0x08FFFFFF)],
           ),
           border: Border.all(
@@ -1156,7 +1192,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
     final odo = _odoCtrl.text.trim();
     final odoInvalid =
         odo.isNotEmpty &&
-        (int.tryParse(odo) == null || int.parse(odo) > 9999999);
+        (int.tryParse(odo) == null || int.parse(odo) > maxOdoKm);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1209,9 +1245,13 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           hint: 'Nhập số km trên đồng hồ xe',
           icon: Icons.speed_rounded,
           suffixText: 'km',
-          errorText: odoInvalid ? 'Nhập số km từ 0 đến 9.999.999.' : null,
+          errorText: odoInvalid ? 'Nhập số km từ 0 đến 999 999.' : null,
           keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          // QA 143: 1 234 567 km was accepted and then blocked every real ODO.
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(AppConstants.maxOdoDigits),
+          ],
         ),
         const SizedBox(height: 12),
         _skipButton(() => _handleCreateVehicle(skipDetails: true)),
@@ -1516,7 +1556,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
         type: MaterialType.transparency,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          splashColor: const Color(0x1434D399),
+          splashColor: context.planAccent.withValues(alpha: 0.08),
           onTap: () {
             HapticFeedback.selectionClick();
             setState(() {
@@ -1691,7 +1731,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               label: 'Số km đã đi',
               value: _draft?.initialOdo == null
                   ? 'Chưa cung cấp'
-                  : '${_draft!.initialOdo} km',
+                  : '${groupThousands(_draft!.initialOdo!)} km',
             ),
           ]),
         ),
@@ -2491,7 +2531,7 @@ class OnboardingVehicleChoice extends StatelessWidget {
         type: MaterialType.transparency,
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          splashColor: const Color(0x1434D399),
+          splashColor: context.planAccent.withValues(alpha: 0.08),
           highlightColor: const Color(0x0AFFFFFF),
           onTap: () {
             HapticFeedback.selectionClick();

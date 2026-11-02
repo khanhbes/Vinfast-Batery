@@ -401,6 +401,10 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
   Timer? _statusRetryTimer;
   static const _statusRetryDelay = Duration(seconds: 5);
 
+  /// The server has no Shelly linked to this vehicle (`/live` 404).
+  static bool _notLinked(SmartChargerException error) =>
+      error.code == 'notConfigured';
+
   void _retrySoonAfterFailure() {
     _statusFailures++;
     if (_statusFailures > 1) return;
@@ -465,7 +469,8 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     } on SmartChargerException catch (error) {
       if (!_disposed) {
         state = state.copyWith(
-          gatewayError: error.message,
+          // QA 143: no Shelly yet is not a server problem.
+          gatewayError: _notLinked(error) ? null : error.message,
           chargerStatus: null,
           capabilities: SmartChargerCapabilities.unavailable,
         );
@@ -915,6 +920,18 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       }
     } on SmartChargerException catch (error) {
       if (!currentContext()) return;
+      if (_notLinked(error)) {
+        // QA 143: an account without Shelly saw "Chưa liên lạc được máy
+        // chủ" and endless retries while the server answered fine.
+        if (!_disposed) {
+          state = state.copyWith(
+            gatewayError: null,
+            chargerStatus: null,
+            capabilities: SmartChargerCapabilities.unavailable,
+          );
+        }
+        return;
+      }
       _retrySoonAfterFailure();
       if (owner != null) {
         shelly.markServerUnavailable(uid: owner, vehicleId: vehicleId);

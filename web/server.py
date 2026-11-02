@@ -898,6 +898,29 @@ def set_admin():
 # ═══════════════════════════════════════════════════════════════
 # USER PROFILE & ONBOARDING APIs
 # ═══════════════════════════════════════════════════════════════
+# QA 143: one odometer range everywhere (scan, learning, onboarding).
+MAX_ODO_KM = 999_999
+# Names the survey screen falls back to when it opened before registration
+# finished writing the profile; never a reason to replace a real name.
+_PLACEHOLDER_NAMES = {'bạn', 'ban', 'người dùng', 'nguoi dung', 'user'}
+
+
+def onboarding_identity(existing: dict, name: str, phone) -> tuple[str, str]:
+    """Name and phone the onboarding commit stores (QA 143).
+
+    Registration writes name and phone first; the survey may commit a
+    placeholder name or an empty phone. Keep the registered values then.
+    """
+    current_name = str(existing.get('name') or existing.get('displayName') or '').strip()
+    new_name = str(name or '').strip()
+    if current_name and (not new_name or new_name.lower() in _PLACEHOLDER_NAMES):
+        new_name = current_name
+    new_phone = str(phone or '').strip()[:20]
+    if not new_phone:
+        new_phone = str(existing.get('phone') or '').strip()[:20]
+    return new_name[:100], new_phone
+
+
 def validate_date_of_birth(dob_str: str) -> tuple[bool, str | None]:
     """Validate date of birth format YYYY-MM-DD, non-future, age <= 120."""
     if not isinstance(dob_str, str):
@@ -1234,8 +1257,9 @@ def commit_mobile_onboarding():
         initial_odo = int(vehicle.get('initialOdo', 0))
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'ODO không hợp lệ', 'userMessage': 'ODO ban đầu không hợp lệ.', 'code': 'invalidOdo', 'retryable': False}), 400
-    if initial_odo < 0 or initial_odo > 9_999_999:
-        return jsonify({'success': False, 'error': 'ODO ngoài phạm vi', 'userMessage': 'ODO ban đầu không hợp lệ.', 'code': 'invalidOdo', 'retryable': False}), 400
+    # QA 143: a scooter odometer shows at most 6 digits (QA 142 scan range).
+    if initial_odo < 0 or initial_odo > MAX_ODO_KM:
+        return jsonify({'success': False, 'error': 'ODO ngoài phạm vi', 'userMessage': 'ODO ban đầu phải từ 0 đến 999 999 km.', 'code': 'invalidOdo', 'retryable': False}), 400
 
     dob = profile.get('dateOfBirth')
     if dob:
@@ -1304,12 +1328,18 @@ def commit_mobile_onboarding():
             }), vehicle_status
 
         now_iso = datetime.now(timezone.utc).isoformat()
+        user_ref = database.collection('users').document(request._uid)
+        try:
+            existing_snapshot = user_ref.get(transaction=transaction) if transaction is not None else user_ref.get()
+            existing_user = (existing_snapshot.to_dict() or {}) if existing_snapshot.exists else {}
+        except Exception:
+            existing_user = {}
+        kept_name, kept_phone = onboarding_identity(existing_user, name, profile.get('phone'))
         profile_update = {
             'uid': request._uid,
             'email': request._email,
-            'name': name,
-            'displayName': name,
-            'phone': str(profile.get('phone') or '').strip()[:20],
+            'name': kept_name,
+            'displayName': kept_name,
             'dateOfBirth': str(dob).strip() if dob else None,
             'registrationFlowVersion': 2,
             'updatedAt': now_iso,
@@ -1337,7 +1367,8 @@ def commit_mobile_onboarding():
             'onboardingCompletedAt': now_iso,
             'shellyOnboardingStatus': shelly_status,
         })
-        user_ref = database.collection('users').document(request._uid)
+        if kept_phone:
+            profile_update['phone'] = kept_phone
         if transaction is not None:
             transaction.set(user_ref, profile_update, merge=True)
         else:

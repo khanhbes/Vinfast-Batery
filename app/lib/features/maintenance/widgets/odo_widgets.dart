@@ -313,7 +313,9 @@ class _TrackPainter extends CustomPainter {
     label(_short(hi), Offset(size.width - pad, y + 14), LuxeColors.dim);
   }
 
-  static String _short(int km) => km >= 10000
+  static String _short(int km) => km >= 100000
+      ? '${(km / 1000).round()}k km' // QA 143: not "1234.6k km"
+      : km >= 10000
       ? '${(km / 1000).toStringAsFixed(km % 1000 == 0 ? 0 : 1)}k km'
       : '${groupThousands(km)} km'; // QA 139 (QA-19)
 

@@ -373,7 +373,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 LuxeColors.platinumHi,
               ],
             ),
-            boxShadow: [BoxShadow(color: Color(0x2234D399), blurRadius: 28)],
+            boxShadow: [
+              BoxShadow(
+                color: context.planAccent.withValues(alpha: 0.13),
+                blurRadius: 28,
+              ),
+            ],
           ),
           child: Container(
             decoration: const BoxDecoration(

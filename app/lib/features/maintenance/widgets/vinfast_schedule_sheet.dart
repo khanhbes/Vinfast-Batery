@@ -144,7 +144,7 @@ class _SheetState extends State<_Sheet> {
                   const Text('Tạo lịch chuẩn', style: LuxeText.title),
                   const SizedBox(height: 6),
                   Text(
-                    'Mốc kế tiếp của từng hạng mục, tính từ ODO hiện tại ${widget.currentOdo} km. Bỏ chọn mục bạn không muốn tạo.',
+                    'Mốc kế tiếp của từng hạng mục, tính từ ODO hiện tại ${groupThousands(widget.currentOdo)} km. Bỏ chọn mục bạn không muốn tạo.',
                     style: LuxeText.body,
                   ),
                   if (widget.currentOdo == 0) ...[

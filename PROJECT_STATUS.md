@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 143. Task Completion Log — Kiểm thử toàn luồng bằng tài khoản mới trên Xiaomi (BA/DA/tester, 02/11/2026) — Chỉ kiểm thử, chưa sửa code
+## 143. Task Completion Log — Kiểm thử toàn luồng bằng tài khoản mới trên Xiaomi (BA/DA/tester, 02/11/2026) — Đã sửa toàn bộ (APK 1.3.14+217)
 
 **Build:** 1.3.12+215 (`flutter build apk --profile`, thiếu `APP_API_BASE_URL` → app chỉ báo "Chưa liên lạc được máy chủ"; không dùng) rồi 1.3.13+216 với `--dart-define=APP_API_BASE_URL=https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io`, SHA-256 `EA3793B2…63E22E19`, `adb install -r` lên Xiaomi 7b20a377 (versionCode 216). Tài khoản test `pinova.qa.20261102@example.com` (Free, không Shelly, không lệnh relay nào). Bàn phím Gboard Telex: gõ ADB "exx" để ra "ex".
 
@@ -28,7 +28,26 @@
 
 **Đạt:** kiểm tra nhập ở đăng nhập/đăng ký, lỗi đăng nhập chung, khảo sát 9 bước, tour từng tab, cập nhật % hiện ngay mọi màn, sửa ODO trong Hồ sơ xe, dự đoán sạc, lịch sử trống, khóa Free/Pro/Ultra, Pinova Bot: từ chối giả admin, cảnh báo lần 1/2, khóa 30 phút lần 3 có băng, mã Admin sai không lộ thông tin, đăng xuất/đăng nhập giữ dữ liệu.
 
-**Còn mở:** sửa các lỗi trên (chờ chủ app duyệt); Xiaomi đang đăng nhập tài khoản test.
+**Sửa (02/11/2026, chủ app duyệt "sửa tất cả", thông số chính VinFast, tuổi vẫn cho bỏ qua, giữ tài khoản test):**
+- SOS: `_EMERGENCY_PATTERN` + `_emergency_match` (`assistant/guardrails.py`, chuẩn hóa NFC) bắt "cháy", "khói", "nổ", "bốc cháy", "chập điện", "giật điện", "pin phồng", tiếng Anh; không dấu chỉ cụm; câu hỏi phòng ngừa bỏ qua. App: `EmergencyText` cho chế độ cơ bản (mất mạng/hết lượt) kèm thẻ dừng sạc. Lần vi phạm 3 bỏ hành động `contact_support` (không tự mở Trợ giúp).
+- Họ tên/SĐT: `onboarding_identity` (server giữ tên đã đăng ký khi khảo sát gửi "Bạn"/rỗng, giữ SĐT khi rỗng); app `AuthService.lastRegistration`, đọc lại hồ sơ trước khi commit; `_ensureUserDoc` không ghi tên rỗng.
+- ODO 0–999 999 (`MAX_ODO_KM`, `maxOdoKm`, ô nhập 6 chữ số); Gara xe → Thông số kiểm khoảng, SoH chỉ lưu khi nhập (1–100), ODO nhỏ hơn số cũ phải xác nhận; lỗi "ODO không thể nhỏ hơn" chỉ đường sửa.
+- Quãng đường: chưa nhập SoH thì dùng km/1 % danh mục (Tổng quan hết "— km"); SoH chưa nhập hiện "—" ở Gara/Hồ sơ xe; bot nhận `rangeKm` có mô hình đã học, prompt/kiến thức bảo dùng đúng số đó.
+- Tab Sạc chưa có Shelly: `/live` 404 `notConfigured` không còn báo "Chưa liên lạc được máy chủ"/thử lại; Theo giờ ghi "Chưa kết nối ổ sạc Shelly. Bấm Thiết lập để kết nối."; "máy chủ tự ngắt" chỉ khi có Shelly.
+- Theo giờ tính giờ đầy bằng `ChargeEstimator.wallSeconds` (đuôi > 95 %) như Sạc AI.
+- Đăng xuất/xóa tài khoản/từ chối quyền riêng tư: đặt lại tab, mục Sạc, xe qua `ProviderScope.containerOf` (trước đây `!mounted` bỏ qua); AuthGate đặt lại tab khi đổi tài khoản; hộp thoại đăng xuất nói phiên sạc vẫn chạy.
+- Sức khỏe pin: Giám sát pin không khóa PRO (giống Tiện ích), nhãn PRO không đè chữ (`reserveTagSpace`), Free không bị chỉ tới bài kiểm tra; câu "không có nhiệt độ" sửa theo QA 142.
+- Mã Admin sai ở lại bước nhập mã kèm lý do (không hiện danh sách Wi-Fi). Đăng ký: tự kiểm lại sau lần bấm đầu, lỗi máy chủ tự xóa khi sửa, `autofillHints` tài khoản mới.
+- Màu: `LuxeGlass(selected)` và 14 mã hex emerald (`0x..34D399`) đổi sang màu nhấn gói; thẻ Shelly ở thiết lập "Hỗ trợ" thay "Sẵn sàng".
+- Số: ODO nhóm nghìn (Gara, khảo sát, lỗi, lịch VinFast), trục Bảo dưỡng "235k km", "0.00 kWh" ở Tổng quan, giá theo tháng làm tròn nghìn ("khoảng 37.000đ"), ô % tối đa 3 chữ số. Khoảng trống dưới Tổng quan/Cài đặt cho nút bot và thanh sạc.
+- Quét: câu riêng tư nói rõ ảnh vùng đồng hồ có thể gửi máy chủ (Gemini, không lưu) khi máy không đọc được.
+- Build: `android/app/build.gradle.kts` dừng build profile/release thiếu `APP_API_BASE_URL` (`-PallowMissingApiUrl=true` để bỏ qua).
+- Danh mục theo số VinFast công bố (30 km/h, 65 kg, 1 pin), km/1 % = quãng đường/100, thêm `batteryChemistry`: Evo200/Feliz S/Klara S/Vento S/Theon S 3.5 kWh LFP (203/198/194/160/150 km), Feliz 2025 và Evo Grand 2.4 kWh 134 km (262 km với pin phụ), Evo Lite Neo và Tempest ắc quy chì 60 V 21 Ah 78/80 km, Klara A2 ắc quy chì 960 Wh 80 km, Ludo Li-ion 70 km. Firestore: `web/scripts/qa143_catalog_specs.py` (chạy thử mặc định, chỉ đổi giá trị còn đúng số cũ; chưa chạy production).
+- Không đổi: thói quen/sức khỏe pin chỉ học từ phiên sạc Shelly (điện năng đo được là đầu vào bắt buộc).
+
+**Kiểm thử:** `python -m pytest tests` 838 đạt, 15 bỏ qua (mới: `tests/test_qa143_fixes.py`); `flutter test` 1 327 đạt, 213 bỏ qua (mới: `test/unit/qa143_fixes_test.dart`; `qa137_live_values_test` cập nhật giá làm tròn); `dart analyze` sạch.
+
+**Còn mở:** deploy API và chạy `qa143_catalog_specs.py` trên production (chờ chủ app); tài khoản test giữ lại để kiểm tra lại.
 
 ## 142. Task Completion Log — Khung quét theo dòng xe (Feliz 2025: % pin, ODO, nhiệt độ pin) + Pinova Bot: quy tắc ứng xử do máy chủ quản (01/11/2026) — Test đạt, API đã deploy, APK 1.3.11+214 đã cài OnePlus (02/11)
 

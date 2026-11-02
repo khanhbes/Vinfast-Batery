@@ -471,7 +471,7 @@ class _TierPill extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'khoảng ${formatVnd(from.round())}/tháng',
+            'khoảng ${formatVnd(_roundedThousand(from))}/tháng',
             style: TextStyle(
               // QA 139: solid ink (80 % ink was 3.8:1 on the violet stop).
               color: selected ? PlanColors.ink : LuxeColors.muted,
@@ -771,7 +771,7 @@ class _Price extends StatelessWidget {
     final discounted = promo?.finalPrice(tier, period);
     final shown = discounted ?? base;
     final note = period == PlanPeriod.year
-        ? 'khoảng ${formatVnd((shown / 12).round())} mỗi tháng · tiết kiệm '
+        ? 'khoảng ${formatVnd(_roundedThousand(shown / 12))} mỗi tháng · tiết kiệm '
               '${PlanTable.yearlySavingPct(tier)}% so với trả từng tháng'
         : 'Trả theo năm chỉ ${formatVnd(PlanTable.price(tier, PlanPeriod.year))}';
     return Column(
@@ -1150,3 +1150,7 @@ class _CompareTable extends StatelessWidget {
     );
   }
 }
+
+/// QA 143: a monthly equivalent is approximate ("khoảng 37.000đ"), not
+/// "khoảng 37.417đ".
+int _roundedThousand(num vnd) => (vnd / 1000).round() * 1000;

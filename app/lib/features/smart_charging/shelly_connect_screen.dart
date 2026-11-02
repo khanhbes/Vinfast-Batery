@@ -163,9 +163,14 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       if (!mounted) return;
       setState(() {
         _redeemingCode = false;
-        _snapshot = result;
-        if (result.errorMessage != null) {
-          _codeError = result.errorMessage ?? 'Không thể kích hoạt mã kết nối';
+        if (result.errorMessage != null &&
+            result.state == ShellyConnectionFlowState.connectionFailed) {
+          // QA 143: a wrong code stays on the code step with its reason;
+          // the Wi-Fi / Local Network checklist is about the scan, not codes.
+          _codeError = result.errorMessage;
+        } else {
+          _snapshot = result;
+          if (result.errorMessage != null) _codeError = result.errorMessage;
         }
       });
     } catch (e) {

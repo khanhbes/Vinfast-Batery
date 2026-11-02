@@ -6,6 +6,7 @@ import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_submit_button.dart';
 import '../dashboard_scan_screen.dart';
 import 'battery_reading_sheet.dart';
+import '../../../core/utils/number_text.dart';
 
 /// What the user read on the scooter after a charge (Task 126).
 typedef ActualSocReading = ({double soc, double? odoKm});
@@ -137,7 +138,8 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
       if (previous != null && odo < previous) {
         setState(
           () => _odoError =
-              'ODO không thể nhỏ hơn lần trước (${previous.round()} km).',
+              'ODO không thể nhỏ hơn lần trước (${groupThousands(previous.round())} km). '
+              'Nếu lần trước nhập nhầm, sửa ở Cài đặt → Gara xe → Thông số.',
         );
         return false;
       }
@@ -310,6 +312,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
             key: const ValueKey('actual-soc-odo'),
             controller: _odo,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [LengthLimitingTextInputFormatter(8)],
             textInputAction: TextInputAction.done,
             onSubmitted: (_) => _save(),
             onChanged: (_) {
@@ -319,7 +322,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
               labelText: 'Số ODO trên xe (không bắt buộc)',
               hintText: widget.currentOdoKm == null
                   ? 'Ví dụ: 1250'
-                  : 'Lần trước: ${widget.currentOdoKm!.round()} km',
+                  : 'Lần trước: ${groupThousands(widget.currentOdoKm!.round())} km',
               suffixText: 'km',
               errorText: _odoError,
             ),

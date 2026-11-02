@@ -7,6 +7,7 @@ import '../models/function_call_action.dart';
 import 'assistant_api.dart';
 import 'local_chat_engine.dart';
 import '../../../core/utils/number_text.dart';
+import '../../../core/utils/emergency_text.dart';
 
 /// Reversal of a one-tap change ("hoàn tác").
 class AssistantUndo {
@@ -157,6 +158,12 @@ class HybridAssistantEngine implements LocalChatEngine {
     String message,
     AssistantUnavailable error,
   ) async {
+    // QA 143: fire and smoke get the safety steps offline too, with the
+    // stop card when a verified session can be stopped.
+    if (EmergencyText.matches(message)) {
+      final stop = await local.reply('dừng sạc');
+      return LocalChatReply(EmergencyText.reply, action: stop.action);
+    }
     final reply = await local.reply(message);
     final note = error.quota
         ? 'Bạn đã dùng hết lượt AI hôm nay, mình trả lời ở chế độ cơ bản. '

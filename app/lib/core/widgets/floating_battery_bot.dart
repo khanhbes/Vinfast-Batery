@@ -136,9 +136,12 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                           border: Border.all(
                             color: context.planAccent.withValues(alpha: 0.45),
                           ),
-                          boxShadow: const [
-                            BoxShadow(color: Color(0x2634D399), blurRadius: 18),
+                          boxShadow: [
                             BoxShadow(
+                              color: context.planAccent.withValues(alpha: 0.15),
+                              blurRadius: 18,
+                            ),
+                            const BoxShadow(
                               color: Color(0x66000000),
                               blurRadius: 14,
                               offset: Offset(0, 6),

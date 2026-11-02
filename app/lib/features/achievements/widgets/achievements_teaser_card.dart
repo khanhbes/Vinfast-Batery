@@ -4,6 +4,7 @@ import '../../../core/theme/luxe_theme.dart';
 import '../controllers/achievements_controller.dart';
 import 'achievement_detail_sheet.dart';
 import 'achievement_medal.dart';
+import '../../../core/theme/plan_style.dart';
 
 /// Compact entry on the charging screen: rank medal, points, progress to
 /// the next rank and the nearest achievement to chase.
@@ -31,7 +32,7 @@ class AchievementsTeaserCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(20),
-          splashColor: const Color(0x1434D399),
+          splashColor: context.planAccent.withValues(alpha: 0.08),
           child: LuxeGlass(
             padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
             child: Row(

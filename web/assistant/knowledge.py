@@ -39,7 +39,7 @@ BUILTIN: list[dict] = [
      "body": "App có 4 tab dưới cùng: Tổng quan (pin, quãng đường ước tính, lối tắt), Sạc pin (ba mục Sạc AI, Theo giờ và Lịch sử: các phiên sạc, điện năng, chi phí theo tháng), Tiện ích (Sức khỏe pin, Sạc đêm, Lộ trình, AI cá nhân, Bảo dưỡng, Thành tựu) và Cài đặt (tài khoản, xe, Shelly, gói, thông báo, giao diện, trợ giúp). Nút Pinova Bot nổi ở góc phải dưới."},
     {"id": "overview", "title": "Tổng quan",
      "keywords": ["tổng quan", "pin hiện tại", "quãng đường", "km", "odo", "sức khỏe pin", "soh"],
-     "body": "Tổng quan hiển thị xe đang chọn, % pin đã nhập, quãng đường ước tính, ODO, hiệu suất km/1% pin và sức khỏe pin. Quãng đường = (pin − 5% dự trữ) × km/1% × SoH; đây là ước tính, không phải số đo BMS."},
+     "body": "Tổng quan hiển thị xe đang chọn, % pin đã nhập, quãng đường ước tính, ODO, hiệu suất km/1% pin và sức khỏe pin. Quãng đường = (pin − 5% dự trữ) × km/1% (km/1% đã học từ các chuyến của bạn, nếu chưa có thì theo định mức dòng xe, nhân SoH khi bạn đã nhập SoH); đây là ước tính, không phải số đo BMS. Khi ngữ cảnh xe có rangeKm thì nói đúng số đó, không tự tính lại."},
     {"id": "battery-input", "title": "Nhập mức pin",
      "keywords": ["nhập pin", "mức pin", "sửa pin", "cập nhật pin", "núm bạc"],
      "body": "App không đọc BMS của xe. Người dùng nhập mức pin (và ODO) theo đồng hồ xe: Tổng quan → 'Cập nhật % pin & ODO' (nhập tay, hoặc bấm 'Quét đồng hồ' rồi đưa camera vào đồng hồ xe — app tự nhận % pin và ODO ngay trên máy, người dùng kiểm lại rồi Lưu), kéo núm tối ở tab Sạc pin, hoặc nhờ Pinova Bot cập nhật. Núm sáng (màu của gói) là mức muốn sạc tới."},

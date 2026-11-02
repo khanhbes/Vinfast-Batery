@@ -253,7 +253,9 @@ class _OptionTile extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(20),
-            color: selected ? const Color(0x1434D399) : LuxeColors.glass,
+            color: selected
+                ? context.planAccent.withValues(alpha: 0.08)
+                : LuxeColors.glass,
             border: Border.all(
               color: selected
                   ? context.planAccent.withValues(alpha: 0.6)
