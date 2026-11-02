@@ -81,6 +81,9 @@ def limit_map(tier: str) -> dict:
 
 
 def discounted(price: int, percent_off: int) -> int:
-    """Price after a promo, rounded down to 1.000đ (never below 1.000đ)."""
+    """Price after a promo, rounded down to 1.000đ. A 100 % code is free;
+    any smaller discount stays at least 1.000đ."""
+    if int(percent_off) >= 100:
+        return 0
     value = int(price) * (100 - int(percent_off)) // 100
     return max(1000, value // 1000 * 1000)

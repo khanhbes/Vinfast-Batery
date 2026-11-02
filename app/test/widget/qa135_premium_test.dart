@@ -72,6 +72,18 @@ class _FakeBilling extends BillingRepository {
   @override
   Future<PromoQuote> redeemPromo(String code) async {
     codes.add(code);
+    if (code == 'FREE100') {
+      return PromoQuote.fromMap({
+        'code': 'FREE100',
+        'percentOff': 100,
+        'validTo': '2027-02-01T00:00:00Z',
+        'prices': {
+          'ultra': {
+            'year': {'base': 449000, 'final': 0},
+          },
+        },
+      })!;
+    }
     if (code != 'TET2027') {
       throw const PinovaApiException(
         'promoInvalid',
@@ -260,6 +272,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.text(formatVnd(199000)), findsOneWidget);
     expect(find.text(formatVnd(249000)), findsOneWidget);
+  });
+
+  testWidgets('a 100% code shows the plan as free, not 0đ', (tester) async {
+    final billing = _FakeBilling(_plan('free'));
+    await _pump(tester, const PremiumScreen(), 1, billing, height: 3200);
+    await tester.tap(find.byKey(const ValueKey('premium-promo-toggle')));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(
+      find.byKey(const ValueKey('premium-promo-input')),
+      'FREE100',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const ValueKey('premium-promo-apply')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('Miễn phí'), findsOneWidget);
+    expect(find.text(formatVnd(0)), findsNothing);
+    expect(find.textContaining('miễn phí với mã'), findsOneWidget);
   });
 
   testWidgets('submit button ignores taps while busy and returns on failure', (

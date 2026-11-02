@@ -101,8 +101,9 @@ class PromoService:
                 percent = int(body.get("percentOff"))
             except (TypeError, ValueError):
                 raise BillingError("invalidPromo", "% giảm phải là số.") from None
-            if not 1 <= percent <= 90:
-                raise BillingError("invalidPromo", "% giảm phải từ 1 đến 90.")
+            # Owner's choice (02/11/2026): up to 100 % (a free plan by code).
+            if not 1 <= percent <= 100:
+                raise BillingError("invalidPromo", "% giảm phải từ 1 đến 100.")
             base["percentOff"] = percent
         if "validTo" in body or existing is None:
             valid_to = _utc(body.get("validTo"))

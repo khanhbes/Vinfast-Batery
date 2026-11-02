@@ -264,8 +264,8 @@ export default function PremiumPlans() {
   const savePromo = async () => {
     if (!draft) return;
     const percent = Number(draft.percentOff);
-    if (!Number.isInteger(percent) || percent < 1 || percent > 90) {
-      toast.error('Mức chiết khấu phải là số nguyên từ 1% đến 90%.');
+    if (!Number.isInteger(percent) || percent < 1 || percent > 100) {
+      toast.error('Mức chiết khấu phải là số nguyên từ 1% đến 100%.');
       return;
     }
     if (!draft.validTo) {
@@ -663,7 +663,7 @@ export default function PremiumPlans() {
                     className="h-8 text-xs tabular-nums border-[var(--border-hairline)] bg-[var(--bg-canvas)]"
                     type="number"
                     min={1}
-                    max={90}
+                    max={100}
                     placeholder="20"
                     value={draft.percentOff}
                     onChange={(e) =>

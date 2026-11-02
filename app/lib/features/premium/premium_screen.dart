@@ -770,7 +770,11 @@ class _Price extends StatelessWidget {
     final base = PlanTable.price(tier, period);
     final discounted = promo?.finalPrice(tier, period);
     final shown = discounted ?? base;
-    final note = period == PlanPeriod.year
+    // A 100 % promo code makes the plan free (owner's choice, 02/11/2026).
+    final free = shown == 0;
+    final note = free
+        ? 'Miễn phí với mã ${promo!.code} (giảm ${promo!.percentOff}%)'
+        : period == PlanPeriod.year
         ? 'khoảng ${formatVnd(_roundedThousand(shown / 12))} mỗi tháng · tiết kiệm '
               '${PlanTable.yearlySavingPct(tier)}% so với trả từng tháng'
         : 'Trả theo năm chỉ ${formatVnd(PlanTable.price(tier, PlanPeriod.year))}';
@@ -782,7 +786,7 @@ class _Price extends StatelessWidget {
           spacing: 8,
           children: [
             Text(
-              formatVnd(shown),
+              free ? 'Miễn phí' : formatVnd(shown),
               key: ValueKey('premium-price-${tier.id}'),
               style: const TextStyle(
                 color: LuxeColors.text,
@@ -791,13 +795,14 @@ class _Price extends StatelessWidget {
                 letterSpacing: -0.5,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Text(
-                period == PlanPeriod.year ? '/năm' : '/tháng',
-                style: LuxeText.caption,
+            if (!free)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text(
+                  period == PlanPeriod.year ? '/năm' : '/tháng',
+                  style: LuxeText.caption,
+                ),
               ),
-            ),
             if (discounted != null)
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
@@ -842,11 +847,11 @@ class _ActionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final covered = plan.isPremium && plan.tier.covers(tier);
-    final price = formatVnd(
-      promo?.finalPrice(tier, period) ?? PlanTable.price(tier, period),
-    );
-    final buyLabel =
-        'Chọn ${tier.label} · $price/${period == PlanPeriod.year ? 'năm' : 'tháng'}';
+    final amount =
+        promo?.finalPrice(tier, period) ?? PlanTable.price(tier, period);
+    final buyLabel = amount == 0
+        ? 'Chọn ${tier.label} · miễn phí với mã'
+        : 'Chọn ${tier.label} · ${formatVnd(amount)}/${period == PlanPeriod.year ? 'năm' : 'tháng'}';
     final trial = plan.trialAvailable && !plan.isPremium;
     final Widget content;
     if (covered) {

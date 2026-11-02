@@ -50,6 +50,9 @@ def test_discount_rounds_down_to_thousand_dong():
     assert features.discounted(29000, 50) == 14000
     assert features.discounted(29000, 90) == 2000
     assert features.discounted(1500, 90) == 1000
+    # Owner's choice (02/11/2026): a 100 % code is free; 99 % keeps the 1.000đ floor.
+    assert features.discounted(449000, 100) == 0
+    assert features.discounted(29000, 99) == 1000
 
 
 def test_new_account_is_free_and_trial_is_once(clock):
@@ -144,7 +147,7 @@ def test_promo_generated_code_and_validation(clock):
     item = promos.create(promo(clock), actor="admin")
     assert len(item["code"]) == 8 and normalize_code(item["code"]) == item["code"]
     assert not set(generate_code(40)) & set("01IO")
-    for bad in (promo(clock, percentOff=0), promo(clock, percentOff=95), promo(clock, validTo=None),
+    for bad in (promo(clock, percentOff=0), promo(clock, percentOff=101), promo(clock, validTo=None),
                 promo(clock, validTo=(clock.now - timedelta(days=1)).isoformat()),
                 promo(clock, tiers=["free"]), promo(clock, periods=["lifetime"]),
                 promo(clock, code="AB"), promo(clock, tiers="pro")):
@@ -242,7 +245,7 @@ def test_admin_routes_grant_revoke_promos_with_audit(clock):
     assert patched.get_json()["data"]["state"] == "inactive"
     assert [item["code"] for item in http.get("/api/admin/promos").get_json()["data"]["items"]] == ["TET2027"]
     assert [a[0] for a in audits] == ["billing_grant", "billing_revoke", "promo_create", "promo_update"]
-    bad = http.post("/api/admin/promos", json=promo(clock, percentOff=100))
+    bad = http.post("/api/admin/promos", json=promo(clock, percentOff=101))
     assert bad.status_code == 400 and bad.get_json()["code"] == "invalidPromo"
 
 
@@ -272,3 +275,12 @@ def test_smart_charge_gate_raises_premium_required(clock):
     assert "Ultra" in error.value.message
     service.entitlements.grant("u1", "pro", period="month")
     service.require_feature("u1", "target_charging")
+
+
+def test_a_100_percent_code_quotes_a_free_plan(clock):
+    """Owner's choice (02/11/2026): admin codes may give up to 100 % off."""
+    promos = PromoService(clock=clock)
+    promos.create(promo(clock, code="FREE100", percentOff=100), actor="admin")
+    quote = promos.redeem("u1", "FREE100")
+    assert quote["percentOff"] == 100
+    assert quote["prices"]["ultra"]["year"] == {"base": 449000, "final": 0}
