@@ -254,7 +254,7 @@ class GuideRegistry {
     _step(
       'utilities_health',
       'Sức khỏe pin',
-      'Dung lượng pin còn lại sau mỗi lần sạc và dấu hiệu chai (gói Pro).',
+      'Dung lượng pin còn lại sau mỗi lần sạc; xu hướng và bài kiểm tra ở gói Pro.',
       keyUtilitiesHealth,
     ),
     _step(

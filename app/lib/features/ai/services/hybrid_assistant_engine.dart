@@ -145,6 +145,12 @@ class HybridAssistantEngine implements LocalChatEngine {
     if (turn.lockedUntil != null) AssistantLock.until.value = turn.lockedUntil;
     _remember('user', message);
     _remember('assistant', turn.reply);
+    if (turn.emergency) {
+      // QA 143: the safety steps stay on screen. The stop action used to go
+      // through _act, whose "no Shelly" text replaced the whole SOS reply.
+      final stop = await local.reply('dừng sạc');
+      return LocalChatReply(turn.reply, action: stop.action);
+    }
     if (turn.actions.isEmpty) {
       return LocalChatReply(turn.reply, card: turn.card);
     }

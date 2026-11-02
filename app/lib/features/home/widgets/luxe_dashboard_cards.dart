@@ -417,6 +417,7 @@ class LuxeBatteryCapacityCard extends ConsumerWidget {
           value: null,
           title: 'Dung lượng pin còn lại',
           caption: 'Ước tính từ các lần sạc của bạn, có ở gói Pro.',
+          tagRoom: true,
         ),
       );
     }
@@ -484,12 +485,16 @@ class _CapacityShell extends StatelessWidget {
     required this.value,
     required this.title,
     required this.caption,
+    this.tagRoom = false,
   });
 
   /// Capacity in %, or null while there is no estimate.
   final double? value;
   final String title;
   final String caption;
+
+  /// QA 143: the plan tag sits at the top end; keep the eyebrow clear of it.
+  final bool tagRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -528,7 +533,17 @@ class _CapacityShell extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('DUNG LƯỢNG · ƯỚC TÍNH', style: LuxeText.eyebrow),
+                  Padding(
+                    padding: EdgeInsetsDirectional.only(
+                      end: tagRoom
+                          ? MediaQuery.textScalerOf(context).scale(56)
+                          : 0,
+                    ),
+                    child: const Text(
+                      'DUNG LƯỢNG · ƯỚC TÍNH',
+                      style: LuxeText.eyebrow,
+                    ),
+                  ),
                   const SizedBox(height: 6),
                   Text(title, style: LuxeText.item),
                   const SizedBox(height: 2),

@@ -343,7 +343,9 @@ class _VehicleCard extends StatelessWidget {
     final meta = [
       if (plate.isNotEmpty) plate,
       year == null ? 'Năm —' : 'Năm $year',
-      battery == null || battery! <= 0 ? 'Pin —' : '${battery!.toInt()} Wh',
+      battery == null || battery! <= 0
+          ? 'Pin —'
+          : '${groupThousands(battery!.round())} Wh',
       ?batteryType,
     ].join(' · ');
     final sohColor = soh == null

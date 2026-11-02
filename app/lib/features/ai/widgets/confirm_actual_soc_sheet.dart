@@ -325,6 +325,8 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
                   : 'Lần trước: ${groupThousands(widget.currentOdoKm!.round())} km',
               suffixText: 'km',
               errorText: _odoError,
+              // QA 143: the hint where to fix a wrong ODO is two lines.
+              errorMaxLines: 3,
             ),
           ),
           const SizedBox(height: 14),

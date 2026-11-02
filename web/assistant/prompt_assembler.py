@@ -111,6 +111,7 @@ class PromptAssembler:
                     "sohPercent",
                     "capacityWh",
                     "kmPerPercent",
+                    "kmPerPercentSource",
                     "rangeKm",
                     "targetSoc",
                 )

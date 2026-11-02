@@ -195,3 +195,17 @@ def test_the_script_and_the_bundled_catalog_agree():
             assert bundled[model_id].get(key, "LFP") == new, (model_id, key)
         spec = bundled[model_id]
         assert spec["defaultEfficiencyKmPerPercent"] == round(spec["rangeKm"] / 100, 2)
+
+
+def test_the_prompt_says_where_the_km_per_percent_comes_from():
+    """The bot called a catalog figure "dữ liệu học được" (QA 143 retest)."""
+    import json
+    from assistant.prompt_assembler import PromptAssembler
+    out = PromptAssembler().assemble(
+        version_config={}, uid="u1", message="xe tôi còn đi được bao xa",
+        context={"vehicle": {"name": "Feliz", "batteryPercent": 80, "kmPerPercent": 1.34,
+                             "kmPerPercentSource": "catalog", "rangeKm": 101}},
+        facts=[], learning=False, knowledge_entries=[], operational_rules_block="")
+    prompt = out["systemPrompt"]
+    assert '"kmPerPercentSource": "catalog", "rangeKm": 101' in prompt
+    assert json

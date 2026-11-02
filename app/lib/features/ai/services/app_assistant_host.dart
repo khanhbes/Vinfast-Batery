@@ -122,17 +122,10 @@ class AppAssistantActionHost implements AssistantActionHost {
           if (vehicle.hasSohData) 'sohPercent': vehicle.stateOfHealth,
           if (vehicle.batteryCapacityWh > 0)
             'capacityWh': vehicle.batteryCapacityWh,
-          if (vehicle.hasEfficiencyData)
-            'kmPerPercent': vehicle.defaultEfficiency,
           // QA 143: the same range the Overview shows (learned km/1 % and
-          // the 5 % reserve), so the bot never computes its own.
-          'rangeKm': estimateRangeKm(
-            vehicle,
-            learned: ref
-                .read(learnedModelsProvider(vehicle.vehicleId))
-                .valueOrNull
-                ?.trip,
-          )?.round(),
+          // the 5 % reserve) and where its km/1 % comes from, so the bot
+          // neither computes its own nor calls a catalog figure "learned".
+          ...?_rangeContext(vehicle),
           'targetSoc': ?target?.round(),
         },
       'vehicles': [
@@ -150,6 +143,29 @@ class AppAssistantActionHost implements AssistantActionHost {
         'chargeLockReason': connection.chatLockExplanation,
       if (connection.status != null) 'shellyRelayOn': connection.status!.relay,
       'settings': {'pushNotifications': ?_push, 'language': 'vi'},
+    };
+  }
+
+  Map<String, Object>? _rangeContext(VehicleModel vehicle) {
+    final learned = ref
+        .read(learnedModelsProvider(vehicle.vehicleId))
+        .valueOrNull
+        ?.trip;
+    final range = estimateRange(vehicle, learned: learned);
+    if (range == null) {
+      return vehicle.hasEfficiencyData
+          ? {
+              'kmPerPercent': vehicle.defaultEfficiency,
+              'kmPerPercentSource': 'catalog',
+            }
+          : null;
+    }
+    return {
+      'kmPerPercent': double.parse(range.kmPerPct.toStringAsFixed(2)),
+      'kmPerPercentSource': range.source == RangeSource.learned
+          ? 'learned'
+          : 'catalog',
+      'rangeKm': range.km.round(),
     };
   }
 

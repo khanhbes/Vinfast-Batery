@@ -12,7 +12,8 @@ import '../../../data/models/maintenance_task_model.dart';
 Color urgencyColor(MaintenanceUrgency u) => switch (u) {
   MaintenanceUrgency.overdue => LuxeColors.danger,
   MaintenanceUrgency.dueSoon => LuxeColors.champagne,
-  MaintenanceUrgency.upcoming => LuxeColors.emerald,
+  // QA 143: a planned service is information, not a verified state.
+  MaintenanceUrgency.upcoming => LuxeColors.steel,
   MaintenanceUrgency.completed => LuxeColors.platinumMid,
 };
 

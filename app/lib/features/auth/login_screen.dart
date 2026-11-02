@@ -59,8 +59,13 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// QA 143: after the first check each field re-checks as it is typed, so
+  /// a filled password does not keep "Nhập mật khẩu".
+  bool _submitted = false;
+
   Future<void> _submit() async {
     if (_loading || _remaining > Duration.zero) return;
+    if (!_submitted) setState(() => _submitted = true);
     if (!_formKey.currentState!.validate()) return;
     HapticFeedback.lightImpact();
     setState(() {
@@ -137,6 +142,9 @@ class _LoginScreenState extends State<LoginScreen> {
         AutofillGroup(
           child: Form(
             key: _formKey,
+            autovalidateMode: _submitted
+                ? AutovalidateMode.onUserInteraction
+                : AutovalidateMode.disabled,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,

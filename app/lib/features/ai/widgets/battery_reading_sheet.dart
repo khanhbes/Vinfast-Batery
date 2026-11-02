@@ -231,8 +231,8 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
             eyebrow: widget.eyebrow,
             title: widget.title,
             caption:
-                'Quét đồng hồ: đưa camera vào, app tự nhận % pin và ODO ngay '
-                'trên máy. Bạn kiểm tra lại trước khi lưu.',
+                'Quét đồng hồ: đưa camera vào, app tự nhận % pin và ODO. '
+                'Bạn kiểm tra lại trước khi lưu.',
             trailing: LuxeCircleButton(
               icon: Icons.close_rounded,
               tooltip: 'Đóng',
@@ -340,6 +340,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
                   : '% pin trên đồng hồ (không bắt buộc)',
               suffixText: '%',
               errorText: _socError,
+              errorMaxLines: 3,
             ),
           ),
           const SizedBox(height: 12),
@@ -360,6 +361,8 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
                   : 'Lần trước: ${groupThousands(widget.currentOdoKm!.round())} km',
               suffixText: 'km',
               errorText: _odoError,
+              // QA 143: the hint where to fix a wrong ODO is two lines.
+              errorMaxLines: 3,
             ),
           ),
           const SizedBox(height: 14),

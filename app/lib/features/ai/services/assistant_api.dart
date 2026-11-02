@@ -24,7 +24,12 @@ class AssistantTurn {
     this.remainingToday,
     this.card,
     this.lockedUntil,
+    this.emergency = false,
   });
+
+  /// QA 143: the server's fire/smoke/shock safety reply (SOS). Its text is
+  /// always shown; the stop card is added only when there is a session.
+  final bool emergency;
 
   /// QA 142: the server locked Pinova Bot for this account until then
   /// (Community rules, 3 strikes).
@@ -210,6 +215,7 @@ class AssistantApi {
               '${(data['assistantLock'] as Map)['until']}',
             )?.toLocal()
           : null,
+      emergency: data['emergencyBypass'] == true,
     );
   }
 

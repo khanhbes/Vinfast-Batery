@@ -57,19 +57,34 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     _batteryTypeCtrl = TextEditingController(
       text: v['batteryType'] ?? v['batteryChemistry'] ?? 'LFP',
     );
+    final capacity = v['batteryCapacity'];
     _batteryCapCtrl = TextEditingController(
-      text: '${(v['batteryCapacity'] ?? 0).toInt()}',
+      text: groupThousands(capacity is num ? capacity.round() : 0),
     );
-    // QA 143: a SoH nobody entered is not "100".
-    final soh = v['stateOfHealth'];
-    _sohCtrl = TextEditingController(
-      text: v['hasSohData'] != false && soh is num ? '${soh.round()}' : '',
-    );
-    _odoCtrl = TextEditingController(text: '${(v['currentOdo'] ?? 0).toInt()}');
+    _sohCtrl = TextEditingController();
+    _odoCtrl = TextEditingController();
+    _fillEditable();
     _efficiencyCtrl = TextEditingController(
       text: '${(v['defaultEfficiency'] ?? 1.2)}',
     );
     _loadSpec();
+  }
+
+  /// What is saved now; "Hủy" goes back to it and the ODO check compares
+  /// with it (QA 143: "Hủy" left the unsaved ODO on screen).
+  late final Map<String, dynamic> _saved = Map.of(widget.vehicleData);
+
+  void _fillEditable() {
+    final v = _saved;
+    _modelCtrl.text = (v['nickname'] ?? '').toString();
+    _licensePlateCtrl.text = (v['licensePlate'] ?? '').toString();
+    // QA 143: a SoH nobody entered is not "100".
+    final soh = v['stateOfHealth'];
+    _sohCtrl.text = v['hasSohData'] != false && soh is num
+        ? '${soh.round()}'
+        : '';
+    final odo = v['currentOdo'];
+    _odoCtrl.text = '${odo is num ? odo.toInt() : 0}';
   }
 
   @override
@@ -108,7 +123,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       AppPopup.showMessage('ODO phải từ 0 đến 999 999 km.');
       return;
     }
-    final oldOdo = widget.vehicleData['currentOdo'];
+    final oldOdo = _saved['currentOdo'];
     if (oldOdo is num && odo < oldOdo) {
       // The one place an ODO may go down: fixing a number typed by mistake.
       final fix = await showLuxeConfirm(
@@ -144,13 +159,24 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
       });
 
       if (result['success'] == true) {
+        _saved.addAll({
+          'nickname': _modelCtrl.text.trim(),
+          'licensePlate': _licensePlateCtrl.text.trim(),
+          if (soh != null) 'stateOfHealth': soh.toDouble(),
+          if (soh != null) 'hasSohData': true,
+          'currentOdo': odo,
+        });
         AppPopup.showSuccess('Đã cập nhật thông số');
       } else {
+        setState(_fillEditable);
         AppPopup.showError(result['error'] ?? 'Cập nhật thất bại');
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isSaving = false);
+        setState(() {
+          _isSaving = false;
+          _fillEditable();
+        });
         AppPopup.showError('Cập nhật thất bại', error: e);
       }
     }
@@ -167,7 +193,10 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
         actions: [
           if (_isEditing && !_isSaving)
             TextButton(
-              onPressed: () => setState(() => _isEditing = false),
+              onPressed: () => setState(() {
+                _fillEditable();
+                _isEditing = false;
+              }),
               child: const Text('Hủy'),
             ),
           TextButton(
@@ -330,9 +359,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                   runSpacing: 6,
                   children: [
                     LuxeTag(_yearCtrl.text),
-                    LuxeTag(
-                      '${groupThousands(int.tryParse(_batteryCapCtrl.text) ?? 0)} Wh',
-                    ),
+                    LuxeTag('${_batteryCapCtrl.text} Wh'),
                     LuxeTag(_batteryTypeCtrl.text, color: LuxeColors.steel),
                   ],
                 ),
@@ -475,15 +502,23 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   Widget _buildCatalogSection() {
     final spec = _spec;
     if (spec == null) return const SizedBox();
+    // QA 143: grouped thousands, the published range and top speed, and no
+    // raw source id ("vinfast_official") on screen.
+    String n(num value) => groupThousands(value.round());
     final rows = <(String, String)>[
       ('Tên model', spec.modelName),
-      ('Dung lượng (Wh)', '${spec.nominalCapacityWh.toInt()}'),
-      ('Dung lượng (Ah)', spec.nominalCapacityAh.toStringAsFixed(1)),
-      ('Điện áp (V)', '${spec.nominalVoltageV.toInt()}'),
-      ('Sạc tối đa (W)', '${spec.maxChargePowerW.toInt()}'),
-      ('Motor định mức (W)', '${spec.ratedMotorPowerW.toInt()}'),
-      ('Motor peak (W)', '${spec.peakMotorPowerW.toInt()}'),
-      ('Nguồn dữ liệu', spec.source),
+      ('Dung lượng (Wh)', n(spec.nominalCapacityWh)),
+      ('Dung lượng (Ah)', n(spec.nominalCapacityAh)),
+      ('Điện áp (V)', n(spec.nominalVoltageV)),
+      if (spec.batteryChemistry case final chemistry?) ('Loại pin', chemistry),
+      if (spec.rangeKm case final range?)
+        ('Quãng đường công bố', '${n(range)} km'),
+      if (spec.topSpeedKmh case final speed?)
+        ('Tốc độ tối đa', '${n(speed)} km/h'),
+      ('Sạc tối đa (W)', n(spec.maxChargePowerW)),
+      ('Motor định mức (W)', n(spec.ratedMotorPowerW)),
+      ('Motor peak (W)', n(spec.peakMotorPowerW)),
+      ('Nguồn dữ liệu', 'Số liệu VinFast công bố'),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

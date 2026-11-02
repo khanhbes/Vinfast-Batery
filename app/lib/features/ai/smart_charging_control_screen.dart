@@ -283,7 +283,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 onRefresh: () => controller.refresh(force: true),
                 child: ListView(
                   controller: _scroll,
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 40),
+                  // QA 143: the last button scrolls clear of the Pinova Bot
+                  // button floating at the bottom end.
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 128),
                   children: [
                     StreamBuilder<ShellyConnectionSnapshot>(
                       stream: ShellyConnectionCoordinator.shared.states,

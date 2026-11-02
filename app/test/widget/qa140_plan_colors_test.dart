@@ -35,7 +35,6 @@ const _emeraldAllowed = <String, int>{
   'features/ai/widgets/recent_sessions_section_v2.dart': 2,
   'features/ai/widgets/session_soc_summary.dart': 1,
   'features/maintenance/maintenance_screen.dart': 1,
-  'features/maintenance/widgets/odo_widgets.dart': 1,
   'features/more/more_screen.dart': 1,
   'features/more/widgets/luxe_tile_grid.dart': 1,
   'features/notifications/notification_center_screen.dart': 1,
@@ -60,6 +59,22 @@ void main() {
       if (count > allowed) problems.add('$rel: $count (allowed $allowed)');
     }
     expect(problems, isEmpty, reason: 'use context.planAccent for highlights');
+  });
+
+  test('QA 143: no hard-coded emerald hex outside the palette', () {
+    // `Color(0x2234D399)` slipped past the rule above (selected glass,
+    // bot glow, chips): the hex is emerald all the same.
+    final hex = RegExp(r'0x[0-9A-Fa-f]{2}34D399', caseSensitive: false);
+    final problems = <String>[];
+    for (final entity in Directory('lib').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final rel = entity.path
+          .replaceAll(r'\', '/')
+          .replaceFirst(RegExp(r'^lib/'), '');
+      if (rel.startsWith('core/theme/')) continue;
+      if (hex.hasMatch(entity.readAsStringSync())) problems.add(rel);
+    }
+    expect(problems, isEmpty, reason: 'use context.planAccent');
   });
 
   testWidgets('the accent follows the plan; status colours do not', (

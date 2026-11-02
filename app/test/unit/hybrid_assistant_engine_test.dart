@@ -111,6 +111,32 @@ void main() {
     );
   }
 
+  test('QA 143: the SOS reply stays when there is nothing to stop', () async {
+    final engine = build([
+      const AssistantTurn(
+        reply: 'CẢNH BÁO AN TOÀN KHẨN CẤP: gọi 114',
+        actions: [
+          AssistantAction('stop_charging', {}),
+          AssistantAction('contact_support', {'category': 'charger'}),
+        ],
+        emergency: true,
+      ),
+    ]);
+    final reply = await engine.reply('Xe bị cháy, có khói');
+    // The local "no Shelly" answer used to replace the safety steps.
+    expect(reply.text, contains('114'));
+    expect(reply.text, isNot('FAQ answer'));
+    expect(local.asked, ['dừng sạc']);
+    expect(host.prepared, isEmpty);
+  });
+
+  test('QA 143: offline, fire words still get the safety steps', () async {
+    final engine = build([const AssistantUnavailable('network')]);
+    final reply = await engine.reply('Xe bị cháy, có khói');
+    expect(reply.text, contains('114'));
+    expect(local.asked, ['dừng sạc']);
+  });
+
   test('plain answers keep a short history for the next turn', () async {
     final engine = build([
       const AssistantTurn(reply: 'Chào bạn', actions: []),

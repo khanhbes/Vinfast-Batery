@@ -37,9 +37,11 @@ class _Server extends ServerSmartChargerService {
   String? redeemedVehicle;
   bool failRedeem = false;
   bool failStatus = false;
+  bool hasBinding = true;
   @override
   Future<SmartChargerBinding?> getBinding({String? vehicleId}) async {
     scopes.add(vehicleId);
+    if (!hasBinding) return null;
     return SmartChargerBinding(
       deviceId: 'qa-device',
       displayName: 'Shelly',
@@ -323,6 +325,37 @@ void main() {
       expect(result.serverBinding!.noLoadTestVerified, true);
       expect(result.errorMessage, contains('Mã hết'));
       expect(server.safetyCommands, 0);
+      await coordinator.dispose();
+    },
+  );
+
+  test(
+    'QA 143: a wrong code without a link keeps the account state unchanged',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final server = _Server()
+        ..failRedeem = true
+        ..hasBinding = false;
+      final coordinator = ShellyConnectionCoordinator(
+        credentials: _Credentials(),
+        serverCharger: server,
+      );
+      coordinator.activateAccount('qa-account');
+      final before = await coordinator.restore(vehicleId: 'qa-vehicle');
+      expect(before.isLinked, false);
+      final emitted = <ShellyConnectionFlowState>[];
+      final sub = coordinator.states.listen((s) => emitted.add(s.state));
+      final result = await coordinator.redeemCode(
+        'ZZZZ99',
+        vehicleId: 'qa-vehicle',
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(result.state, ShellyConnectionFlowState.connectionFailed);
+      expect(result.errorMessage, isNotEmpty);
+      // The shared state goes back to what it was, not "connection failed".
+      expect(coordinator.current.state, before.state);
+      expect(emitted.last, before.state);
+      await sub.cancel();
       await coordinator.dispose();
     },
   );

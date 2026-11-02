@@ -1352,11 +1352,13 @@ class ShellyConnectionCoordinator {
         );
         return _current;
       }
-      _emit(
-        ShellyConnectionSnapshot(
-          state: ShellyConnectionFlowState.connectionFailed,
-          errorMessage: error.message,
-        ),
+      // QA 143: a wrong or expired code leaves the account's link state as
+      // it was (Charge tab, setup); only the code step shows why. Emitting
+      // connectionFailed put the Wi-Fi checklist on the code screen.
+      _emit(previous);
+      return ShellyConnectionSnapshot(
+        state: ShellyConnectionFlowState.connectionFailed,
+        errorMessage: error.message,
       );
     } on Object {
       if (generation != _accountGeneration) return _current;
@@ -1372,12 +1374,10 @@ class ShellyConnectionCoordinator {
         );
         return _current;
       }
-      _emit(
-        ShellyConnectionSnapshot(
-          state: ShellyConnectionFlowState.connectionFailed,
-          errorMessage:
-              'Chưa thể liên kết Shelly. Kiểm tra kết nối rồi thử lại.',
-        ),
+      _emit(previous);
+      return const ShellyConnectionSnapshot(
+        state: ShellyConnectionFlowState.connectionFailed,
+        errorMessage: 'Chưa thể liên kết Shelly. Kiểm tra kết nối rồi thử lại.',
       );
     } finally {
       if (generation == _accountGeneration) _busy = false;
