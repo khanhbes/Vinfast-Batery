@@ -9,9 +9,6 @@ import {
   Search,
   Sparkles,
   ShieldAlert,
-  ShieldCheck,
-  Lock,
-  Unlock,
 } from 'lucide-react';
 import {
   adminBillingGrant,
@@ -132,58 +129,6 @@ export default function PremiumPlans() {
   );
   const [draft, setDraft] = useState<PromoDraft | null>(null);
 
-  // Disabled plans tracking (stored in localStorage for persistence across reloads)
-  const [disabledPlans, setDisabledPlans] = useState<
-    Record<string, { disabled: boolean; reason: string; disabledAt: string }>
-  >(() => {
-    try {
-      const saved = localStorage.getItem('pinova_disabled_plans');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
-
-  const [planLockModal, setPlanLockModal] = useState<{
-    planKey: string;
-    planTitle: string;
-    currentDisabled: boolean;
-  } | null>(null);
-  const [lockReason, setLockReason] = useState(
-    'Phát hiện giao dịch bất thường / Nghi vấn lạm dụng mã chiết khấu'
-  );
-
-  const confirmTogglePlan = () => {
-    if (!planLockModal) return;
-    const { planKey, planTitle, currentDisabled } = planLockModal;
-    const nextDisabled = !currentDisabled;
-    const nextState = {
-      ...disabledPlans,
-      [planKey]: {
-        disabled: nextDisabled,
-        reason: lockReason,
-        disabledAt: new Date().toISOString(),
-      },
-    };
-    setDisabledPlans(nextState);
-    try {
-      localStorage.setItem('pinova_disabled_plans', JSON.stringify(nextState));
-    } catch {
-      /* optional */
-    }
-
-    if (nextDisabled) {
-      toast.error(
-        `Đã VÔ HIỆU HÓA gói ${planTitle}. Đăng ký mới trên ứng dụng mobile đã bị khóa khẩn cấp.`
-      );
-    } else {
-      toast.success(
-        `Đã MỞ LẠI gói ${planTitle}. Người dùng có thể tiếp tục đăng ký bình thường.`
-      );
-    }
-    setPlanLockModal(null);
-  };
-
   const plansCatalog = useMemo(
     () => [
       {
@@ -211,16 +156,6 @@ export default function PremiumPlans() {
         subscribers: counts?.ultra ?? 0,
         description: 'Tối đa 10 xe · 100 lượt Bot/ngày · Sạc đêm · AI cá nhân · Giao diện Aurora',
         tone: 'text-[var(--accent-primary)]',
-        isSystem: false,
-      },
-      {
-        key: 'fleet',
-        name: 'Đội xe / Fleet',
-        price: 'Theo hợp đồng',
-        subscribers: counts?.fleet ?? 0,
-        description:
-          'Quản trị tập trung doanh nghiệp · Báo cáo tổng hợp · API Gateway chuyên dụng',
-        tone: 'text-purple-400',
         isSystem: false,
       },
     ],
@@ -454,19 +389,12 @@ export default function PremiumPlans() {
           </div>
         </CardHeader>
         <CardContent className="p-5">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {plansCatalog.map((plan) => {
-              const lockInfo = disabledPlans[plan.key];
-              const isDisabled = lockInfo?.disabled === true;
-
               return (
                 <div
                   key={plan.key}
-                  className={`relative rounded-2xl border p-4 flex flex-col justify-between transition-all ${
-                    isDisabled
-                      ? 'border-rose-500/50 bg-rose-500/5 shadow-rose-500/10'
-                      : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] hover:border-[var(--accent-primary)]/40'
-                  }`}
+                  className="relative rounded-2xl border p-4 flex flex-col justify-between transition-all border-[var(--border-hairline)] bg-[var(--bg-canvas)] hover:border-[var(--accent-primary)]/40"
                 >
                   <div className="space-y-3">
                     {/* Top Row: Plan name & Status */}
@@ -477,16 +405,6 @@ export default function PremiumPlans() {
                           {plan.price}
                         </p>
                       </div>
-
-                      {isDisabled ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-400 border border-rose-500/30">
-                          <Lock className="h-3 w-3" /> Đã khóa
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 border border-emerald-500/30">
-                          <ShieldCheck className="h-3 w-3" /> Đang mở
-                        </span>
-                      )}
                     </div>
 
                     {/* Active subscribers count */}
@@ -508,49 +426,6 @@ export default function PremiumPlans() {
                         {plan.description}
                       </p>
                     </details>
-
-                    {isDisabled && lockInfo.reason && (
-                      <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2 text-[10px] text-rose-300">
-                        <strong>Lý do khóa:</strong> {lockInfo.reason}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action button */}
-                  <div className="mt-4 pt-3 border-t border-[var(--border-hairline)]">
-                    {plan.isSystem ? (
-                      <span className="text-[11px] text-[var(--text-muted)] italic block text-center py-1">
-                        Gói nền tảng hệ thống
-                      </span>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={isDisabled ? 'default' : 'outline'}
-                        onClick={() => {
-                          setPlanLockModal({
-                            planKey: plan.key,
-                            planTitle: plan.name,
-                            currentDisabled: isDisabled,
-                          });
-                        }}
-                        className={`w-full h-8 text-xs font-semibold gap-1.5 ${
-                          isDisabled
-                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                            : 'border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300'
-                        }`}
-                      >
-                        {isDisabled ? (
-                          <>
-                            <Unlock className="h-3.5 w-3.5" /> Mở lại gói này
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="h-3.5 w-3.5" /> Vô hiệu hóa gói (Bất thường)
-                          </>
-                        )}
-                      </Button>
-                    )}
                   </div>
                 </div>
               );
@@ -1048,96 +923,6 @@ export default function PremiumPlans() {
           </div>
         </CardContent>
       </Card>
-
-      {/* PLAN LOCK/DISABLE CONFIRMATION MODAL */}
-      {planLockModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4">
-            <div className="flex items-center gap-3">
-              <div
-                className={`rounded-xl p-2.5 ${
-                  planLockModal.currentDisabled
-                    ? 'bg-emerald-500/10 text-emerald-400'
-                    : 'bg-rose-500/10 text-rose-400'
-                }`}
-              >
-                {planLockModal.currentDisabled ? (
-                  <Unlock className="h-6 w-6" />
-                ) : (
-                  <ShieldAlert className="h-6 w-6" />
-                )}
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-[var(--text-primary)]">
-                  {planLockModal.currentDisabled
-                    ? `Mở lại đăng ký gói ${planLockModal.planTitle}`
-                    : `Xác nhận vô hiệu hóa gói ${planLockModal.planTitle}`}
-                </h3>
-                <p className="text-xs text-[var(--text-muted)]">
-                  {planLockModal.currentDisabled
-                    ? 'Phục hồi khả năng đăng ký cho người dùng'
-                    : 'Khóa khẩn cấp ngăn chặn bất thường'}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-              {planLockModal.currentDisabled ? (
-                <span>
-                  Gói <strong className="text-[var(--text-primary)]">{planLockModal.planTitle}</strong> sẽ
-                  được kích hoạt trở lại. Người dùng ứng dụng mobile có thể tiếp tục mua mới và gia hạn
-                  bình thường.
-                </span>
-              ) : (
-                <span>
-                  Khi vô hiệu hóa gói{' '}
-                  <strong className="text-[var(--text-primary)]">{planLockModal.planTitle}</strong>, toàn
-                  bộ yêu cầu đăng ký mới hoặc thanh toán nâng cấp trên ứng dụng mobile sẽ bị từ chối tạm
-                  thời. Các tài khoản đang sử dụng gói này vẫn giữ nguyên quyền lợi cho đến hết kỳ hạn.
-                </span>
-              )}
-            </p>
-
-            {!planLockModal.currentDisabled && (
-              <div className="space-y-1.5">
-                <label className="text-[11px] font-semibold text-[var(--text-muted)] block">
-                  Lý do vô hiệu hóa (ghi vào nhật ký):
-                </label>
-                <Input
-                  className="h-8 text-xs bg-[var(--bg-canvas)] border-[var(--border-hairline)]"
-                  value={lockReason}
-                  onChange={(e) => setLockReason(e.target.value)}
-                  placeholder="Nhập lý do bất thường..."
-                />
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-3 pt-2 border-t border-[var(--border-hairline)]">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setPlanLockModal(null)}
-                className="h-8 text-xs border-[var(--border-hairline)]"
-              >
-                Hủy bỏ
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                onClick={confirmTogglePlan}
-                className={`h-8 text-xs font-semibold ${
-                  planLockModal.currentDisabled
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                    : 'bg-rose-600 hover:bg-rose-500 text-white'
-                }`}
-              >
-                {planLockModal.currentDisabled ? 'Xác nhận mở lại' : 'Xác nhận khóa khẩn cấp'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
