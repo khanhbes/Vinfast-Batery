@@ -240,6 +240,13 @@ export const adminCreatePromo = (data) =>
   apiFetch('/api/admin/promos', { method: 'POST', body: JSON.stringify(data) })
 export const adminUpdatePromo = (code, data) =>
   apiFetch('/api/admin/promos/' + encodeURIComponent(code), { method: 'PATCH', body: JSON.stringify(data) })
+// QA 145: MoMo payment orders
+export const adminPaymentOrders = (status = '') =>
+  apiFetch('/api/admin/billing/orders' + (status ? '?status=' + encodeURIComponent(status) : ''), { silent: true })
+export const adminRefundOrder = (orderId) =>
+  apiFetch('/api/admin/billing/orders/' + encodeURIComponent(orderId) + '/refund', { method: 'POST' })
+export const adminCheckOrder = (orderId) =>
+  apiFetch('/api/admin/billing/orders/' + encodeURIComponent(orderId) + '/check', { method: 'POST' })
 
 // Support tickets (QA 135)
 export const adminSupportTickets = (status = '') =>

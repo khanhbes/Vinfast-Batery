@@ -2194,7 +2194,8 @@ h1{{font-size:1.5rem}}li{{margin:4px 0}}</style></head><body>
 <h2>Dữ liệu bị xóa</h2>
 <p>Hồ sơ, xe, lịch sử sạc và chuyến đi, số đọc pin và ODO, dữ liệu AI cá nhân, liên kết ổ Shelly, thông báo,
 kế hoạch sạc đêm, yêu cầu hỗ trợ và gói Premium. Việc xóa không thể hoàn tác.</p>
-<p>Một số nhật ký bảo mật (ví dụ ghi nhận việc xóa, theo mã tài khoản) có thể được giữ lại để chống lạm dụng.</p>
+<p>Một số nhật ký bảo mật (ví dụ ghi nhận việc xóa, theo mã tài khoản) có thể được giữ lại để chống lạm dụng.
+Bản ghi giao dịch thanh toán (mã đơn, số tiền, thời gian) được giữ theo quy định kế toán.</p>
 </body></html>"""
     return page, 200, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=3600'}
 
@@ -6794,12 +6795,20 @@ def _register_billing():
     from billing.promos import PromoService
     from billing.routes import create_billing_blueprint
 
+    from billing.momo import MomoClient
+    from billing.payments import PaymentService
+
     db = _firestore_db if _firebase_available else None
     entitlements = EntitlementService(db)
     promos = PromoService(db)
+    # QA 145: MoMo for the APK build; closed until PAYMENTS_ENABLED and the
+    # MOMO_* secrets are set.
+    payments = PaymentService(entitlements=entitlements, promos=promos, momo=MomoClient.from_env(),
+                              db=db, audit=_audit)
     app.register_blueprint(create_billing_blueprint(
         entitlements=entitlements, promos=promos, auth_resolver=_verify_token,
         require_admin=require_admin, audit=_audit, user_lookup=_billing_user_lookup,
+        payments=payments,
     ))
     app.extensions['billing'] = entitlements
 

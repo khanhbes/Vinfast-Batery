@@ -18,6 +18,16 @@ class AppConstants {
     defaultValue: '',
   );
 
+  /// QA 145: how Premium is paid. `direct` (the APK Pinova hands out) pays
+  /// with MoMo; `store` (Google Play / App Store) must use the store's
+  /// billing and never shows MoMo.
+  static const String paymentChannel = String.fromEnvironment(
+    'PAYMENT_CHANNEL',
+    defaultValue: 'direct',
+  );
+
+  static bool get directPayments => paymentChannel != 'store';
+
   static String? _customApiBaseUrl;
 
   static String get apiBaseUrl => _customApiBaseUrl ?? defaultApiBaseUrl;

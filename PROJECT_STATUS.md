@@ -12,6 +12,25 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03/11/2026, chủ app chọn) — Code + test xong, chưa deploy
+
+**Chủ app chọn:** thu tiền theo bản build (APK = MoMo, store = billing của store, chưa có tài khoản store nên chưa làm); trả trước theo kỳ; Pro → Ultra quy phần Pro còn lại thành tiền; mã giảm giá 1 lần/tài khoản + tổng lượt tùy chọn. Đã có merchant MoMo.
+
+**Máy chủ (`web/billing/`):**
+- `momo.py`: tạo đơn `captureWallet`, kiểm chữ ký IPN, tra cứu, hoàn tiền (HMAC-SHA256 theo thứ tự trường của MoMo).
+- `payments.py`: báo giá (gia hạn cộng sau hạn, nâng gói có tín dụng, dư thành ngày Ultra, đổi xuống `downgradeLater`, dưới 1.000đ = miễn phí); đơn `paymentOrders` (+ bản sao `users/{uid}/paymentOrders`), dùng lại đơn đang chờ, 10 đơn/giờ; chốt một lần; sai số tiền → `review`; tài khoản đã ở gói cao hơn → `needsReview`; hoàn tiền thu hồi gói của đơn.
+- Đối soát: IPN, `GET /api/billing/orders/<id>` (hỏi MoMo sau 10 s), `/api/billing/me` đối soát đơn chờ. **Lệch kế hoạch:** không thêm job vào worker sạc (worker không có khóa MoMo); nhắc hết hạn chưa làm, app vẫn hiện "còn N ngày".
+- `promos.py`: `maxUses`, `uses`, `promoUsed`/`promoExhausted`; mã chỉ tiêu khi đơn được chốt.
+- Trang công khai `/dieu-khoan-premium` (nháp, chủ app cần duyệt), `/thanh-toan/ket-qua`; trang xóa tài khoản ghi rõ giữ bản ghi giao dịch.
+
+**App:** `PaymentSheet` (báo giá, mở MoMo bằng deeplink rồi `payUrl`, chờ và hỏi lại 1/2/4/7/15/30 s và khi quay lại app, quá 2 phút giải thích), `PaymentHistoryScreen` (từ trang Premium), gia hạn cùng gói, mua khi đang dùng thử, `PAYMENT_CHANNEL=store` không hiện MoMo, `<queries>` scheme `momo`.
+
+**Admin:** mục Giao dịch MoMo (lọc, doanh thu tháng, hỏi lại MoMo, hoàn tiền), số lượt tối đa của mã; sửa số lượt dùng (trước đọc trường `redeemedCount` không tồn tại) và giá/quyền lợi các gói theo `features.py` (trước ghi 59.000đ/149.000đ).
+
+**Kiểm thử:** backend `test_qa145_payments.py` 22 test, toàn bộ `pytest tests` 861 đạt / 15 bỏ qua; app `qa145_payments_test.dart` + `qa135_premium_test.dart` 26 đạt, `flutter analyze` sạch; Admin `npm run lint` + `npm run build` đạt.
+
+**Còn mở:** chủ app đặt khóa MoMo môi trường test vào secret Azure (`MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_ENDPOINT`, `PAYMENT_PUBLIC_BASE_URL`, `PAYMENTS_ENABLED=true`); deploy API + Admin, build APK, thử sandbox trên Xiaomi 17 Ultra rồi chuyển khóa thật (thử 1.000đ bằng mã 99%, hoàn tiền); duyệt điều khoản; billing Google Play/App Store khi có tài khoản; khóa gói "localStorage" và gói "Đội xe" trên trang Admin chỉ là giao diện (không có ở máy chủ).
+
 ## 144. Task Completion Log — Mã giảm giá tới 100% (02/11/2026, chủ app yêu cầu) — Đã deploy API + trang Admin
 
 - Máy chủ (`web/billing/promos.py`): % giảm 1–100 (trước 1–90). `features.discounted`: mã 100% ra 0đ; mã nhỏ hơn vẫn sàn 1.000đ.

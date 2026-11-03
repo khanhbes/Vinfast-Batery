@@ -14,13 +14,17 @@ import '../../core/utils/number_text.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_submit_button.dart';
+import '../../core/constants/app_constants.dart';
 import '../../data/models/entitlement.dart';
+import 'payment_history_screen.dart';
+import 'payment_sheet.dart';
 import 'plan_tag.dart';
 
 /// Pinova Premium (QA 135; layout QA 136): pick Pro or Ultra, read four
 /// plain benefits, pick month or year, then one button at the bottom (the
 /// 7-day trial, or the plan). Promo code and the full comparison are folded
-/// away. Phase 1 takes no payment: buying shows "sắp mở".
+/// away. QA 145: the APK build pays with MoMo ([PaymentSheet]); a store
+/// build still shows "sắp mở" until the store's billing is turned on.
 class PremiumScreen extends ConsumerStatefulWidget {
   const PremiumScreen({super.key, this.highlight});
 
@@ -166,6 +170,21 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
   }
 
   void _buy(PlanTier tier) {
+    final plan = ref.read(entitlementProvider);
+    final promo = plan.pendingPromo;
+    final amount =
+        promo?.finalPrice(tier, _period) ?? PlanTable.price(tier, _period);
+    // QA 145: the APK pays with MoMo; a store build only takes a free code
+    // here (the store's billing comes later).
+    final momo = AppConstants.directPayments && plan.momoAvailable;
+    if (momo || amount == 0) {
+      showLuxeSheet<void>(
+        context,
+        builder: (_) =>
+            PaymentSheet(tier: tier, period: _period, allowPaid: momo),
+      );
+      return;
+    }
     showLuxeSheet<void>(
       context,
       builder: (context) => Padding(
@@ -178,12 +197,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
               title: 'Thanh toán sắp mở',
               caption: 'Gói ${tier.label} · ${_period.label}',
             ),
-            const Text(
-              'Pinova chưa nhận thanh toán trong app. Trong lúc chờ, bạn có '
-              'thể dùng thử miễn phí, hoặc gửi yêu cầu cho bộ phận hỗ trợ để '
-              'được cấp gói. Mã khuyến mãi đã nhập được giữ cho lần mua đầu.',
-              style: LuxeText.body,
-            ),
+            const Text(PaymentSheet.closedText, style: LuxeText.body),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
@@ -320,6 +334,13 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
                 'An toàn luôn miễn phí ở mọi gói: bật/dừng sạc có xác minh, '
                 'hẹn giờ, tự ngắt khi quá tải hoặc quá nóng. Hết gói không '
                 'ngắt phiên sạc đang chạy.',
+          ),
+          const SizedBox(height: 8),
+          TextButton.icon(
+            key: const ValueKey('premium-payment-history'),
+            onPressed: () => PaymentHistoryScreen.open(context),
+            icon: const Icon(Icons.receipt_long_rounded),
+            label: const Text('Lịch sử thanh toán'),
           ),
         ],
       ),
@@ -846,12 +867,17 @@ class _ActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final covered = plan.isPremium && plan.tier.covers(tier);
+    // QA 145: a paid plan can be renewed (prepaid) and a trial can be
+    // bought; only a higher paid plan hides the button.
+    final paidPlan = plan.isPremium && !plan.isTrial;
+    final renew = paidPlan && plan.tier == tier;
+    final covered = paidPlan && plan.tier.covers(tier) && !renew;
     final amount =
         promo?.finalPrice(tier, period) ?? PlanTable.price(tier, period);
+    final verb = renew ? 'Gia hạn' : 'Chọn';
     final buyLabel = amount == 0
-        ? 'Chọn ${tier.label} · miễn phí với mã'
-        : 'Chọn ${tier.label} · ${formatVnd(amount)}/${period == PlanPeriod.year ? 'năm' : 'tháng'}';
+        ? '$verb ${tier.label} · miễn phí với mã'
+        : '$verb ${tier.label} · ${formatVnd(amount)}/${period == PlanPeriod.year ? 'năm' : 'tháng'}';
     final trial = plan.trialAvailable && !plan.isPremium;
     final Widget content;
     if (covered) {
@@ -861,7 +887,8 @@ class _ActionBar extends StatelessWidget {
         color: context.planAccent,
         message: plan.tier == tier
             ? 'Bạn đang dùng gói này.'
-            : 'Gói ${plan.tier.label} của bạn đã gồm mọi thứ của ${tier.label}.',
+            : 'Gói ${plan.tier.label} của bạn đã gồm mọi thứ của ${tier.label}. '
+                  'Đổi sang ${tier.label} được sau khi gói hiện tại hết hạn.',
       );
     } else if (trial) {
       content = Column(

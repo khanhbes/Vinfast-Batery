@@ -165,6 +165,7 @@ class Entitlement {
     this.enforced = true,
     this.known = false,
     this.serverSupportsBilling = true,
+    this.momoAvailable = false,
   });
 
   final PlanTier tier;
@@ -187,6 +188,9 @@ class Entitlement {
   /// False when the server predates QA 135 (no billing yet): nothing is
   /// gated then, exactly like before.
   final bool serverSupportsBilling;
+
+  /// QA 145: the server takes MoMo payments now (APK build only).
+  final bool momoAvailable;
 
   static const legacyServer = Entitlement(
     known: true,
@@ -246,6 +250,7 @@ class Entitlement {
       pendingPromo: PromoQuote.fromMap(map['pendingPromo']),
       enforced: map['enforced'] != false,
       known: true,
+      momoAvailable: map['payments'] is Map && map['payments']['momo'] == true,
     );
   }
 
@@ -259,5 +264,150 @@ class Entitlement {
     'limits': limits,
     'pendingPromo': pendingPromo?.toMap(),
     'enforced': enforced,
+    'payments': {'momo': momoAvailable},
   };
+
+  Entitlement withPromo(PromoQuote? promo) => Entitlement(
+    tier: tier,
+    status: status,
+    expiresAt: expiresAt,
+    trialAvailable: trialAvailable,
+    trialDays: trialDays,
+    features: features,
+    limits: limits,
+    pendingPromo: promo,
+    enforced: enforced,
+    known: known,
+    serverSupportsBilling: serverSupportsBilling,
+    momoAvailable: momoAvailable,
+  );
+}
+
+int _int(Object? value) => (value as num?)?.toInt() ?? 0;
+
+DateTime? _date(Object? value) =>
+    DateTime.tryParse(value?.toString() ?? '')?.toLocal();
+
+/// What an order costs, priced by the server (QA 145). The app shows it;
+/// it never computes a price itself.
+class PaymentQuote {
+  const PaymentQuote({
+    required this.tier,
+    required this.period,
+    required this.kind,
+    required this.base,
+    required this.afterPromo,
+    required this.amount,
+    this.promoCode,
+    this.percentOff = 0,
+    this.credit = 0,
+    this.extraDays = 0,
+    this.days = 0,
+    this.newExpiresAt,
+  });
+
+  final PlanTier tier;
+  final PlanPeriod period;
+
+  /// new | extend | upgrade.
+  final String kind;
+  final int base;
+  final int afterPromo;
+  final int amount;
+  final String? promoCode;
+  final int percentOff;
+
+  /// Money off for the rest of a paid Pro plan (Pro → Ultra).
+  final int credit;
+
+  /// Days added when the credit is more than the price.
+  final int extraDays;
+  final int days;
+  final DateTime? newExpiresAt;
+
+  bool get free => amount == 0;
+
+  static PaymentQuote fromMap(Map<String, dynamic> map) => PaymentQuote(
+    tier: PlanTier.parse(map['tier']),
+    period: map['period'] == 'month' ? PlanPeriod.month : PlanPeriod.year,
+    kind: map['kind']?.toString() ?? 'new',
+    base: _int(map['base']),
+    afterPromo: _int(map['afterPromo'] ?? map['base']),
+    amount: _int(map['amount']),
+    promoCode: map['promoCode']?.toString(),
+    percentOff: _int(map['percentOff']),
+    credit: _int(map['credit']),
+    extraDays: _int(map['extraDays']),
+    days: _int(map['days']),
+    newExpiresAt: _date(map['newExpiresAt']),
+  );
+}
+
+/// One payment order (QA 145).
+class PaymentOrder {
+  const PaymentOrder({
+    required this.orderId,
+    required this.tier,
+    required this.period,
+    required this.amount,
+    required this.status,
+    this.method = 'momo',
+    this.days = 0,
+    this.promoCode,
+    this.createdAt,
+    this.paidAt,
+    this.deeplink,
+    this.payUrl,
+  });
+
+  final String orderId;
+  final PlanTier tier;
+  final PlanPeriod period;
+  final int amount;
+
+  /// pending | paid | failed | review | refunded.
+  final String status;
+
+  /// momo | free.
+  final String method;
+  final int days;
+  final String? promoCode;
+  final DateTime? createdAt;
+  final DateTime? paidAt;
+  final String? deeplink;
+  final String? payUrl;
+
+  bool get paid => status == 'paid';
+  bool get pending => status == 'pending';
+  bool get failed => status == 'failed';
+
+  String get statusLabel => switch (status) {
+    'paid' => method == 'free' ? 'Đã kích hoạt' : 'Đã thanh toán',
+    'pending' => 'Đang chờ',
+    'failed' => 'Chưa thanh toán',
+    'refunded' => 'Đã hoàn tiền',
+    _ => 'Đang kiểm tra',
+  };
+
+  static PaymentOrder fromMap(Map<String, dynamic> map) {
+    String? text(Object? v) {
+      final s = v?.toString() ?? '';
+      return s.isEmpty ? null : s;
+    }
+
+    return PaymentOrder(
+      orderId: map['orderId']?.toString() ?? '',
+      tier: PlanTier.parse(map['tier']),
+      period: map['period'] == 'month' ? PlanPeriod.month : PlanPeriod.year,
+      amount: _int(map['amount']),
+      status: map['status']?.toString() ?? 'pending',
+      method: map['method']?.toString() ?? 'momo',
+      days: _int(map['days']),
+      promoCode: text(map['promoCode']),
+      createdAt: _date(map['createdAt']),
+      paidAt: _date(map['paidAt']),
+      deeplink: text(map['deeplink']),
+      payUrl: text(map['payUrl']),
+    );
+  }
 }

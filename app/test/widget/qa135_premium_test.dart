@@ -241,7 +241,8 @@ void main() {
     expect(billing.trials, 1);
     await tester.pump(const Duration(seconds: 2));
     expect(find.textContaining('Đang dùng thử Ultra'), findsOneWidget);
-    expect(find.text('Bạn đang dùng gói này.'), findsOneWidget);
+    // QA 145: a trial can be bought (the paid plan starts now).
+    expect(find.byKey(const ValueKey('premium-buy-ultra')), findsOneWidget);
     expect(find.byKey(const ValueKey('premium-trial-ultra')), findsNothing);
   });
 

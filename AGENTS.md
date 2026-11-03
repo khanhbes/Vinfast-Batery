@@ -245,6 +245,13 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Ngữ cảnh bot: `rangeKm` + `kmPerPercent` + `kmPerPercentSource` (catalog/learned) lấy từ `estimateRange`; bot không gọi số định mức là "đã học".
   - Form Đăng nhập/Đăng ký tự kiểm lại sau lần bấm đầu (`AutovalidateMode.onUserInteraction`). Màn có nút bot nổi chừa ≥ 128 dp cuối danh sách.
 
+- **QA 145 (03/11/2026, chủ app chọn) — thanh toán Premium:**
+  - Kênh theo bản build (`--dart-define=PAYMENT_CHANNEL`): `direct` (APK tự phát hành, mặc định) trả bằng **MoMo**; `store` (Google Play/App Store) không bao giờ hiện MoMo, chỉ nhận đơn miễn phí (mã 100 %) tới khi làm billing của store.
+  - Máy chủ tính giá và cấp gói (`web/billing/payments.py`, `momo.py`); app chỉ hiện báo giá (`PaymentSheet`). Trả trước, không tự gia hạn: mua cùng gói cộng sau ngày hết hạn; Pro → Ultra quy phần Pro đã trả còn lại thành tiền trừ vào Ultra (dư thành ngày Ultra); đổi xuống chờ hết hạn (`downgradeLater`). Dùng thử/Admin cấp không có tín dụng.
+  - Gói chỉ bật khi đơn `paid`: IPN MoMo (`POST /api/billing/momo/ipn`, kiểm chữ ký HMAC, sai số tiền → `review`), tra cứu khi app hỏi `/api/billing/orders/<id>` hoặc mở `/api/billing/me` (đối soát đơn chờ). Một đơn chỉ cấp một lần (marker create-once + `apply_purchase` bỏ qua `orderId` đã áp).
+  - `paymentOrders/{id}` (+ bản sao `users/{uid}/paymentOrders`) chỉ Admin SDK; xóa tài khoản giữ bản ghi giao dịch gốc (kế toán). Mã khuyến mãi: 1 lần/tài khoản (`users/{uid}/billing/promoUses/codes/{CODE}`), `maxUses` tùy chọn, chỉ tiêu khi đơn được chốt.
+  - Cấu hình: `PAYMENTS_ENABLED`, `PAYMENT_PUBLIC_BASE_URL`, `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` (secret), `MOMO_ENDPOINT` (mặc định sandbox). Thiếu → checkout 503, đơn miễn phí vẫn chạy. Trang công khai `/dieu-khoan-premium`, `/thanh-toan/ket-qua` (redirect MoMo). Admin: Gói & Khuyến mại → Giao dịch MoMo (hỏi lại, hoàn tiền = thu hồi gói của đơn).
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

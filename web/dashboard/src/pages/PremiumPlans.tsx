@@ -18,8 +18,11 @@ import {
   adminBillingRevoke,
   adminBillingStats,
   adminBillingUser,
+  adminCheckOrder,
   adminCreatePromo,
+  adminPaymentOrders,
   adminPromos,
+  adminRefundOrder,
   adminUpdatePromo,
 } from '@/api';
 import { Button } from '@/components/ui/button';
@@ -47,10 +50,42 @@ type Promo = {
   validTo: string;
   tiers: ('pro' | 'ultra')[];
   periods: ('month' | 'year')[];
-  redeemedCount: number;
+  uses: number;
+  maxUses: number | null;
+  checks: number;
   note: string;
   createdAt: string;
 };
+
+type Order = {
+  orderId: string;
+  uid: string;
+  tier: 'pro' | 'ultra';
+  period: 'month' | 'year';
+  days: number;
+  amount: number;
+  promoCode: string | null;
+  credit: number;
+  status: 'pending' | 'paid' | 'failed' | 'review' | 'refunded';
+  method: 'momo' | 'free';
+  transId: number | null;
+  needsReview: boolean;
+  reviewReason: string | null;
+  createdAt: string | null;
+  paidAt: string | null;
+};
+
+const orderStatus: Record<Order['status'], { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {
+  paid: { label: 'Đã thanh toán', tone: 'success' },
+  pending: { label: 'Đang chờ', tone: 'warning' },
+  review: { label: 'Cần kiểm tra', tone: 'danger' },
+  failed: { label: 'Không thành công', tone: 'neutral' },
+  refunded: { label: 'Đã hoàn tiền', tone: 'neutral' },
+};
+
+function vnd(value: number) {
+  return value === 0 ? 'Miễn phí' : `${value.toLocaleString('vi-VN')}đ`;
+}
 
 type PromoDraft = {
   code: string;
@@ -59,6 +94,7 @@ type PromoDraft = {
   validTo: string;
   tiers: ('pro' | 'ultra')[];
   periods: ('month' | 'year')[];
+  maxUses: string;
   note: string;
 };
 
@@ -89,6 +125,11 @@ export default function PremiumPlans() {
   const [grantPeriod, setGrantPeriod] = useState<'month' | 'year' | 'days'>('month');
   const [grantDays, setGrantDays] = useState('14');
   const [promos, setPromos] = useState<Promo[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [orderFilter, setOrderFilter] = useState('');
+  const [revenue, setRevenue] = useState<{ month: string; amount: number; momo: boolean; sandbox: boolean } | null>(
+    null
+  );
   const [draft, setDraft] = useState<PromoDraft | null>(null);
 
   // Disabled plans tracking (stored in localStorage for persistence across reloads)
@@ -157,19 +198,18 @@ export default function PremiumPlans() {
       {
         key: 'pro',
         name: 'Pinova Pro',
-        price: '59.000đ/tháng',
+        price: '29.000đ/tháng · 249.000đ/năm',
         subscribers: counts?.pro ?? 0,
-        description: '3 xe liên kết · 30 lượt Bot/ngày · AI sạc tối ưu Wh/% · Lộ trình nâng cao',
+        description: '2 xe · 30 lượt Bot/ngày · Sạc đến % tự ngắt · Lộ trình · Sức khỏe pin đầy đủ',
         tone: 'text-sky-400',
         isSystem: false,
       },
       {
         key: 'ultra',
         name: 'Pinova Ultra',
-        price: '149.000đ/tháng',
+        price: '49.000đ/tháng · 449.000đ/năm',
         subscribers: counts?.ultra ?? 0,
-        description:
-          'Không giới hạn xe · 100 lượt Bot/ngày · Phân tích chai pin thực tế · Hỗ trợ VIP',
+        description: 'Tối đa 10 xe · 100 lượt Bot/ngày · Sạc đêm · AI cá nhân · Giao diện Aurora',
         tone: 'text-[var(--accent-primary)]',
         isSystem: false,
       },
@@ -206,10 +246,62 @@ export default function PremiumPlans() {
     }
   }, []);
 
+  const loadOrders = useCallback(async (status: string) => {
+    try {
+      const res = await adminPaymentOrders(status);
+      setOrders(res?.data?.items || []);
+      setRevenue({
+        month: res?.data?.month || '',
+        amount: res?.data?.monthRevenue || 0,
+        momo: res?.data?.channels?.momo === true,
+        sandbox: res?.data?.channels?.sandbox === true,
+      });
+    } catch {
+      toast.error('Chưa tải được giao dịch.');
+    }
+  }, []);
+
   useEffect(() => {
     void loadStats();
     void loadPromos();
   }, [loadStats, loadPromos]);
+
+  useEffect(() => {
+    void loadOrders(orderFilter);
+  }, [loadOrders, orderFilter]);
+
+  const refundOrder = async (order: Order) => {
+    if (
+      !window.confirm(
+        `Hoàn ${vnd(order.amount)} qua MoMo cho đơn ${order.orderId}? Gói của đơn này sẽ kết thúc.`
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await adminRefundOrder(order.orderId);
+      toast.success(`Đã hoàn tiền đơn ${order.orderId}.`);
+      await loadOrders(orderFilter);
+      await loadStats();
+    } catch (error) {
+      toast.error(message(error, 'Chưa hoàn tiền được.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const checkOrder = async (order: Order) => {
+    setBusy(true);
+    try {
+      const res = await adminCheckOrder(order.orderId);
+      toast.success(`Đơn ${order.orderId}: ${orderStatus[res?.data?.status as Order['status']]?.label || 'đã kiểm tra'}.`);
+      await loadOrders(orderFilter);
+    } catch (error) {
+      toast.error(message(error, 'Chưa hỏi lại được MoMo.'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const search = async () => {
     const q = query.trim();
@@ -276,6 +368,11 @@ export default function PremiumPlans() {
       toast.error('Chọn ít nhất một gói cước và một kỳ hạn áp dụng.');
       return;
     }
+    const maxUses = draft.maxUses.trim() ? Number(draft.maxUses) : null;
+    if (maxUses !== null && (!Number.isInteger(maxUses) || maxUses < 1)) {
+      toast.error('Số lượt tối đa phải là số nguyên từ 1 trở lên (để trống = không giới hạn).');
+      return;
+    }
     setBusy(true);
     try {
       const validTo = new Date(`${draft.validTo}T23:59:59+07:00`).toISOString();
@@ -289,6 +386,7 @@ export default function PremiumPlans() {
         validFrom,
         tiers: draft.tiers,
         periods: draft.periods,
+        maxUses,
         note: draft.note.trim(),
       });
       toast.success(`Đã tạo thành công mã khuyến mại ${res?.data?.code || draft.code}.`);
@@ -594,6 +692,127 @@ export default function PremiumPlans() {
         </CardContent>
       </Card>
 
+      {/* QA 145: MoMo payment orders */}
+      <Card className="border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-xs">
+        <CardHeader className="pb-3 border-b border-[var(--border-hairline)] bg-[var(--bg-elevated)]">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <CardTitle className="text-[15px] font-semibold text-[var(--text-primary)] flex items-center gap-2">
+              <Crown className="w-4 h-4 text-[var(--accent-primary)]" />
+              Giao dịch MoMo
+            </CardTitle>
+            <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-secondary)]">
+              {revenue && (
+                <span className="tabular-nums">
+                  Doanh thu {revenue.month}: <strong className="text-[var(--text-primary)]">{vnd(revenue.amount)}</strong>
+                </span>
+              )}
+              {revenue && (
+                <StatusBadge
+                  label={!revenue.momo ? 'MoMo đang tắt' : revenue.sandbox ? 'MoMo thử nghiệm' : 'MoMo thật'}
+                  tone={!revenue.momo ? 'neutral' : revenue.sandbox ? 'warning' : 'success'}
+                />
+              )}
+              <select
+                className="h-7 rounded border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2 text-xs"
+                value={orderFilter}
+                onChange={(e) => setOrderFilter(e.target.value)}
+                aria-label="Lọc trạng thái"
+              >
+                <option value="">Tất cả</option>
+                {Object.entries(orderStatus).map(([key, item]) => (
+                  <option key={key} value={key}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void loadOrders(orderFilter)}
+                className="h-7 text-xs border-[var(--border-hairline)]"
+              >
+                <RefreshCw className="mr-1 h-3 w-3" />
+                Làm mới
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-[11px] text-[var(--text-muted)] text-left">
+                <tr className="border-b border-[var(--border-hairline)]">
+                  <th className="px-4 py-2 font-medium">Thời gian</th>
+                  <th className="px-4 py-2 font-medium">Mã đơn</th>
+                  <th className="px-4 py-2 font-medium">Tài khoản</th>
+                  <th className="px-4 py-2 font-medium">Gói</th>
+                  <th className="px-4 py-2 font-medium text-right">Số tiền</th>
+                  <th className="px-4 py-2 font-medium">Trạng thái</th>
+                  <th className="px-4 py-2 font-medium">Mã MoMo</th>
+                  <th className="px-4 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--border-hairline)]">
+                {orders.map((o) => (
+                  <tr key={o.orderId} className="hover:bg-[var(--bg-hover)]">
+                    <td className="px-4 py-2 tabular-nums whitespace-nowrap">{day(o.paidAt || o.createdAt)}</td>
+                    <td className="px-4 py-2">
+                      <CopyChip value={o.orderId} head={8} tail={6} />
+                    </td>
+                    <td className="px-4 py-2">
+                      <CopyChip value={o.uid} head={6} tail={4} />
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {tierName[o.tier]} · {o.period === 'year' ? 'năm' : 'tháng'}
+                      {o.promoCode ? ` · ${o.promoCode}` : ''}
+                      {o.credit ? ` · quy đổi ${vnd(o.credit)}` : ''}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">{vnd(o.amount)}</td>
+                    <td className="px-4 py-2">
+                      <StatusBadge label={orderStatus[o.status]?.label || o.status} tone={orderStatus[o.status]?.tone || 'neutral'} />
+                      {o.needsReview && <span className="ml-1 text-amber-400">(tài khoản đã ở gói cao hơn)</span>}
+                      {o.reviewReason === 'amountMismatch' && <span className="ml-1 text-rose-400">(sai số tiền)</span>}
+                    </td>
+                    <td className="px-4 py-2 tabular-nums">{o.transId ?? '—'}</td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      {o.status === 'pending' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => void checkOrder(o)}
+                          className="h-7 text-xs border-[var(--border-hairline)]"
+                        >
+                          Hỏi lại MoMo
+                        </Button>
+                      )}
+                      {o.status === 'paid' && o.method === 'momo' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => void refundOrder(o)}
+                          className="h-7 text-xs border-rose-500/40 text-rose-300"
+                        >
+                          Hoàn tiền
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {orders.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-[var(--text-muted)]">
+                      Chưa có giao dịch.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Promotion Campaigns Section */}
       <Card className="border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-xs">
         <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3 border-b border-[var(--border-hairline)] bg-[var(--bg-elevated)]">
@@ -612,6 +831,7 @@ export default function PremiumPlans() {
                   validTo: '',
                   tiers: ['pro', 'ultra'],
                   periods: ['month', 'year'],
+                  maxUses: '',
                   note: '',
                 })
               }
@@ -640,7 +860,7 @@ export default function PremiumPlans() {
                 </button>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-4">
+              <div className="grid gap-3 sm:grid-cols-5">
                 <div>
                   <label className="block text-[11px] font-medium text-[var(--text-muted)] mb-1">
                     Mã code (Tự động in hoa)
@@ -682,6 +902,22 @@ export default function PremiumPlans() {
                     value={draft.validFrom}
                     onChange={(e) =>
                       setDraft((d) => (d ? { ...d, validFrom: e.target.value } : null))
+                    }
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-[var(--text-muted)] mb-1">
+                    Số lượt tối đa (trống = không giới hạn)
+                  </label>
+                  <Input
+                    className="h-8 text-xs tabular-nums border-[var(--border-hairline)] bg-[var(--bg-canvas)]"
+                    type="number"
+                    min={1}
+                    placeholder="Không giới hạn"
+                    value={draft.maxUses}
+                    onChange={(e) =>
+                      setDraft((d) => (d ? { ...d, maxUses: e.target.value } : null))
                     }
                   />
                 </div>
@@ -789,7 +1025,8 @@ export default function PremiumPlans() {
                     Hiệu lực: {day(p.validFrom)} → {day(p.validTo)}
                   </span>
                   <span className="tabular-nums font-medium text-[var(--text-primary)]">
-                    {p.redeemedCount} lượt dùng
+                    {p.uses ?? 0}
+                    {p.maxUses ? `/${p.maxUses}` : ''} lượt dùng · 1 lần/tài khoản
                   </span>
                   <Button
                     size="sm"

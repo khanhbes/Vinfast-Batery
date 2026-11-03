@@ -37,6 +37,53 @@ class BillingRepository {
   }
 
   Future<void> clearPromo() => _api.delete('/api/billing/promo');
+
+  // QA 145: MoMo payments (the server prices and grants).
+  Future<PaymentQuote> quote(PlanTier tier, PlanPeriod period) async =>
+      PaymentQuote.fromMap(
+        await _api.post('/api/billing/quote', {
+          'tier': tier.id,
+          'period': period.id,
+        }),
+      );
+
+  Future<PaymentResult> checkout(PlanTier tier, PlanPeriod period) async =>
+      PaymentResult.fromMap(
+        await _api.post('/api/billing/checkout', {
+          'tier': tier.id,
+          'period': period.id,
+        }),
+      );
+
+  Future<PaymentResult> order(String orderId) async => PaymentResult.fromMap(
+    await _api.get('/api/billing/orders/${Uri.encodeComponent(orderId)}'),
+  );
+
+  Future<List<PaymentOrder>> orders() async {
+    final items = (await _api.get('/api/billing/orders'))['items'];
+    return [
+      if (items is List)
+        for (final item in items)
+          if (item is Map)
+            PaymentOrder.fromMap(Map<String, dynamic>.from(item)),
+    ];
+  }
+}
+
+/// An order and, once it is paid, the plan it turned on.
+class PaymentResult {
+  const PaymentResult(this.order, this.plan);
+
+  final PaymentOrder order;
+  final Entitlement? plan;
+
+  static PaymentResult fromMap(Map<String, dynamic> map) {
+    final plan = map['plan'];
+    return PaymentResult(
+      PaymentOrder.fromMap(Map<String, dynamic>.from(map['order'] as Map)),
+      plan is Map ? Entitlement.fromMap(Map<String, dynamic>.from(plan)) : null,
+    );
+  }
 }
 
 final billingRepositoryProvider = Provider<BillingRepository>(
@@ -113,20 +160,15 @@ class EntitlementNotifier extends Notifier<Entitlement> {
   Future<PromoQuote> redeemPromo(String code) async {
     final quote = await ref.read(billingRepositoryProvider).redeemPromo(code);
     _generation++;
-    state = Entitlement(
-      tier: state.tier,
-      status: state.status,
-      expiresAt: state.expiresAt,
-      trialAvailable: state.trialAvailable,
-      trialDays: state.trialDays,
-      features: state.features,
-      limits: state.limits,
-      pendingPromo: quote,
-      enforced: state.enforced,
-      known: state.known,
-      serverSupportsBilling: state.serverSupportsBilling,
-    );
+    state = state.withPromo(quote);
     return quote;
+  }
+
+  /// A paid order's plan from the server (QA 145).
+  Future<void> applyPlan(Entitlement value) async {
+    _generation++;
+    state = value;
+    if (_uid != null) await _cache(_uid!, value);
   }
 
   Future<void> clearPromo() async {

@@ -37,6 +37,7 @@ class PromoService:
         self._local: dict[str, dict] = {}
         self._pending: dict[str, dict] = {}
         self._failures: dict[str, list[datetime]] = {}
+        self._uses: set[tuple[str, str]] = set()
         self._lock = threading.Lock()
 
     # -- storage ----------------------------------------------------------
@@ -123,6 +124,19 @@ class PromoService:
             base["active"] = body.get("active") is not False
         if "note" in body or existing is None:
             base["note"] = str(body.get("note") or "").strip()[:120]
+        if "maxUses" in body or existing is None:
+            # QA 145: optional total for the code; empty = no limit. Each
+            # account can use a code once either way.
+            raw = body.get("maxUses")
+            if raw in (None, ""):
+                base["maxUses"] = None
+            else:
+                try:
+                    base["maxUses"] = int(raw)
+                except (TypeError, ValueError):
+                    raise BillingError("invalidPromo", "Số lượt tối đa phải là số.") from None
+                if not 1 <= base["maxUses"] <= 1_000_000:
+                    raise BillingError("invalidPromo", "Số lượt tối đa phải từ 1 trở lên.")
         return base
 
     def create(self, body: dict, actor: str = "") -> dict:
@@ -134,7 +148,7 @@ class PromoService:
         data = self._validated(body)
         if data["validTo"] <= now:
             raise BillingError("invalidPromo", "Ngày hết hạn phải ở tương lai.")
-        data.update({"code": code, "createdAt": now, "createdBy": actor[:128], "checks": 0})
+        data.update({"code": code, "createdAt": now, "createdBy": actor[:128], "checks": 0, "uses": 0})
         self._put(code, data, create=True)
         return self.public(data)
 
@@ -172,6 +186,7 @@ class PromoService:
             "tiers": list(data.get("tiers") or []), "periods": list(data.get("periods") or []),
             "active": bool(data.get("active")), "note": data.get("note") or "",
             "checks": int(data.get("checks") or 0), "state": state,
+            "maxUses": data.get("maxUses"), "uses": int(data.get("uses") or 0),
             "createdAt": _iso(data.get("createdAt")), "createdBy": data.get("createdBy"),
         }
 
@@ -205,6 +220,7 @@ class PromoService:
             self._fail(uid, "promoNotStarted", "Mã khuyến mãi chưa đến ngày dùng.", 409)
         if info["state"] != "active":
             self._fail(uid, "promoInvalid", "Mã khuyến mãi không còn hiệu lực.", 410)
+        self.check_usable(uid, code, data)
         self._count_check(code)
         prices = {}
         for tier in info["tiers"]:
@@ -241,6 +257,55 @@ class PromoService:
             return None
         data.pop("savedAt", None)
         return data
+
+    # -- uses (QA 145) ----------------------------------------------------
+    def _use_ref(self, uid: str, code: str):
+        return (self.db.collection("users").document(uid).collection("billing")
+                .document("promoUses").collection("codes").document(code))
+
+    def used_by(self, uid: str, code: str) -> bool:
+        if self.db is None:
+            with self._lock:
+                return (uid, code) in self._uses
+        return self._use_ref(uid, code).get().exists
+
+    def check_usable(self, uid: str, code: str, data: dict | None = None) -> None:
+        """Once per account, and within the code's total when it has one."""
+        if data is None:
+            data = self._get(code) or {}
+        if self.used_by(uid, code):
+            raise BillingError("promoUsed", "Bạn đã dùng mã này.", 409)
+        max_uses = data.get("maxUses")
+        if max_uses and int(data.get("uses") or 0) >= int(max_uses):
+            raise BillingError("promoExhausted", "Mã khuyến mãi đã hết lượt dùng.", 410)
+
+    def consume(self, uid: str, code: str, order_id: str) -> None:
+        """A paid (or free) order used the code: mark it and count it. A
+        paid order is honoured even if the code ran out meanwhile."""
+        code = normalize_code(code)
+        now = self.clock()
+        if self.db is None:
+            with self._lock:
+                if (uid, code) in self._uses:
+                    return
+                self._uses.add((uid, code))
+                item = self._local.get(code)
+                if item is not None:
+                    item["uses"] = int(item.get("uses") or 0) + 1
+                self._pending.pop(uid, None)
+            return
+        try:
+            self._use_ref(uid, code).create({"orderId": order_id, "usedAt": now})
+        except Exception as error:
+            if type(error).__name__ in ("AlreadyExists", "Conflict"):
+                return
+            raise
+        try:
+            from google.cloud import firestore as gfs
+            self.db.collection(COLLECTION).document(code).update({"uses": gfs.Increment(1)})
+        except Exception:
+            pass  # the counter must never fail a paid order
+        self.clear_pending(uid)
 
     def clear_pending(self, uid: str) -> None:
         if self.db is None:

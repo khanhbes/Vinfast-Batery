@@ -219,11 +219,51 @@ class EntitlementService:
         })
         return self.summary(uid)
 
+    def paid_state(self, uid: str) -> dict:
+        """What the running paid plan is worth (QA 145): ``paidAmount`` is
+        what was paid for the span ``paidFrom`` → ``expiresAt``."""
+        data = self._read(uid)
+        return {"paidAmount": int(data.get("paidAmount") or 0),
+                "paidFrom": _utc(data.get("paidFrom")), "expiresAt": _utc(data.get("expiresAt")),
+                "source": data.get("source"), "orderIds": list(data.get("orderIds") or [])}
+
+    def apply_purchase(self, uid: str, *, order_id: str, tier: str, period: str, days: int,
+                       amount: int, carried: int = 0, source: str = "momo") -> dict:
+        """A paid order (QA 145). The same plan still running is extended
+        from its end; anything else starts now. Applying the same order
+        twice changes nothing."""
+        tier = str(tier or "").lower()
+        if tier not in features.PAID_TIERS:
+            raise BillingError("invalidTier", "Gói phải là pro hoặc ultra.")
+        now = self.clock()
+        data = self._read(uid)
+        order_ids = list(data.get("orderIds") or [])
+        if order_id in order_ids:
+            return self.summary(uid)
+        current = self.state(uid, fresh=True)
+        extend = current["tier"] == tier and current["status"] == "active"
+        start = max(now, _utc(data.get("expiresAt")) or now) if extend else now
+        expires = start + timedelta(days=int(days))
+        paid_from = (_utc(data.get("paidFrom")) or _utc(data.get("startedAt")) or now) if extend else now
+        paid_amount = (int(data.get("paidAmount") or 0) if extend else 0) + int(amount) + int(carried)
+        self._write(uid, {
+            "tier": tier, "status": "active", "period": period, "source": source,
+            "startedAt": (_utc(data.get("startedAt")) or now) if extend else now,
+            "expiresAt": expires, "updatedAt": now, "updatedBy": f"order:{order_id}"[:128],
+            "paidFrom": paid_from, "paidAmount": paid_amount,
+            "orderIds": (order_ids + [order_id])[-MAX_HISTORY:],
+            "history": self._history(data, {"at": _iso(now), "action": "purchase", "tier": tier,
+                                            "days": int(days), "amount": int(amount),
+                                            "expiresAt": _iso(expires), "orderId": order_id,
+                                            "source": source}),
+        })
+        return self.summary(uid)
+
     def revoke(self, uid: str, actor: str = "") -> dict:
         now = self.clock()
         data = self._read(uid)
         self._write(uid, {
-            **{k: v for k, v in data.items() if k != "history"},
+            **{k: v for k, v in data.items() if k not in ("history", "paidAmount", "paidFrom")},
             "tier": "free", "status": "revoked", "expiresAt": None, "updatedAt": now,
             "updatedBy": actor[:128],
             "history": self._history(data, {"at": _iso(now), "action": "revoke", "by": actor[:128]}),
