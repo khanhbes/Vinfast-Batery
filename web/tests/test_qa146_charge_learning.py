@@ -347,3 +347,99 @@ def test_a_failed_profile_read_never_stops_a_timed_charge(monkeypatch):
     monkeypatch.setattr(service, "learned_profile", broken)
     session = service.manual_on("owner", 3600, "t3", vehicle_id="car", current_soc=20)
     assert session.state == "active" and session.model_wh_per_pct is None
+
+
+# ── a charge left to finish by itself is not "interrupted" ─────────────────
+
+def _target_session(service, provider, clock, *, current=0, target=100):
+    preview = service.create_preview("owner", {"vehicleId": "car", "currentSoc": current, "targetSoc": target})
+    return service.start("owner", preview.preview_id, f"tgt-{current}-{target}")
+
+
+def _read(service, provider, clock, power, wh, *, seconds=20):
+    clock.advance(seconds=seconds)
+    provider.status.power_w = power
+    provider.status.energy_wh += wh
+    return service.current("owner", vehicle_id="car")
+
+
+def _charge_into_the_tail(service, provider, clock):
+    """Constant power, then the taper the owner's charger really draws."""
+    # The tail only counts after 10 minutes of real charging.
+    assert _read(service, provider, clock, 450, 2280, seconds=700).state == "active"
+    for power in (178, 136, 87):
+        assert _read(service, provider, clock, power, 2).state == "active"
+    return _read(service, provider, clock, 4, 0)
+
+
+def test_relay_seen_off_after_the_full_tail_is_a_full_battery():
+    service, repo, provider, clock = _service()
+    session = _target_session(service, provider, clock)
+    assert _charge_into_the_tail(service, provider, clock).state == "active"
+    # The server's OFF reached the device; this reader still has it "active".
+    provider.status.relay = False
+    clock.advance(seconds=20)
+    done = service.current("owner", vehicle_id="car") or repo.get_session("owner", session.session_id)
+    assert done.state == "completed" and done.stop_reason == "battery_full"
+    assert done.estimated_soc == 100 and done.end_soc_source == "taper_full"
+    pending = LearnedProfile.from_dict(repo.get_personal_profile("owner", "car").learned).pending
+    assert [item["labelSource"] for item in pending] == ["taper_full"]
+
+
+def test_relay_seen_off_after_the_target_energy_is_target_reached():
+    service, repo, provider, clock = _service()
+    session = _target_session(service, provider, clock, current=20, target=30)
+    assert session.target_energy_wh and session.target_energy_wh > 100
+    assert _read(service, provider, clock, 450, session.target_energy_wh - 50).state == "active"
+    # OFF landed with the last Wh still unread: the fresh meter reading counts.
+    provider.status.energy_wh += 60
+    provider.status.power_w = 0
+    provider.status.relay = False
+    clock.advance(seconds=20)
+    done = service.current("owner", vehicle_id="car") or repo.get_session("owner", session.session_id)
+    assert done.state == "completed" and done.stop_reason == "target_reached"
+
+
+def test_the_servers_own_stop_cut_short_keeps_the_result():
+    service, repo, provider, clock = _service()
+    session = _target_session(service, provider, clock)
+    live = _charge_into_the_tail(service, provider, clock)
+    live.state = "stopping"
+    repo.save_session("owner", live)
+    provider.status.relay = False
+    clock.advance(seconds=20)
+    done = service.current("owner", vehicle_id="car") or repo.get_session("owner", session.session_id)
+    assert done.state == "completed" and done.stop_reason == "battery_full"
+
+
+def test_a_real_interruption_is_still_reported():
+    service, repo, provider, clock = _service()
+    session = _target_session(service, provider, clock)
+    assert _read(service, provider, clock, 450, 500).state == "active"
+    # Cut mid-charge at full power, no tail, target far away.
+    provider.status.relay = False
+    clock.advance(seconds=20)
+    done = service.current("owner", vehicle_id="car") or repo.get_session("owner", session.session_id)
+    assert done.state == "interrupted" and done.stop_reason == "relay_off"
+    learned = repo.get_personal_profile("owner", "car")
+    assert learned is None or not (learned.learned or {}).get("pending")
+
+
+def test_unplugging_the_scooter_is_not_a_full_battery():
+    service, repo, provider, clock = _service()
+    session = _target_session(service, provider, clock)
+    assert _read(service, provider, clock, 450, 500).state == "active"
+    # 450 -> 0 W with no taper before the tail.
+    assert _read(service, provider, clock, 0, 0).state == "active"
+    provider.status.relay = False
+    clock.advance(seconds=20)
+    done = service.current("owner", vehicle_id="car") or repo.get_session("owner", session.session_id)
+    assert done.state == "interrupted" and done.stop_reason == "relay_off"
+
+
+def test_the_users_own_off_stays_manual():
+    service, repo, provider, clock = _service()
+    session = _target_session(service, provider, clock)
+    assert _read(service, provider, clock, 450, 500).state == "active"
+    done = service.stop("owner", session.session_id)
+    assert done.state == "cancelled" and done.stop_reason == "manual"

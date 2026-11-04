@@ -633,8 +633,49 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if manual:
             session.ai_stop_at = device_stop
 
-    def _relay_off_outcome(self, session: ChargingSession, now) -> tuple[str, str]:
-        """Timer completion vs. an OFF that came before the plan."""
+    def _finished_outcome(self, session: ChargingSession, now, status=None) -> str | None:
+        """Why this charge had already finished when its relay is seen OFF.
+
+        QA 146: the server's own OFF can be seen first by another reader (/live
+        while the worker stops, or a poll after Cloud status lagged), which used
+        to record a charge left to finish by itself as "interrupted".
+        """
+        energy = float(session.energy_used_wh or 0)
+        reading = _optional_float(getattr(status, "energy_wh", None))
+        if reading is not None and session.last_meter_energy_wh is not None:
+            energy += max(0.0, reading - session.last_meter_energy_wh)
+        if (session.stop_mode == "target" and session.target_energy_wh is not None
+                and charge_model.target_reached(energy, session.target_energy_wh, 0, 0)):
+            return "target_reached"
+        if (session.tail_since is not None
+                and self._tail_follows_taper(session, float(session.peak_power_w or 0))):
+            return "battery_full"
+        if (session.stop_mode == "target" and session.idle_since is not None
+                and (now - session.idle_since).total_seconds() >= charge_model.IDLE_CUTOFF_SECONDS):
+            return "charger_idle"
+        return None
+
+    def _finalize_relay_off(self, uid: str, session: ChargingSession, state: str, stop_reason: str,
+                            now, **finalize) -> ChargingSession:
+        """Record a relay seen OFF; a full battery gets its usual label."""
+        full = stop_reason == "battery_full"
+        if full:
+            session.estimated_soc = 100.0
+            session.end_soc_source = "taper_full"
+            session.full_detected_at = now
+        done = self._finalize_session(uid, session, state=state, stop_reason=stop_reason, **finalize)
+        if full and done.state == "completed":
+            try:
+                self.queue_charge_label(uid, done, label_source="taper_full")
+            except Exception:
+                pass  # learning never affects the verified OFF
+        return done
+
+    def _relay_off_outcome(self, session: ChargingSession, now, status=None) -> tuple[str, str]:
+        """A charge that had finished, timer completion, or an OFF before the plan."""
+        finished = self._finished_outcome(session, now, status)
+        if finished is not None:
+            return "completed", finished
         near_timer = now >= session.effective_stop_at - timedelta(seconds=PLANNED_STOP_TOLERANCE_SECONDS)
         if session.stop_mode == "target":
             # The device timer is only the safety ceiling of a target charge:
@@ -1843,12 +1884,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if not relay_on:
             state, stop_reason = (("cancelled", "manual") if session.state == "stopping"
                                   else self._relay_off_outcome(session, now))
-            self._finalize_session(
-                uid, session,
-                state=state,
-                stop_reason=stop_reason,
-                meter_energy_wh=float(payload.get("energyWh", 0)),
-            )
+            self._finalize_relay_off(uid, session, state, stop_reason, now,
+                                     meter_energy_wh=float(payload.get("energyWh", 0)))
         else:
             self._checkpoint_session(uid, session)
         return {"recorded": sample_due, "coverage": session.telemetry_coverage}
@@ -2328,16 +2365,20 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             self._checkpoint_session(uid, session)
             return session
         if session.state == "stopping":
-            # Only stop() moves a session to "stopping": relay OFF here is the
-            # user's OFF (verified or still awaiting its own readback).
+            # OFF_PENDING_READBACK is the user's OFF still awaiting its readback.
+            # Otherwise stop() or the server's own cutoff was cut short; a charge
+            # that had finished keeps that result (QA 146).
             if session.last_error == OFF_PENDING_READBACK:
                 session.last_error = None
+            else:
+                finished = self._finished_outcome(session, now, status)
+                if finished is not None:
+                    return self._finalize_relay_off(uid, session, "completed", finished, now, status=status)
             return self._finalize_session(uid, session, state="cancelled",
                                           stop_reason="manual", status=status)
         self._note_link_ok(uid, session, now)
-        state, stop_reason = self._relay_off_outcome(session, now)
-        return self._finalize_session(uid, session, state=state,
-                                      stop_reason=stop_reason, status=status)
+        state, stop_reason = self._relay_off_outcome(session, now, status)
+        return self._finalize_relay_off(uid, session, state, stop_reason, now, status=status)
 
     def _provider_error(self, exc: ProviderError) -> SmartChargeError:
         status = 401 if exc.code == "needsReauthentication" else 503
