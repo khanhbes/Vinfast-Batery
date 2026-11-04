@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 146. Task Completion Log — Học dự đoán % sạc theo xe, tag Đang học (04/11/2026, chủ app chọn) — Code + test xong, chưa deploy
+## 146. Task Completion Log — Học dự đoán % sạc theo xe, tag Đang học (04/11/2026, chủ app chọn) — API + worker đã deploy, APK 1.3.20+223 đã build, chưa thử trên máy
 
 Chỉ đọc một xe của chủ app (`az containerapp exec`, chủ app tự chạy script). 38 phiên; 9 mẫu đã học: 7 mẫu chấm được, 2 mẫu tới 100 % (`censored`). Đo điện tốt: phiên mục tiêu ngắt lệch ≤ 3,7 Wh so với `target_energy_wh`, công suất ổn định 440–450 W.
 
@@ -38,7 +38,9 @@ Chỉ đọc một xe của chủ app (`az containerapp exec`, chủ app tự ch
 
 **Kiểm thử:** `pytest tests` 881 đạt / 15 bỏ qua; `flutter test` 1355 đạt / 213 bỏ qua; `flutter analyze` file đã sửa sạch. Sửa 1 test cũ `test_task126_charge_model` (26,15 → 26,37) vì đổi quy tắc có chủ đích. Fixture ẩn danh `tests/fixtures/owner_charge_samples.json`. Chưa deploy, chưa build APK, chưa thử trên máy.
 
-**Còn mở:** deploy API + worker, APK; sau deploy chủ app bấm Huấn luyện lại để dùng 26,50 (điểm ngắt đổi rất ít); sau 5 lần sạc có nhập % đọc `charge.shadow` để chủ app quyết định bật bù lệch hay không; đọc lại % sau 30–60 phút chưa đi xe để kiểm đồng hồ trễ. Riêng, chưa sửa: `battery_health` bỏ qua bài kiểm tra khi % đầu đúng 0 (`0.0 or 100`), nếu sửa phiên 02/11 sẽ thành 85,6 % do đồng hồ lệch; `batteryReadings` có `charge_end` trùng; xe Feliz khác có thể vẫn 2600 Wh (cần đọc rộng, chủ app duyệt riêng).
+**Deploy (04/11, chủ app đồng ý và tự chạy script vì lệnh rollout bị hệ thống quyền chặn):** gate task162 từ worktree sạch `adce4eb`: Linux 880 đạt / 20 bỏ qua, nguồn 90 file khớp, boot Pass 11,68 s, worker smoke đạt. API `sha256:43cc2a3d…` → revision `vinfast-api--api106-1104142809` (`qa146-rollout-20261104.json`, succeeded, không rollback); worker `sha256:9049d0fc…` → `vinfast-worker-control--0000029`, cả hai Running. `/api/health`, `/api/ready`, `/dieu-khoan-premium` 200 (đã hết câu nhắc 3 ngày), `/api/learning/x/status` không token 401. APK profile 1.3.20+223 (aapt xác nhận), SHA-256 `FA0BF70D1027C2661A396D8FC9640EAC32B0B3DD143ACD33A6D41EF3CBD97813`, chưa cài. Chưa kiểm tra phiên sạc hay tag trên máy thật.
+
+**Còn mở:** cài APK; chủ app bấm Huấn luyện lại để dùng 26,50 (điểm ngắt đổi rất ít); sau 5 lần sạc có nhập % đọc `charge.shadow` để chủ app quyết định bật bù lệch hay không; đọc lại % sau 30–60 phút chưa đi xe để kiểm đồng hồ trễ. Riêng, chưa sửa: `battery_health` bỏ qua bài kiểm tra khi % đầu đúng 0 (`0.0 or 100`), nếu sửa phiên 02/11 sẽ thành 85,6 % do đồng hồ lệch; `batteryReadings` có `charge_end` trùng; xe Feliz khác có thể vẫn 2600 Wh (cần đọc rộng, chủ app duyệt riêng).
 
 ## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03–04/11/2026, chủ app chọn) — API và trang Admin đã deploy, MoMo còn đóng
 
