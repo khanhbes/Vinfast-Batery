@@ -22,7 +22,7 @@ from .models import (
     utcnow,
 )
 from .providers import ProviderError
-from . import charge_model
+from . import charge_ai, charge_model
 from .charging_fusion import fuse_charging_eta
 from .personalization import evaluate_training, update_profile
 from .personal_model_registry import PersonalModelRegistry
@@ -433,7 +433,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if params is None:
             raise SmartChargeError("capacityUnavailable",
                                    "Xe chưa có dung lượng pin đã được xác minh.", 409)
-        estimate = charge_model.estimate(params, current, target)
+        # QA 147: only what the owner's training selected; 0 for most vehicles.
+        correction = charge_ai.correction(learned, current, target, self.clock())
+        estimate = charge_model.estimate(params, current + correction, target)
         seconds = estimate.seconds
         if seconds <= 0 or seconds > self.max_minutes * 60:
             raise SmartChargeError("unsafeDuration",
@@ -480,6 +482,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             estimate_low_seconds=estimate.low_seconds,
             estimate_high_seconds=estimate.high_seconds,
             wh_per_pct=round(params.wh_per_pct, 3),
+            soc_correction_pct=correction,
             charge_power_w=round(params.power_w, 1),
             power_source=params.power_source,
             soc_mae=params.soc_mae,
@@ -1064,7 +1067,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             safety_policy_version=self.safety_policy.version,
             stop_mode="target" if target_mode else "timer",
             model_wh_per_pct=preview.wh_per_pct if target_mode else None,
-            target_energy_wh=(round(preview.wh_per_pct * max(0.0, preview.target_soc - preview.current_soc), 2)
+            soc_correction_pct=preview.soc_correction_pct if target_mode else 0.0,
+            target_energy_wh=(round(preview.wh_per_pct * max(
+                0.0, preview.target_soc - preview.current_soc - preview.soc_correction_pct), 2)
                               if target_mode else None),
             hardware_timeout_seconds=duration,
         )
@@ -1682,7 +1687,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                 if latest is None or latest.state != "active":
                     self._settle_failed_raise(uid, session.session_id, extended)
         session.target_soc = target
-        session.target_energy_wh = round(session.model_wh_per_pct * max(0.0, target - session.start_soc), 2)
+        session.target_energy_wh = round(
+            session.model_wh_per_pct * max(0.0, target - session.start_soc - session.soc_correction_pct), 2)
         session.ai_stop_at = now + timedelta(seconds=seconds_left)
         session.updated_at = now
         session.version += 1
@@ -2022,6 +2028,11 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             session.estimated_stored_energy_wh = session.energy_used_wh * charge_model.DEFAULT_EFFICIENCY
             params = charge_model.ChargeParams(wh_per_pct=session.model_wh_per_pct, power_w=1)
             session.estimated_soc = charge_model.soc_after(params, session.start_soc, session.energy_used_wh)
+            if session.soc_correction_pct and session.target_energy_wh:
+                # Reaches the target exactly when the corrected energy is in.
+                share = min(1.0, session.energy_used_wh / session.target_energy_wh)
+                session.estimated_soc = min(100.0, max(
+                    session.start_soc, session.estimated_soc + session.soc_correction_pct * share))
             session.soc_estimate_source = "shelly_energy"
             session.soc_estimate_quality = "live" if session.energy_quality == "good" else "partial"
             session.soc_estimation_version = 3

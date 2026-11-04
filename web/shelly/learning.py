@@ -21,7 +21,7 @@ import re
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from . import charge_model
+from . import charge_ai, charge_model
 from .habits import charge_habits
 
 
@@ -139,6 +139,8 @@ class VehicleLearningMixin:
         at = (session.stopped_at or now).isoformat()
         wh_in_use = session.model_wh_per_pct or learned.wh_per_pct or base
         carried, next_offset = _gauge_shadow(learned, session, end_pct, at, wh_in_use)
+        # Collected for later: nothing reads it yet (QA 147).
+        temperature = _recent_battery_temp(vehicle, session)
         queued, decision = charge_model.queue_sample(learned, {
             "sessionId": session.session_id,
             "energyWh": session.energy_used_wh,
@@ -152,6 +154,7 @@ class VehicleLearningMixin:
             "labelSource": label_source,
             "shadowOffsetPct": carried,
             "shadowWhPerPct": wh_in_use if carried is not None else None,
+            "batteryTempC": temperature,
         }, base_wh_per_pct=base, now=now)
         if decision != "queued":
             return decision
@@ -308,6 +311,7 @@ class VehicleLearningMixin:
         charge = charge_model.training_status(learned)
         consent = profile.consent_enabled if profile else True
         charge["learning"]["state"] = _learning_state(charge["learning"], learned, consent)
+        charge["model"] = charge_ai.status(learned)
         charge.update({"whPerPct": learned.wh_per_pct, "powerW": learned.power_w,
                        "report": (profile.training_reports or {}).get("charge") if profile else None,
                        # What the model learned from and what waits (Task 127).
@@ -392,8 +396,10 @@ class VehicleLearningMixin:
             learned = charge_model.LearnedProfile.from_dict(profile.learned)
             if not learned.pending and mode == "finetune":
                 raise self._learning_error("nothingNew", "Chưa có dữ liệu sạc mới để huấn luyện.", 409)
-            updated, report = charge_model.train(learned, base_wh_per_pct=self._charge_base(vehicle),
-                                                 now=now, mode=mode)
+            base = self._charge_base(vehicle)
+            updated, report = charge_model.train(learned, base_wh_per_pct=base, now=now, mode=mode)
+            updated, layer = charge_ai.select_layer(updated, base=base, now=now)
+            report = {**report, "layer": layer}
             profile.learned = updated.to_dict()
             profile.valid_sessions = len(updated.samples)
             profile.median_power_w = updated.power_w
@@ -436,10 +442,10 @@ def _learning_state(progress: dict, learned, consent: bool) -> str:
 
 def _gauge_shadow(learned, session, end_pct: float, at: str,
                   wh_per_pct: float | None) -> tuple[float | None, float | None]:
-    """Shadow test (QA 146): the offset this charge started with and the one it
-    leaves. ``(None, None)`` when it cannot be scored (no Wh/%, or a charge older
-    than the newest labelled one, whose start was not affected by that offset).
-    A second reading of the same charge reuses its first starting offset."""
+    """The offset this charge started with and the one it leaves. ``(None, None)``
+    when it cannot be scored (no Wh/%, or a charge older than the newest labelled
+    one, whose start was not affected by that offset). A second reading of the same
+    charge reuses its first starting offset."""
     if not wh_per_pct:
         return None, None
     previous = next((item for item in [*learned.samples, *learned.pending]
@@ -452,7 +458,16 @@ def _gauge_shadow(learned, session, end_pct: float, at: str,
             return None, None
         carried = learned.gauge_offset_pct
     return carried, charge_model.gauge_offset_after(
-        session.start_soc, carried, session.energy_used_wh, wh_per_pct, end_pct)
+        session.start_soc, session.energy_used_wh, wh_per_pct, end_pct)
+
+
+def _recent_battery_temp(vehicle: dict, session) -> float | None:
+    """The cluster's battery temperature, when read close to this charge's start."""
+    temperature = _float(vehicle.get("batteryTempC"), 0, 100)
+    read_at, began = _parse(vehicle.get("batteryTempAt")), _parse(session.created_at)
+    if temperature is None or read_at is None or began is None:
+        return None
+    return temperature if abs((began - read_at).total_seconds()) <= 3 * 3600 else None
 
 
 def _charge_row(item: dict) -> dict:

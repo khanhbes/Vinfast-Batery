@@ -43,6 +43,7 @@ import '../premium/premium_gate.dart';
 import '../../data/models/app_appearance.dart';
 import 'widgets/edit_stop_at_sheet.dart';
 import 'widgets/edit_target_sheet.dart';
+import 'widgets/full_charge_nudge.dart';
 import 'widgets/prediction_card_v2.dart';
 import 'widgets/push_off_notice.dart';
 import 'dashboard_scan_screen.dart';
@@ -507,6 +508,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     ShellyConnectionSnapshot connection,
   ) {
     final draft = state.draft;
+    final suggestFullAfter = ref
+        .watch(learnedModelsProvider(widget.vehicleId))
+        .valueOrNull
+        ?.status
+        ?.charge
+        .suggestFullAfter;
     final busy =
         state.phase == SmartChargingViewPhase.loading ||
         state.phase == SmartChargingViewPhase.starting;
@@ -681,6 +688,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             ),
           ),
         ),
+        if (suggestFullAfter != null && currentTarget < 99 && !full) ...[
+          const SizedBox(height: 12),
+          FullChargeNudge(
+            chargesSinceFull: suggestFullAfter,
+            onChooseFull: busy
+                ? null
+                : () => controller.updateDraft(targetSoc: 100),
+          ),
+        ],
         LuxeFold(
           duration: const Duration(milliseconds: 360),
           child: preview == null

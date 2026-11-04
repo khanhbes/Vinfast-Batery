@@ -256,9 +256,14 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **QA 146 (04/11/2026, chủ app chọn) — học dự đoán % sạc:**
   - `_robust_wh` là trung vị trọng số theo % đã nạp × độ mới; không kẹp min theo mẫu 100 %. Sai số hiện cho user qua `honest_mae`.
   - Tag theo dữ liệu sạc, không theo tuổi xe: `Đang học` tới khi đủ 5 lần sạc và tổng ≥ 100 %; đủ dữ liệu mà chưa huấn luyện thì `bấm Huấn luyện` hoặc `Ultra để áp dụng`. Nút Huấn luyện vẫn chỉ Ultra.
-  - Đồng hồ xe có lúc hụt rồi bù ở lần sau. Bù lệch (`gauge_offset_pct`, `charge.shadow`) chỉ chạy song song, không được đưa vào điểm ngắt khi chủ app chưa duyệt theo số đo.
+  - Đồng hồ xe có lúc hụt rồi bù ở lần sau; bù lệch (`gauge_offset_pct`, `charge.shadow`) chỉ vào điểm ngắt qua lớp ở QA 147.
   - `battery_health` (Dung lượng pin còn lại) tách khỏi mô hình: đổi cách huấn luyện không được làm số này đổi (test khóa 99,4 % / 2385 Wh). Đừng đổi nhãn/`censored` của mẫu nếu chưa xét ảnh hưởng tới nó.
   - Dung lượng danh định chỉ dùng để hiển thị, tính sức khỏe pin và làm điểm xuất phát của xe chưa học; xe đã học giữ Wh/%. App đọc qua `VehicleModel.capacityWhFrom`.
+
+- **QA 147 (04/11/2026, chủ app chọn) — dự đoán % sạc nhiều lớp (`shelly/charge_ai.py`):**
+  - `base` (Wh/%) → `offset` (lệch lần trước, trả hết ở lần sau, không cộng dồn) → `ai` (ridge nhỏ). Lớp chỉ đổi khi bấm Huấn luyện và chỉ khi thắng trên lần sạc chưa thấy (`_beats`: MAE ≥ 5 %, RMSE, bias); AI cần ≥ 30 lần sạc, ≥ 14 ngày, ≥ 20 lần kiểm tra. Lần tới 100 % không chấm điểm.
+  - Đã có AI thì chỉ finetune, kể cả Huấn luyện lại. Không thêm đặc trưng khi chưa có dữ liệu; `batteryTempC` hiện chỉ thu thập.
+  - `soc_correction_pct` chỉ cho Sạc AI, mục tiêu < 99 %, ±15 %, ≤ nửa phần % cần sạc. Không đụng trần timer, ngắt khi đầy, an toàn. `learned.ledger` (200) cho AI; `samples` (12) và `battery_health` giữ nguyên.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

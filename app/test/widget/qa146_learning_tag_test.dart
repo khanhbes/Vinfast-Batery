@@ -7,6 +7,7 @@ import 'package:vinfast_battery/data/models/personal_charging_profile.dart';
 import 'package:vinfast_battery/data/models/vehicle_learning_status.dart';
 import 'package:vinfast_battery/data/models/vehicle_model.dart';
 import 'package:vinfast_battery/data/services/server_smart_charger_service.dart';
+import 'package:vinfast_battery/features/ai/widgets/full_charge_nudge.dart';
 import 'package:vinfast_battery/features/ai/widgets/prediction_card_v2.dart';
 import 'package:vinfast_battery/features/settings/personal_ai_settings_screen.dart';
 
@@ -91,6 +92,80 @@ void main() {
       expect(_status(_learning('learned')).chargeLearningTag, isNull);
       expect(_status(_learning('off')).chargeLearningTag, isNull);
       expect(_status(null).chargeLearningTag, isNull);
+    });
+  });
+
+  group('layers on top of Wh/% (QA 147)', () {
+    ModelTrainingStatus charge(Map<String, dynamic>? model) =>
+        ModelTrainingStatus.fromJson({
+          'pending': 0,
+          'required': 3,
+          'whPerPct': 26.5,
+          'model': ?model,
+        });
+
+    test('the layer in use and the way to the small model', () {
+      expect(charge({'layer': 'base'}).layerLabel, isNull);
+      expect(charge({'layer': 'offset'}).layerLabel, 'có bù lệch đồng hồ');
+      expect(charge({'layer': 'ai'}).layerLabel, 'có AI nhỏ');
+      expect(
+        charge({
+          'layer': 'base',
+          'aiCharges': 7,
+          'aiNeedCharges': 30,
+        }).aiProgressLabel,
+        'AI nhỏ: 7/30 lần sạc',
+      );
+      expect(
+        charge({
+          'layer': 'offset',
+          'aiCharges': 30,
+          'aiNeedCharges': 30,
+          'aiDays': 9,
+          'aiNeedDays': 14,
+        }).aiProgressLabel,
+        'AI nhỏ: cần dữ liệu trong 14 ngày',
+      );
+      expect(
+        charge({
+          'layer': 'base',
+          'aiCharges': 31,
+          'aiNeedCharges': 30,
+          'aiDays': 40,
+          'aiNeedDays': 14,
+        }).aiProgressLabel,
+        'AI nhỏ: đã đủ dữ liệu, sẽ thử khi huấn luyện',
+      );
+      expect(charge({'layer': 'ai'}).aiProgressLabel, isNull);
+      // An older server sends nothing and nothing is shown.
+      expect(charge(null).layerLabel, isNull);
+      expect(charge(null).aiProgressLabel, isNull);
+      expect(charge(null).suggestFullAfter, isNull);
+    });
+
+    test('a full charge is suggested only when the server says so', () {
+      expect(
+        charge({'suggestFull': true, 'chargesSinceFull': 6}).suggestFullAfter,
+        6,
+      );
+      expect(
+        charge({'suggestFull': false, 'chargesSinceFull': 2}).suggestFullAfter,
+        isNull,
+      );
+    });
+
+    test('the training report names the selected layer', () {
+      TrainingReport? report(String? layer) => TrainingReport.fromJson({
+        'decision': 'promoted',
+        'used': 9,
+        'beforeMae': 3.6,
+        'afterMae': 3.3,
+        'layer': ?(layer == null ? null : {'selected': layer}),
+      });
+      expect(report(null)!.summary, isNot(contains('Đang dùng thêm')));
+      expect(report('base')!.summary, isNot(contains('Đang dùng thêm')));
+      expect(report('offset')!.summary, contains('bù lệch đồng hồ'));
+      expect(report('ai')!.summary, contains('AI nhỏ'));
     });
   });
 
@@ -182,6 +257,42 @@ void main() {
       }
       expect(find.byKey(const ValueKey('model-learning-tag')), findsOneWidget);
       expect(find.text('Đang học · 2/5 lần sạc'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets('full charge nudge fills the target, text x$scale', (
+      tester,
+    ) async {
+      var chosen = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: LuxeTheme.data(),
+          home: MediaQuery(
+            data: MediaQueryData(
+              size: const Size(320, 640),
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: Scaffold(
+              body: SingleChildScrollView(
+                child: FullChargeNudge(
+                  chargesSinceFull: 6,
+                  onChooseFull: () => chosen++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.textContaining('Đã 6 lần sạc chưa đầy'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('full-charge-choose')));
+      expect(chosen, 1);
+      expect(
+        tester.getSize(find.byKey(const ValueKey('full-charge-choose'))).height,
+        greaterThanOrEqualTo(48),
+      );
       expect(tester.takeException(), isNull);
     });
   }

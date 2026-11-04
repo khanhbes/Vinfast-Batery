@@ -268,6 +268,7 @@ class ChargePreview:
     estimate_low_seconds: int | None = None
     estimate_high_seconds: int | None = None
     wh_per_pct: float | None = None
+    soc_correction_pct: float = 0.0
     charge_power_w: float | None = None
     power_source: str | None = None
     soc_mae: float | None = None
@@ -310,6 +311,7 @@ class ChargePreview:
             "estimateLowSeconds": self.estimate_low_seconds,
             "estimateHighSeconds": self.estimate_high_seconds,
             "whPerPct": self.wh_per_pct,
+            "socCorrectionPct": self.soc_correction_pct,
             "chargePowerW": self.charge_power_w,
             "powerSource": self.power_source,
             "socMae": self.soc_mae,
@@ -400,6 +402,8 @@ class ChargingSession:
     stop_mode: str = "timer"
     model_wh_per_pct: float | None = None
     target_energy_wh: float | None = None
+    # QA 147: % the selected layer expects the gauge to add beyond the energy.
+    soc_correction_pct: float = 0.0
     idle_since: datetime | None = None
     unsafe_samples: int = 0
     soc_error: float | None = None
@@ -501,6 +505,7 @@ class ChargingSession:
             "stop_mode": self.stop_mode,
             "model_wh_per_pct": self.model_wh_per_pct,
             "target_energy_wh": self.target_energy_wh,
+            "soc_correction_pct": self.soc_correction_pct,
             "idle_since": iso(self.idle_since),
             "unsafe_samples": self.unsafe_samples,
             "soc_error": self.soc_error,

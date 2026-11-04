@@ -235,19 +235,12 @@ def test_a_vehicle_with_only_full_charges_can_still_learn():
 
 # ── gauge offset: shadow only ──────────────────────────────────────────────
 
-def test_gauge_offset_replayed_on_the_owner_charges():
-    offset, wh = 0.0, 26.151
-    pairs = []
-    for item in SAMPLES:
-        start, energy, actual = item["startPct"], item["energyWh"], item["actualEndPct"]
-        pairs.append((min(100.0, start + energy / wh), min(100.0, start + offset + energy / wh), actual))
-        offset = charge_model.gauge_offset_after(start, offset, energy, wh, actual)
-    assert offset == 0.0  # the last charge reached 100 %
-    plain = sum(abs(p - a) for p, _, a in pairs) / len(pairs)
-    carried = sum(abs(c - a) for _, c, a in pairs) / len(pairs)
-    assert carried < plain
-    assert charge_model.gauge_offset_after(10, 0, 100, 26, 80) == -15.0  # bounded both ways
-    assert charge_model.gauge_offset_after(10, 0, 3000, 26, 80) == 15.0
+def test_gauge_offset_is_settled_not_added_up():
+    # QA 147: the offset is what this charge left, whatever it started with.
+    assert charge_model.gauge_offset_after(8, 62 * 26.0, 26.0, 58) == pytest.approx(12.0)
+    assert charge_model.gauge_offset_after(0, 88 * 26.0, 26.0, 100) == 0.0  # full settles it
+    assert charge_model.gauge_offset_after(10, 100, 26, 80) == -15.0  # bounded both ways
+    assert charge_model.gauge_offset_after(10, 3000, 26, 80) == 15.0
 
 
 def test_gauge_offset_never_moves_the_estimate_or_the_cutoff():
@@ -293,9 +286,9 @@ def test_gauge_offset_through_the_service():
     assert entry["shadowOffsetPct"] == pytest.approx(12.0)
     assert learned().gauge_offset_pct == 0.0
 
+    # The full charge is not scored: the charger ended it, the estimate could not miss.
     report = service.learning_status("owner", "car")["charge"]["shadow"]
-    assert report["n"] == 2 and report["ready"] is False
-    assert report["withOffset"]["mae"] < report["plain"]["mae"]
+    assert report["n"] == 1 and report["ready"] is False
 
 
 def test_a_late_reading_of_an_older_charge_leaves_the_offset_alone():

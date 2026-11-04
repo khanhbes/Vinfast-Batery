@@ -12,6 +12,26 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 147. Task Completion Log — Dự đoán % sạc nhiều lớp: Wh/%, bù lệch đồng hồ, AI nhỏ, nhắc sạc đầy (04/11/2026, chủ app chọn) — Code + test xong, chưa deploy
+
+**Chủ app chọn:** kết hợp phương án A với các phương án sau, tránh lệch nhất có thể; đủ dữ liệu thì huấn luyện AI nhỏ, từ đó chỉ finetune.
+
+**Đính chính QA 146:** bảng so sánh cũ (bù lệch 3,31 % so với 4,40 %) tính cả lần tới 100 %, trong khi lần đó bộ sạc tự ngắt nên app không có gì để đoán sai. Tính lại trên 7 lần app phải đoán: không bù 3,29 %, bù cộng dồn 2,94 %, **bù một lần rồi trả hết ở lần sau 1,97 %** (lớn nhất 5,8 % so với 11,1 %). Đã đổi `gauge_offset_after` sang cách thứ ba. Quy tắc được chọn sau khi xem chính 7 lần này nên có thể khớp quá; vì vậy nó phải thắng trên số thật rồi mới dùng.
+
+**Đã làm (`web/shelly/charge_ai.py`):**
+- Ba lớp, chỉ đổi khi chủ xe bấm Huấn luyện (Ultra): `base` (Wh/%) → `offset` (cần ít nhất 5 lần ghi thật, không tính lần tới 100 %) → `ai` (hồi quy ridge 6 đặc trưng: % đầu, % sạc, lệch mang sang, số lần chưa đầy, số ngày nghỉ, hệ số chặn; thuần Python).
+- Mỗi lớp chỉ thắng khi sai số đo trên lần sạc chưa thấy: AI cần ≥ 30 lần sạc trong ≥ 14 ngày, ≥ 20 lần kiểm tra theo thời gian, MAE tốt hơn ≥ 5 %, RMSE không xấu hơn 3 %, bias không tăng. Quy tắc dự án là 2 %; mô phỏng cho thấy 2 % chọn AI trên nhiễu 7/80 lần, 5 % là 0/80, và vẫn nhận mẫu thật 66/80.
+- Đã có AI thì chỉ finetune (kéo về trọng số hiện tại, trọng số theo độ mới), cả nút Huấn luyện lại từ đầu; finetune kém đi thì giữ trọng số cũ; AI kém lớp đơn giản hơn 0,5 % trên 10 lần gần nhất thì tạm dừng, trọng số vẫn giữ.
+- `learned.ledger` giữ tới 200 lần sạc cho AI; `samples` vẫn là cửa sổ 12 mẫu cho Wh/% và Dung lượng pin còn lại. Hồ sơ cũ đọc như `base`. Ghi thêm `batteryTempC` trên sổ khi có số đọc gần lúc sạc; chưa dùng làm đặc trưng vì chưa có dữ liệu.
+- Áp dụng: chỉ Sạc AI, mục tiêu dưới 99 %. `soc_correction_pct` giới hạn ±15 % và ≤ nửa phần % cần sạc, giảm hoặc tăng `target_energy_wh`, % trực tiếp về đúng mục tiêu lúc ngắt. Sạc tới 100 % và Theo giờ không bị chỉnh; trần timer, ngắt khi đầy và mọi kiểm tra an toàn giữ nguyên.
+- App: AI cá nhân hiện lớp đang dùng + tiến độ "AI nhỏ: 9/30 lần sạc"; báo cáo huấn luyện nêu lớp; Sạc AI có `FullChargeNudge` sau ≥ 5 lần sạc có nhập % chưa đầy, nút chỉ điền mục tiêu 100 %, vẫn qua xác nhận.
+
+**Nguồn về sạc đầy:** nhiều tài liệu ngành nêu LFP phẳng điện áp, BMS đếm dòng nên trôi và thường chỉnh lại khi đầy; mốc 0 % kém tin cậy. Chưa tìm thấy khuyến cáo chính thức của VinFast về sạc đầy định kỳ cho Feliz; chủ app nên xem sách hướng dẫn hoặc hỏi đại lý. Câu nhắc vì vậy ghi "có thể".
+
+**Kiểm thử:** `test_qa147_charge_layers.py` (dữ liệu chủ xe + mô phỏng nhiều seed), `pytest tests` 910 đạt / 15 bỏ qua; `flutter test` 1360 đạt / 213 bỏ qua; `flutter analyze` file đã sửa sạch. Mô phỏng hao pin 20 %/năm: sai số AI dưới 2 %. Dung lượng pin còn lại giữ 99,4 % / 2385 Wh ở mọi lớp (test khóa).
+
+**Hạn chế:** chưa deploy, chưa APK, chưa có lần sạc thật nào qua bản này. AI nhỏ cần ≥ 30 lần sạc có nhập %, hiện xe chủ app có 7 lần chấm được; có thể đủ dữ liệu mà vẫn không được chọn nếu không thắng. Lần hụt đầu tiên của đồng hồ vẫn không đoán trước được.
+
 ## 146. Task Completion Log — Học dự đoán % sạc theo xe, tag Đang học (04/11/2026, chủ app chọn) — API + worker đã deploy, APK 1.3.20+223 đã build, chưa thử trên máy
 
 Chỉ đọc một xe của chủ app (`az containerapp exec`, chủ app tự chạy script). 38 phiên; 9 mẫu đã học: 7 mẫu chấm được, 2 mẫu tới 100 % (`censored`). Đo điện tốt: phiên mục tiêu ngắt lệch ≤ 3,7 Wh so với `target_energy_wh`, công suất ổn định 440–450 W.

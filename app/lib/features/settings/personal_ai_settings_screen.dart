@@ -437,11 +437,18 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
   static String _chargeLearned(ModelTrainingStatus status) {
     final wh = (status.raw['whPerPct'] as num?)?.toDouble();
     final power = (status.raw['powerW'] as num?)?.toDouble();
-    if (wh == null) return 'Đang dùng thông số dòng xe (chưa huấn luyện).';
+    final ai = status.aiProgressLabel;
+    if (wh == null) {
+      return 'Đang dùng thông số dòng xe (chưa huấn luyện).'
+          '${ai == null ? '' : ' $ai.'}';
+    }
     final mae = status.mae;
+    final layer = status.layerLabel;
     return '${wh.toStringAsFixed(1)} Wh cho 1%'
+        '${layer == null ? '' : ' $layer'}'
         '${power == null ? '' : ' · sạc khoảng ${power.round()} W'}'
-        '${mae == null ? '' : ' · sai số khoảng ±${mae.toStringAsFixed(1)}%'}';
+        '${mae == null ? '' : ' · sai số khoảng ±${mae.toStringAsFixed(1)}%'}'
+        '${ai == null ? '' : ' · $ai'}';
   }
 
   static String _tripLearned(VehicleLearningStatus status) {

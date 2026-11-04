@@ -98,6 +98,35 @@ class ModelTrainingStatus {
 
   double get progress => required <= 0 ? 1 : (pending / required).clamp(0, 1);
 
+  Map<dynamic, dynamic> get _model {
+    final value = raw['model'];
+    return value is Map ? value : const {};
+  }
+
+  /// What sits on top of Wh/% after training (QA 147), null for plain Wh/%.
+  String? get layerLabel => switch (_model['layer']) {
+    'offset' => 'có bù lệch đồng hồ',
+    'ai' => 'có AI nhỏ',
+    _ => null,
+  };
+
+  /// The way to the small model, null once it is in use or on an older server.
+  String? get aiProgressLabel {
+    if (_model.isEmpty || _model['layer'] == 'ai') return null;
+    final have = _int(_model['aiCharges']);
+    final need = _int(_model['aiNeedCharges'], fallback: 30);
+    if (have < need) return 'AI nhỏ: $have/$need lần sạc';
+    final days = _num(_model['aiDays']) ?? 0;
+    final needDays = _num(_model['aiNeedDays']) ?? 14;
+    return days < needDays
+        ? 'AI nhỏ: cần dữ liệu trong ${needDays.round()} ngày'
+        : 'AI nhỏ: đã đủ dữ liệu, sẽ thử khi huấn luyện';
+  }
+
+  /// Partial charges since the last full one when a full charge is suggested.
+  int? get suggestFullAfter =>
+      _model['suggestFull'] == true ? _int(_model['chargesSinceFull']) : null;
+
   static ModelTrainingStatus fromJson(Object? raw) {
     final data = raw is Map
         ? Map<String, dynamic>.from(raw)
@@ -126,7 +155,11 @@ class TrainingReport {
     this.afterMae,
     this.at,
     this.evaluation,
+    this.layer,
   });
+
+  /// base | offset | ai: what the training selected on top of Wh/% (QA 147).
+  final String? layer;
 
   /// promoted | rejected_worse | no_data
   final String decision;
@@ -144,12 +177,17 @@ class TrainingReport {
   String get summary {
     String error(double? value) =>
         value == null ? '—' : '±${value.toStringAsFixed(1)}%';
-    return switch (decision) {
+    final main = switch (decision) {
       'promoted' =>
         'Đã dùng bản mới · sai số ${error(beforeMae)} → ${error(afterMae)} ($used mẫu)',
       'rejected_worse' =>
         'Bản mới không tốt hơn nên vẫn giữ bản cũ (sai số ${error(beforeMae)}).',
       _ => 'Chưa đủ dữ liệu để huấn luyện.',
+    };
+    return switch (layer) {
+      'offset' => '$main Đang dùng thêm bù lệch đồng hồ.',
+      'ai' => '$main Đang dùng thêm AI nhỏ.',
+      _ => main,
     };
   }
 
@@ -163,6 +201,10 @@ class TrainingReport {
       afterMae: _num(raw['afterMae']),
       at: DateTime.tryParse(raw['at']?.toString() ?? ''),
       evaluation: ModelEvaluation.fromJson(raw['evaluation']),
+      layer: () {
+        final value = raw['layer'];
+        return value is Map ? value['selected']?.toString() : null;
+      }(),
     );
   }
 }

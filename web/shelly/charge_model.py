@@ -63,9 +63,11 @@ CENSORED_WEIGHT = 0.25
 # "Đang học" (QA 146): the vehicle's own charges cover at least one full cycle.
 LEARNING_MIN_CHARGES = 5
 LEARNING_MIN_GAIN_PCT = 100.0
-# Shadow test only (QA 146): the scooter's gauge seems to fall behind the energy
-# after some charges and catch up on the next one. Nothing here moves a cutoff.
+# The scooter's gauge seems to fall behind the energy after some charges and catch
+# up on the next one. Recorded on every charge; it moves a cutoff only after a
+# training selected that layer (QA 147, charge_ai).
 MAX_GAUGE_OFFSET_PCT = 15.0
+MAX_LEDGER_CHARGES = 200
 GAUGE_RESET_END_PCT = 99.0
 SHADOW_MIN_CHARGES = 5
 # New labelled charges needed before the app suggests training (Task 127).
@@ -108,10 +110,15 @@ class LearnedProfile:
     # not change the estimate until the owner presses "Huấn luyện".
     pending: list[dict] = field(default_factory=list)
     trained_at: str | None = None
-    # Shadow test (QA 146): energy-based % minus the gauge after the newest
-    # labelled charge. Never used by the estimate or the cutoff.
+    # Energy-based % minus the gauge after the newest labelled charge.
     gauge_offset_pct: float = 0.0
     gauge_offset_at: str | None = None
+    # QA 147: every labelled charge, for the small model. ``samples`` stays the
+    # short window that the Wh/% fit and battery_health read.
+    ledger: list[dict] = field(default_factory=list)
+    layer: str = "base"  # base | offset | ai (charge_ai)
+    ai_model: dict | None = None
+    layer_mae: float | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -126,6 +133,10 @@ class LearnedProfile:
             "trainedAt": self.trained_at,
             "gaugeOffsetPct": self.gauge_offset_pct,
             "gaugeOffsetAt": self.gauge_offset_at,
+            "ledger": self.ledger[-MAX_LEDGER_CHARGES:],
+            "layer": self.layer,
+            "aiModel": self.ai_model,
+            "layerMae": self.layer_mae,
         }
 
     @classmethod
@@ -143,6 +154,10 @@ class LearnedProfile:
             trained_at=str(data["trainedAt"]) if data.get("trainedAt") else None,
             gauge_offset_pct=_finite(data.get("gaugeOffsetPct")),
             gauge_offset_at=str(data["gaugeOffsetAt"]) if data.get("gaugeOffsetAt") else None,
+            ledger=[dict(item) for item in (data.get("ledger") or []) if isinstance(item, dict)],
+            layer=str(data.get("layer") or "base"),
+            ai_model=dict(data["aiModel"]) if isinstance(data.get("aiModel"), dict) else None,
+            layer_mae=_positive(data.get("layerMae"), allow_zero=True),
         )
 
 
@@ -308,12 +323,17 @@ def queue_sample(
     if sample.get("shadowOffsetPct") is not None and sample.get("shadowWhPerPct"):
         entry["shadowOffsetPct"] = round(float(sample["shadowOffsetPct"]), 2)
         entry["shadowWhPerPct"] = round(float(sample["shadowWhPerPct"]), 3)
+    temperature = _positive(sample.get("batteryTempC"))
+    if temperature is not None:
+        entry["batteryTempC"] = temperature
     sid = entry["sessionId"]
     # A user reading replaces an automatic one for the same charge.
     pending = [item for item in profile.pending if item.get("sessionId") != sid]
     samples = [item for item in profile.samples if item.get("sessionId") != sid]
+    ledger = [item for item in profile.ledger if item.get("sessionId") != sid]
     queued = LearnedProfile(**{**profile.__dict__, "samples": samples,
-                               "pending": [*pending, entry][-MAX_PENDING_SAMPLES:]})
+                               "pending": [*pending, entry][-MAX_PENDING_SAMPLES:],
+                               "ledger": [*ledger, entry][-MAX_LEDGER_CHARGES:]})
     return queued, "queued"
 
 
@@ -397,6 +417,8 @@ def honest_mae(profile: LearnedProfile) -> float | None:
     """The error to show: the stored one, or the model's error on the charges
     it now holds when that is worse (QA 146: a rejected training kept "0.55"
     while the model missed the newest charges by 5.81)."""
+    if profile.layer != "base" and profile.layer_mae is not None:
+        return profile.layer_mae  # measured on charges that layer had not seen
     stored = profile.soc_mae
     charges = [*profile.samples, *profile.pending]
     if not profile.wh_per_pct or not any(not item.get("censored") for item in charges):
@@ -405,16 +427,16 @@ def honest_mae(profile: LearnedProfile) -> float | None:
     return live if stored is None else max(stored, live)
 
 
-def _unique_charges(profile: LearnedProfile) -> list[dict]:
+def unique_charges(profile: LearnedProfile) -> list[dict]:
     merged: dict[str, dict] = {}
-    for index, item in enumerate([*profile.samples, *profile.pending]):
+    for index, item in enumerate([*profile.ledger, *profile.samples, *profile.pending]):
         merged[str(item.get("sessionId") or f"_{index}")] = item
     return list(merged.values())
 
 
 def learning_progress(profile: LearnedProfile) -> dict:
     """How far the vehicle's own charges are from a full cycle ("Đang học")."""
-    charges = _unique_charges(profile)
+    charges = unique_charges(profile)
     gain = sum(_gain(item) for item in charges)
     return {
         "charges": len(charges),
@@ -425,25 +447,29 @@ def learning_progress(profile: LearnedProfile) -> dict:
     }
 
 
-def gauge_offset_after(start_pct: float, carried_pct: float, energy_wh: float,
-                       wh_per_pct: float, actual_end_pct: float) -> float:
-    """Shadow test: what the gauge still owes after this charge. A full battery
-    settles the debt."""
+def gauge_offset_after(start_pct: float, energy_wh: float, wh_per_pct: float,
+                       actual_end_pct: float) -> float:
+    """What the gauge owes after this charge. It is settled on the next charge,
+    so it is not added up (owner's 7 charges: mean error 1.97 %, 2.94 % when added
+    up, 3.29 % without it). A full battery settles it at once."""
     if actual_end_pct >= GAUGE_RESET_END_PCT:
         return 0.0
-    offset = start_pct + carried_pct + energy_wh / wh_per_pct - actual_end_pct
+    offset = start_pct + energy_wh / wh_per_pct - actual_end_pct
     return round(min(MAX_GAUGE_OFFSET_PCT, max(-MAX_GAUGE_OFFSET_PCT, offset)), 2)
 
 
 def shadow_report(profile: LearnedProfile) -> dict:
-    """Would carrying the gauge offset predict the end % better? Display only:
-    the owner decides from these numbers whether it ever moves a cutoff."""
+    """Would carrying the gauge offset predict the end % better, charge by charge
+    as it really ran? A charge that reached 100 % ends on the charger's signal,
+    so the estimate had nothing to get right there and it is not scored."""
     plain, carried = [], []
-    for item in _unique_charges(profile):
+    for item in unique_charges(profile):
         wh = _positive(item.get("shadowWhPerPct"))
         if wh is None or item.get("shadowOffsetPct") is None:
             continue
         actual = float(item["actualEndPct"])
+        if actual >= GAUGE_RESET_END_PCT:
+            continue
         end = float(item["startPct"]) + float(item["energyWh"]) / wh
         plain.append((min(100.0, end), actual))
         carried.append((min(100.0, end + float(item["shadowOffsetPct"])), actual))
@@ -452,9 +478,16 @@ def shadow_report(profile: LearnedProfile) -> dict:
         "need": SHADOW_MIN_CHARGES,
         "ready": len(plain) >= SHADOW_MIN_CHARGES,
         "offsetPct": profile.gauge_offset_pct,
-        "plain": _stats(plain),
-        "withOffset": _stats(carried),
+        "plain": _stats_rmse(plain),
+        "withOffset": _stats_rmse(carried),
     }
+
+
+def _stats_rmse(pairs: list[tuple[float, float]]) -> dict:
+    result = _stats(pairs)
+    result["rmse"] = (round(math.sqrt(sum((p - a) ** 2 for p, a in pairs) / len(pairs)), 2)
+                      if pairs else None)
+    return result
 
 
 def train(
@@ -499,6 +532,10 @@ def train(
         trained_at=now.isoformat(),
         gauge_offset_pct=profile.gauge_offset_pct,
         gauge_offset_at=profile.gauge_offset_at,
+        ledger=profile.ledger,
+        layer=profile.layer,
+        ai_model=profile.ai_model,
+        layer_mae=profile.layer_mae,
     )
     candidate.soc_mae = _loo_mae(samples, base_wh_per_pct, weigh_now)
     evaluation = _evaluate(samples, profile, base_wh_per_pct, weigh_now)
