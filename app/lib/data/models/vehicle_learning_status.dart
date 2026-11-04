@@ -20,6 +20,27 @@ class VehicleLearningStatus {
   final ModelTrainingStatus charge;
   final ModelTrainingStatus trip;
 
+  /// Short tag while the charge estimate is not yet this vehicle's own (QA
+  /// 146), null once it is, or when learning is off or the server is older.
+  String? get chargeLearningTag {
+    final raw = charge.raw['learning'];
+    if (raw is! Map) return null;
+    final charges = _int(raw['charges']);
+    final needCharges = _int(raw['needCharges'], fallback: 5);
+    return switch (raw['state']) {
+      'learning' when charges < needCharges =>
+        'Đang học · $charges/$needCharges lần sạc',
+      'learning' =>
+        'Đang học · đã nạp ${(_num(raw['gainPct']) ?? 0).round()}/'
+            '${(_num(raw['needGainPct']) ?? 100).round()}%',
+      'enough' =>
+        trainAllowed
+            ? 'Đủ dữ liệu · bấm Huấn luyện'
+            : 'Đủ dữ liệu · Ultra để áp dụng',
+      _ => null,
+    };
+  }
+
   /// The model the trip planner should use (trained, ODO or catalog prior).
   TripModelParams? get tripParams {
     final raw = trip.raw['model'];

@@ -2099,6 +2099,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             "vehicle": (lambda: self._owned_vehicle(uid, vehicle_id)) if vehicle_id != "manual" else (lambda: {}),
             "existing": lambda: self.repository.get_by_idempotency(uid, idempotency_key),
             "active": lambda: self.repository.active_sessions(uid),
+            # Same round as the checks above: no extra wait before ON.
+            "learned": (lambda: self.learned_profile(uid, vehicle_id)) if vehicle_id != "manual" else (lambda: None),
         })
         binding = checks["binding"].result()
         if not binding:
@@ -2158,6 +2160,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             nominal_capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
             state_of_health=_optional_float(vehicle.get("stateOfHealth")),
             safety_policy_version=self.safety_policy.version,
+            # QA 146: the live % of a timed charge uses what this vehicle
+            # learned; the timer alone still decides when it stops.
+            model_wh_per_pct=_timed_wh_per_pct(checks["learned"], vehicle),
         )
         # Device lock + new session row in one transaction (was two).
         if not self.repository.claim_device_and_create_session(uid, session):
@@ -2348,6 +2353,20 @@ def _datetime(value) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+def _timed_wh_per_pct(learned_future, vehicle: dict) -> float | None:
+    """Learned Wh/% for a timed charge's display, or ``None`` for the capacity
+    estimate. Reading it must never stand in the way of the charge."""
+    try:
+        learned = learned_future.result()
+    except Exception:
+        return None
+    if not learned or not learned.wh_per_pct:
+        return None
+    params = charge_model.params_for(capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
+                                     learned=learned)
+    return round(params.wh_per_pct, 3) if params else None
 
 
 def _display_target_soc(current_soc, target_soc) -> float:

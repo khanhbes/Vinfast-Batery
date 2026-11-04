@@ -253,6 +253,13 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Cấu hình: `PAYMENTS_ENABLED`, `PAYMENT_PUBLIC_BASE_URL`, `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` (secret), `MOMO_ENDPOINT` (mặc định sandbox). Thiếu → checkout 503, đơn miễn phí vẫn chạy. Trang công khai `/dieu-khoan-premium`, `/thanh-toan/ket-qua` (redirect MoMo). Admin: Gói & Khuyến mại → Giao dịch MoMo (hỏi lại, hoàn tiền = thu hồi gói của đơn).
   - Hiện tại (04/11/2026, chủ app chọn): **chưa thu tiền**, `PAYMENTS_ENABLED` tắt, chủ app chưa có merchant MoMo (chỉ có ví cá nhân, không có khóa API). Gói bật bằng mã giảm 100 %; nút mua dẫn tới ô nhập mã. Không ghi lời hứa trên giao diện cho tính năng chưa có (nhắc hết hạn 3 ngày chưa làm).
 
+- **QA 146 (04/11/2026, chủ app chọn) — học dự đoán % sạc:**
+  - `_robust_wh` là trung vị trọng số theo % đã nạp × độ mới; không kẹp min theo mẫu 100 %. Sai số hiện cho user qua `honest_mae`.
+  - Tag theo dữ liệu sạc, không theo tuổi xe: `Đang học` tới khi đủ 5 lần sạc và tổng ≥ 100 %; đủ dữ liệu mà chưa huấn luyện thì `bấm Huấn luyện` hoặc `Ultra để áp dụng`. Nút Huấn luyện vẫn chỉ Ultra.
+  - Đồng hồ xe có lúc hụt rồi bù ở lần sau. Bù lệch (`gauge_offset_pct`, `charge.shadow`) chỉ chạy song song, không được đưa vào điểm ngắt khi chủ app chưa duyệt theo số đo.
+  - `battery_health` (Dung lượng pin còn lại) tách khỏi mô hình: đổi cách huấn luyện không được làm số này đổi (test khóa 99,4 % / 2385 Wh). Đừng đổi nhãn/`censored` của mẫu nếu chưa xét ảnh hưởng tới nó.
+  - Dung lượng danh định chỉ dùng để hiển thị, tính sức khỏe pin và làm điểm xuất phát của xe chưa học; xe đã học giữ Wh/%. App đọc qua `VehicleModel.capacityWhFrom`.
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

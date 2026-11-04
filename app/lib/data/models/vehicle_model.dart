@@ -157,6 +157,21 @@ class VehicleModel {
   }
 
   /// Parse số thực an toàn.
+  /// One reading of the nominal capacity, in the server's order (QA 146): a
+  /// catalog correction reaches `nominalCapacityWh` first, and the older
+  /// fields can still hold the previous value.
+  static double capacityWhFrom(Map<dynamic, dynamic> data) {
+    for (final key in const [
+      'nominalCapacityWh',
+      'batteryCapacityWh',
+      'batteryCapacity',
+    ]) {
+      final value = _asDouble(data[key]);
+      if (value > 0) return value;
+    }
+    return 0;
+  }
+
   static double _asDouble(dynamic value, [double fallback = 0.0]) {
     if (value == null) return fallback;
     if (value is double) return value;
@@ -181,9 +196,7 @@ class VehicleModel {
       ),
       stateOfHealth: _asDouble(data['stateOfHealth'], 100.0),
       defaultEfficiency: _asDouble(data['defaultEfficiency'], 1.2),
-      batteryCapacityWh: _asDouble(
-        data['batteryCapacityWh'] ?? data['batteryCapacity'],
-      ),
+      batteryCapacityWh: capacityWhFrom(data),
       totalCharges: _asInt(data['totalCharges']),
       totalTrips: _asInt(data['totalTrips']),
       lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),
@@ -242,9 +255,7 @@ class VehicleModel {
       currentBattery: _asInt(data['currentBattery'], 100),
       stateOfHealth: _asDouble(data['stateOfHealth'], 100.0),
       defaultEfficiency: _asDouble(data['defaultEfficiency'], 1.2),
-      batteryCapacityWh: _asDouble(
-        data['batteryCapacityWh'] ?? data['batteryCapacity'],
-      ),
+      batteryCapacityWh: capacityWhFrom(data),
       totalCharges: _asInt(data['totalCharges']),
       totalTrips: _asInt(data['totalTrips']),
       lastBatteryPercent: _asInt(data['lastBatteryPercent'], 100),

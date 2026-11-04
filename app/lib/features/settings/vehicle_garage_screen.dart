@@ -13,6 +13,7 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/loading_skeleton.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
+import '../../data/models/vehicle_model.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
@@ -264,7 +265,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
       model: (v['model'] ?? v['vehicleName'] ?? 'Xe không tên').toString(),
       photoUrl: VehicleImages.forVehicleMap(v),
       year: v['year'] is num ? (v['year'] as num).toInt() : null,
-      battery: num2(v['batteryCapacity']),
+      battery: num2(VehicleModel.capacityWhFrom(v)),
       // QA 143: a SoH nobody entered is not "100".
       soh: v['hasSohData'] == false ? null : num2(v['stateOfHealth']),
       odo: num2(v['currentOdo']),

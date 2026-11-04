@@ -695,6 +695,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       fromSoc: draft.currentSoc.round(),
                       toSoc: currentTarget.round(),
                       personalizationLabel: preview.personalizationLabel,
+                      learningTag: ref
+                          .watch(learnedModelsProvider(widget.vehicleId))
+                          .valueOrNull
+                          ?.status
+                          ?.chargeLearningTag,
                       warnings: preview.warnings,
                       rangeLabel: _rangeLabel(preview),
                       stopLine: preview.isTargetMode

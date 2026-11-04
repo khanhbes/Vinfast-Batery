@@ -1,0 +1,110 @@
+[
+ {
+  "sessionId": "owner-1",
+  "whPerPct": 26.151,
+  "energyWh": 2615.09,
+  "startPct": 0.0,
+  "actualEndPct": 100.0,
+  "estimatedEndPct": 90.52220769230767,
+  "avgPowerW": 433.97709899749765,
+  "censored": true,
+  "at": "2026-09-06T06:43:39.769542+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-2",
+  "whPerPct": 26.372,
+  "energyWh": 1555.97,
+  "startPct": 22.0,
+  "actualEndPct": 81.0,
+  "estimatedEndPct": 75.86036153846152,
+  "avgPowerW": 439.72840336134317,
+  "censored": false,
+  "at": "2026-09-12T17:46:21.974525+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-3",
+  "whPerPct": 26.071,
+  "energyWh": 886.42,
+  "startPct": 16.0,
+  "actualEndPct": 50.0,
+  "estimatedEndPct": 46.68387307692316,
+  "avgPowerW": 440.4009900990107,
+  "censored": false,
+  "at": "2026-10-16T13:22:04.177704+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-4",
+  "whPerPct": 27.442,
+  "energyWh": 576.29,
+  "startPct": 58.0,
+  "actualEndPct": 79.0,
+  "estimatedEndPct": 80.0370922718061,
+  "avgPowerW": 447.24142857142806,
+  "censored": false,
+  "at": "2026-10-17T05:36:33.676198+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-5",
+  "whPerPct": 26.501,
+  "energyWh": 2067.05,
+  "startPct": 1.0,
+  "actualEndPct": 79.0,
+  "estimatedEndPct": 80.04271347176011,
+  "avgPowerW": 443.4628458498005,
+  "censored": false,
+  "at": "2026-10-20T19:55:22.674089+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-6",
+  "whPerPct": 28.167,
+  "energyWh": 1971.67,
+  "startPct": 11.0,
+  "actualEndPct": 81.0,
+  "estimatedEndPct": 79.25011538461533,
+  "avgPowerW": 441.1999999999982,
+  "censored": false,
+  "at": "2026-10-23T19:15:17.025119+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-7",
+  "whPerPct": 22.807,
+  "energyWh": 866.67,
+  "startPct": 9.0,
+  "actualEndPct": 47.0,
+  "estimatedEndPct": 42.14091239340743,
+  "avgPowerW": 447.5333333333335,
+  "censored": false,
+  "at": "2026-10-26T12:55:03.334545+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-8",
+  "whPerPct": 32.407,
+  "energyWh": 1620.33,
+  "startPct": 8.0,
+  "actualEndPct": 58.0,
+  "estimatedEndPct": 69.96049864249939,
+  "avgPowerW": 444.6709183673485,
+  "censored": false,
+  "at": "2026-10-31T11:13:23.861189+00:00",
+  "labelSource": "user"
+ },
+ {
+  "sessionId": "owner-9",
+  "whPerPct": 22.841,
+  "energyWh": 2284.14,
+  "startPct": 0.0,
+  "actualEndPct": 100.0,
+  "estimatedEndPct": 100.0,
+  "avgPowerW": 438.3863247863245,
+  "censored": true,
+  "at": "2026-11-01T21:32:03.987449+00:00",
+  "labelSource": "user"
+ }
+]

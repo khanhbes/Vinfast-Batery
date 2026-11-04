@@ -348,6 +348,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                     status.charge.raw['pendingSamples'],
                   ),
                   learned: _chargeLearned(status.charge),
+                  tag: status.chargeLearningTag,
                   sources:
                       'Học từ % bạn đọc trên đồng hồ sau sạc và lúc app tự nhận '
                       'biết pin đầy (công suất dưới 40 W suốt 5 phút).',
@@ -514,11 +515,15 @@ class _ModelCard extends StatelessWidget {
     required this.onRetrain,
     this.dataRows = const [],
     this.pendingRows = const [],
+    this.tag,
   });
 
   final IconData icon;
   final String title;
   final ModelTrainingStatus status;
+
+  /// "Đang học · 2/5 lần sạc" (QA 146).
+  final String? tag;
 
   /// Charges the model learned from / that wait for training (charge card).
   final List<ChargeSampleRow> dataRows;
@@ -542,6 +547,17 @@ class _ModelCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (tag != null) ...[
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: LuxeTag(
+                tag!,
+                key: const ValueKey('model-learning-tag'),
+                color: LuxeColors.champagne,
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Row(
             children: [
               LuxeRing(

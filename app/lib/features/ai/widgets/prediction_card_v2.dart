@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../data/services/charge_estimator.dart';
 import '../../../core/theme/plan_style.dart';
+import '../../../core/widgets/luxe_settings.dart';
 
 /// AI charging plan: duration as the hero figure, the automatic stop time
 /// and the model provenance. Energy/cost estimates are intentionally not
@@ -18,7 +19,11 @@ class PredictionCardV2 extends StatelessWidget {
     this.warnings = const [],
     this.rangeLabel,
     this.stopLine,
+    this.learningTag,
   });
+
+  /// "Đang học · 2/5 lần sạc" while the vehicle has too little data (QA 146).
+  final String? learningTag;
 
   /// "1 giờ 50 – 2 giờ 20" uncertainty band (Task 126).
   final String? rangeLabel;
@@ -109,6 +114,17 @@ class PredictionCardV2 extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1),
           const SizedBox(height: 10),
+          if (learningTag != null) ...[
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: LuxeTag(
+                learningTag!,
+                key: const ValueKey('prediction-learning-tag'),
+                color: LuxeColors.champagne,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           Row(
             children: [
               const Icon(

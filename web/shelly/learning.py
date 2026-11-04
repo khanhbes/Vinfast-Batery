@@ -136,6 +136,9 @@ class VehicleLearningMixin:
         taper = (charge_model.learn_taper(session.telemetry_samples, session.start_soc, sample_wh)
                  if sample_wh else None)
         now = self.clock()
+        at = (session.stopped_at or now).isoformat()
+        wh_in_use = session.model_wh_per_pct or learned.wh_per_pct or base
+        carried, next_offset = _gauge_shadow(learned, session, end_pct, at, wh_in_use)
         queued, decision = charge_model.queue_sample(learned, {
             "sessionId": session.session_id,
             "energyWh": session.energy_used_wh,
@@ -143,13 +146,18 @@ class VehicleLearningMixin:
             "actualEndPct": end_pct,
             "estimatedEndPct": session.estimated_soc,
             "avgPowerW": session.average_power_w,
-            "at": (session.stopped_at or now).isoformat(),
+            "at": at,
             "taperStartPct": taper[0] if taper else None,
             "taperPowerRatio": taper[1] if taper else None,
             "labelSource": label_source,
+            "shadowOffsetPct": carried,
+            "shadowWhPerPct": wh_in_use if carried is not None else None,
         }, base_wh_per_pct=base, now=now)
         if decision != "queued":
             return decision
+        if next_offset is not None:
+            queued.gauge_offset_pct = next_offset
+            queued.gauge_offset_at = at
         profile.learned = queued.to_dict()
         profile.updated_at = now
         self.repository.save_personal_profile(profile)
@@ -298,6 +306,8 @@ class VehicleLearningMixin:
         profile = self.repository.get_personal_profile(uid, vehicle_id)
         learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
         charge = charge_model.training_status(learned)
+        consent = profile.consent_enabled if profile else True
+        charge["learning"]["state"] = _learning_state(charge["learning"], learned, consent)
         charge.update({"whPerPct": learned.wh_per_pct, "powerW": learned.power_w,
                        "report": (profile.training_reports or {}).get("charge") if profile else None,
                        # What the model learned from and what waits (Task 127).
@@ -413,6 +423,36 @@ class VehicleLearningMixin:
         self.repository.append_audit(uid, "personal_model_trained", vehicle_id=vehicle_id,
                                      model=model, mode=mode, decision=report["decision"])
         return {"report": report, "status": self.learning_status(uid, vehicle_id, vehicle=vehicle)}
+
+
+def _learning_state(progress: dict, learned, consent: bool) -> str:
+    """off | learning ("Đang học") | enough (data waits for a training) | learned."""
+    if not consent:
+        return "off"
+    if not progress["done"]:
+        return "learning"
+    return "learned" if learned.wh_per_pct else "enough"
+
+
+def _gauge_shadow(learned, session, end_pct: float, at: str,
+                  wh_per_pct: float | None) -> tuple[float | None, float | None]:
+    """Shadow test (QA 146): the offset this charge started with and the one it
+    leaves. ``(None, None)`` when it cannot be scored (no Wh/%, or a charge older
+    than the newest labelled one, whose start was not affected by that offset).
+    A second reading of the same charge reuses its first starting offset."""
+    if not wh_per_pct:
+        return None, None
+    previous = next((item for item in [*learned.samples, *learned.pending]
+                     if item.get("sessionId") == session.session_id), None)
+    if previous is not None and previous.get("shadowOffsetPct") is not None:
+        carried = float(previous["shadowOffsetPct"])
+    else:
+        newest, this = _parse(learned.gauge_offset_at), _parse(at)
+        if newest is not None and this is not None and this < newest:
+            return None, None
+        carried = learned.gauge_offset_pct
+    return carried, charge_model.gauge_offset_after(
+        session.start_soc, carried, session.energy_used_wh, wh_per_pct, end_pct)
 
 
 def _charge_row(item: dict) -> dict:

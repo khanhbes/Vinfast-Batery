@@ -65,8 +65,9 @@ def test_learning_from_real_feliz_sessions():
         "estimatedEndPct": 75.9, "avgPowerW": 440, "at": "2026-09-12T17:46:21+00:00"},
         base_wh_per_pct=base, now=now)
     assert decision == "promoted"
-    # The 0 -> 100 reading is censored (an upper bound), the 22 -> 81 one exact.
-    assert profile.wh_per_pct == pytest.approx(26.15, abs=0.01)
+    # QA 146: the 22 -> 81 charge is exact and the 0 -> 100 one counts less (it
+    # no longer clamps the model to its own value).
+    assert profile.wh_per_pct == pytest.approx(26.37, abs=0.01)
     assert profile.power_w == pytest.approx(437)
     params = charge_model.params_for(capacity_wh=2600, learned=profile)
     assert params.source == "personal" and params.power_source == "personal"

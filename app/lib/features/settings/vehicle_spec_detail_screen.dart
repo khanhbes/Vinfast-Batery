@@ -5,6 +5,7 @@ import '../../core/services/auth_service.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
+import '../../data/models/vehicle_model.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../core/widgets/vehicle_photo.dart';
@@ -57,9 +58,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     _batteryTypeCtrl = TextEditingController(
       text: v['batteryType'] ?? v['batteryChemistry'] ?? 'LFP',
     );
-    final capacity = v['batteryCapacity'];
     _batteryCapCtrl = TextEditingController(
-      text: groupThousands(capacity is num ? capacity.round() : 0),
+      text: groupThousands(VehicleModel.capacityWhFrom(v).round()),
     );
     _sohCtrl = TextEditingController();
     _odoCtrl = TextEditingController();

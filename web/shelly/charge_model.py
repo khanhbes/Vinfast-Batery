@@ -54,6 +54,20 @@ MIN_CONFIRMED_GAIN_PCT = 10.0
 MAX_PROFILE_SAMPLES = 12
 MAX_PENDING_SAMPLES = 24
 HALF_LIFE_DAYS = 90.0
+# QA 146: one charge counts by the % it gained (a long charge is less hurt by a
+# gauge error of a few %). A charge that ended at 100 % without the full-battery
+# signal counts less, because the battery may have filled before it ended. The
+# catalog value counts like a short charge, so it only matters at the start.
+PRIOR_GAIN_PCT = 20.0
+CENSORED_WEIGHT = 0.25
+# "Đang học" (QA 146): the vehicle's own charges cover at least one full cycle.
+LEARNING_MIN_CHARGES = 5
+LEARNING_MIN_GAIN_PCT = 100.0
+# Shadow test only (QA 146): the scooter's gauge seems to fall behind the energy
+# after some charges and catch up on the next one. Nothing here moves a cutoff.
+MAX_GAUGE_OFFSET_PCT = 15.0
+GAUGE_RESET_END_PCT = 99.0
+SHADOW_MIN_CHARGES = 5
 # New labelled charges needed before the app suggests training (Task 127).
 FIRST_TRAINING_MIN_SAMPLES = 2
 TRAINING_MIN_NEW_SAMPLES = 3
@@ -94,6 +108,10 @@ class LearnedProfile:
     # not change the estimate until the owner presses "Huấn luyện".
     pending: list[dict] = field(default_factory=list)
     trained_at: str | None = None
+    # Shadow test (QA 146): energy-based % minus the gauge after the newest
+    # labelled charge. Never used by the estimate or the cutoff.
+    gauge_offset_pct: float = 0.0
+    gauge_offset_at: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -106,6 +124,8 @@ class LearnedProfile:
             "version": self.version,
             "pending": self.pending[-MAX_PENDING_SAMPLES:],
             "trainedAt": self.trained_at,
+            "gaugeOffsetPct": self.gauge_offset_pct,
+            "gaugeOffsetAt": self.gauge_offset_at,
         }
 
     @classmethod
@@ -121,6 +141,8 @@ class LearnedProfile:
             version=int(data.get("version") or 0),
             pending=[dict(item) for item in (data.get("pending") or []) if isinstance(item, dict)],
             trained_at=str(data["trainedAt"]) if data.get("trainedAt") else None,
+            gauge_offset_pct=_finite(data.get("gaugeOffsetPct")),
+            gauge_offset_at=str(data["gaugeOffsetAt"]) if data.get("gaugeOffsetAt") else None,
         )
 
 
@@ -165,7 +187,7 @@ def params_for(
         taper_power_ratio=learned.taper_power_ratio or DEFAULT_TAPER_POWER_RATIO,
         source="personal" if learned.wh_per_pct else "vehicle",
         samples=len(learned.samples),
-        soc_mae=learned.soc_mae,
+        soc_mae=honest_mae(learned),
         power_source=power_source,
     )
 
@@ -283,6 +305,9 @@ def queue_sample(
         "labelSource": label,
         "at": str(sample.get("at") or now.isoformat()),
     }
+    if sample.get("shadowOffsetPct") is not None and sample.get("shadowWhPerPct"):
+        entry["shadowOffsetPct"] = round(float(sample["shadowOffsetPct"]), 2)
+        entry["shadowWhPerPct"] = round(float(sample["shadowWhPerPct"]), 3)
     sid = entry["sessionId"]
     # A user reading replaces an automatic one for the same charge.
     pending = [item for item in profile.pending if item.get("sessionId") != sid]
@@ -360,9 +385,75 @@ def training_status(profile: LearnedProfile) -> dict:
         "required": required,
         "ready": pending >= required,
         "trained": len(profile.samples),
-        "mae": profile.soc_mae,
+        "mae": honest_mae(profile),
         "trainedAt": profile.trained_at,
         "version": profile.version,
+        "learning": learning_progress(profile),
+        "shadow": shadow_report(profile),
+    }
+
+
+def honest_mae(profile: LearnedProfile) -> float | None:
+    """The error to show: the stored one, or the model's error on the charges
+    it now holds when that is worse (QA 146: a rejected training kept "0.55"
+    while the model missed the newest charges by 5.81)."""
+    stored = profile.soc_mae
+    charges = [*profile.samples, *profile.pending]
+    if not profile.wh_per_pct or not any(not item.get("censored") for item in charges):
+        return stored
+    live = round(_mae_with(charges, profile.wh_per_pct), 2)
+    return live if stored is None else max(stored, live)
+
+
+def _unique_charges(profile: LearnedProfile) -> list[dict]:
+    merged: dict[str, dict] = {}
+    for index, item in enumerate([*profile.samples, *profile.pending]):
+        merged[str(item.get("sessionId") or f"_{index}")] = item
+    return list(merged.values())
+
+
+def learning_progress(profile: LearnedProfile) -> dict:
+    """How far the vehicle's own charges are from a full cycle ("Đang học")."""
+    charges = _unique_charges(profile)
+    gain = sum(_gain(item) for item in charges)
+    return {
+        "charges": len(charges),
+        "needCharges": LEARNING_MIN_CHARGES,
+        "gainPct": round(gain, 1),
+        "needGainPct": LEARNING_MIN_GAIN_PCT,
+        "done": len(charges) >= LEARNING_MIN_CHARGES and gain >= LEARNING_MIN_GAIN_PCT,
+    }
+
+
+def gauge_offset_after(start_pct: float, carried_pct: float, energy_wh: float,
+                       wh_per_pct: float, actual_end_pct: float) -> float:
+    """Shadow test: what the gauge still owes after this charge. A full battery
+    settles the debt."""
+    if actual_end_pct >= GAUGE_RESET_END_PCT:
+        return 0.0
+    offset = start_pct + carried_pct + energy_wh / wh_per_pct - actual_end_pct
+    return round(min(MAX_GAUGE_OFFSET_PCT, max(-MAX_GAUGE_OFFSET_PCT, offset)), 2)
+
+
+def shadow_report(profile: LearnedProfile) -> dict:
+    """Would carrying the gauge offset predict the end % better? Display only:
+    the owner decides from these numbers whether it ever moves a cutoff."""
+    plain, carried = [], []
+    for item in _unique_charges(profile):
+        wh = _positive(item.get("shadowWhPerPct"))
+        if wh is None or item.get("shadowOffsetPct") is None:
+            continue
+        actual = float(item["actualEndPct"])
+        end = float(item["startPct"]) + float(item["energyWh"]) / wh
+        plain.append((min(100.0, end), actual))
+        carried.append((min(100.0, end + float(item["shadowOffsetPct"])), actual))
+    return {
+        "n": len(plain),
+        "need": SHADOW_MIN_CHARGES,
+        "ready": len(plain) >= SHADOW_MIN_CHARGES,
+        "offsetPct": profile.gauge_offset_pct,
+        "plain": _stats(plain),
+        "withOffset": _stats(carried),
     }
 
 
@@ -375,11 +466,12 @@ def train(
 ) -> tuple[LearnedProfile, dict]:
     """Fit the profile on stored + pending charges (owner pressed train).
 
-    ``finetune``: recency-weighted and kept only if not worse than the current
-    estimate on the data. ``retrain``: every stored charge weighs the same and
-    power/taper are re-learned from all of them; the same guard refuses a
-    clearly worse result. Pending charges always move into the stored set so
-    the data is never lost.
+    ``finetune``: recency-weighted, so the value follows a battery that wears
+    and needs fewer Wh per %, and kept only if not worse than the current
+    estimate on the data. ``retrain``: no recency weight and power/taper are
+    re-learned from all stored charges; the same guard refuses a clearly worse
+    result. Pending charges always move into the stored set so the data is
+    never lost.
     """
     now = now or datetime.now(timezone.utc)
     retrain = mode == "retrain"
@@ -405,6 +497,8 @@ def train(
         version=profile.version + 1,
         pending=[],
         trained_at=now.isoformat(),
+        gauge_offset_pct=profile.gauge_offset_pct,
+        gauge_offset_at=profile.gauge_offset_at,
     )
     candidate.soc_mae = _loo_mae(samples, base_wh_per_pct, weigh_now)
     evaluation = _evaluate(samples, profile, base_wh_per_pct, weigh_now)
@@ -418,7 +512,8 @@ def train(
             and after > before + 0.5):
         # Keep the proven estimate; the new charges stay stored for later.
         kept = LearnedProfile(**{**profile.__dict__, "samples": samples, "pending": [],
-                                 "trained_at": now.isoformat()})
+                                 "trained_at": now.isoformat(),
+                                 "soc_mae": _round2(_mae_with(samples, profile.wh_per_pct))})
         return kept, {**report, "decision": "rejected_worse", "whPerPct": profile.wh_per_pct,
                       "afterMae": _round2(before)}
     return candidate, {**report, "decision": "promoted" if candidate.wh_per_pct else "no_data"}
@@ -530,24 +625,24 @@ def learn_taper(curve: list[dict], start_pct: float, wh_per_pct: float) -> tuple
     return None
 
 
-def _robust_wh(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
-    """Recency-weighted median, shrunk towards the catalog default.
+def _gain(item: dict) -> float:
+    return max(0.0, float(item.get("actualEndPct") or 0) - float(item.get("startPct") or 0))
 
-    Samples ending at 100 % are censored: the battery may have filled before
-    the session ended, so they only bound the value from above.
+
+def _robust_wh(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
+    """Median weighted by % gained and recency, starting from the catalog value.
+
+    QA 146: this used to clamp to the lowest charge that ended at 100 %, so one
+    such charge (0 -> 100 at 22.84 Wh/%) decided the whole model and made every
+    later training look worse. A median needs several charges to agree, which
+    separates a battery that wears from one odd gauge reading.
     """
-    exact = [item for item in samples if not item.get("censored")]
-    pairs = [(float(item["whPerPct"]), _weight(item, now)) for item in exact]
+    pairs = [(float(item["whPerPct"]),
+              _gain(item) * _weight(item, now) * (CENSORED_WEIGHT if item.get("censored") else 1.0))
+             for item in samples]
     if base:
-        pairs.append((base, 0.5))  # prior worth half a fresh sample
-    value = _weighted_median(pairs)
-    for item in samples:
-        if item.get("censored") and value is not None:
-            value = min(value, float(item["whPerPct"]))
-    if value is None:
-        bounds = [float(item["whPerPct"]) for item in samples if item.get("censored")]
-        value = min(bounds) if bounds else None
-    return value
+        pairs.append((base, PRIOR_GAIN_PCT))
+    return _weighted_median(pairs)
 
 
 def _loo_mae(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
@@ -608,6 +703,14 @@ def _median(values) -> float | None:
         return None
     middle = len(numbers) // 2
     return numbers[middle] if len(numbers) % 2 else (numbers[middle - 1] + numbers[middle]) / 2
+
+
+def _finite(value) -> float:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return number if math.isfinite(number) else 0.0
 
 
 def _clamp_pct(value) -> float:

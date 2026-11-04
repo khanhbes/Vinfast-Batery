@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 146. Task Completion Log — Rà độ lệch dự đoán % sạc trên dữ liệu thật (04/11/2026) — Mới phân tích, chưa sửa code
+## 146. Task Completion Log — Học dự đoán % sạc theo xe, tag Đang học (04/11/2026, chủ app chọn) — Code + test xong, chưa deploy
 
 Chỉ đọc một xe của chủ app (`az containerapp exec`, chủ app tự chạy script). 38 phiên; 9 mẫu đã học: 7 mẫu chấm được, 2 mẫu tới 100 % (`censored`). Đo điện tốt: phiên mục tiêu ngắt lệch ≤ 3,7 Wh so với `target_energy_wh`, công suất ổn định 440–450 W.
 
@@ -22,7 +22,21 @@ Chỉ đọc một xe của chủ app (`az containerapp exec`, chủ app tự ch
 
 **Nghi vấn chưa xác minh:** số đọc 58 % ngày 31/10 có thể đọc sau khi đã đi xe (máy chủ không lưu giờ đọc); % đầu 0 ngày 01/11 không khớp 2284 Wh (khoảng 13 % nếu theo 26,15–26,5 Wh/%); đồng hồ pin LFP có thể trôi khi lâu không sạc đầy (từ 06/09 tới 02/11 không có lần tới 100 %). Hai phiên cuối không có số đọc ảnh, ODO đứng ở 5093 từ 27/10. `batteryReadings` có số đọc `charge_end` trùng (6 lần cho một phiên).
 
-**Còn mở:** chủ app quyết định sửa cách học; đo lại 3–5 lần sạc (ảnh đồng hồ lúc cắm và ngay khi rút). Chưa chạy test vì chưa đổi code.
+**Chủ app xác nhận:** 58 % đọc ngay khi rút sạc, 0 % là số thật trên đồng hồ. Hai phân kỳ cho 26,37 và 26,13 Wh/%, cả 9 lần 26,26: Wh/% ổn định, phần lệch chủ yếu do đồng hồ. Hai cặp hụt rồi bù ở lần sạc có nhập % kế tiếp (+5,4 / −4,9 và +12,0 / −12,7); mới 2 cặp, cơ chế trong xe chưa xác minh.
+
+**Đã làm (chủ app chọn: giữ Ultra, tag theo dữ liệu sạc, bù lệch chạy song song):**
+- `charge_model._robust_wh`: trung vị trọng số theo % đã nạp × độ mới, mẫu 100 % không có tín hiệu đầy tính 1/4, catalog tính như 20 %; bỏ kẹp min. Phát lại lần Huấn luyện 04/11 trên dữ liệu thật: `promoted`, 26,151 → 26,501 (trước: `rejected_worse`).
+- `honest_mae`: sai số hiện và độ tin cậy lấy mức lớn hơn giữa số đã lưu và sai số thật trên mẫu (xe chủ app 0,55 → 3,56); huấn luyện bị từ chối lưu sai số thật.
+- Tag: `training_status.learning` (đủ 5 lần sạc và tổng ≥ 100 %), `learning_status` đặt `state` = `off|learning|enough|learned`. App `VehicleLearningStatus.chargeLearningTag` hiện ở thẻ dự đoán Sạc AI và thẻ AI cá nhân: "Đang học · 2/5 lần sạc", "Đủ dữ liệu · bấm Huấn luyện" hoặc "Đủ dữ liệu · Ultra để áp dụng". Máy chủ cũ không có trường này thì không hiện tag.
+- Xe chai: mô phỏng 2 năm có đồng hồ hụt tới 12 %, sai Wh/% cuối kỳ trung bình 1,0 % (chai 3 %/năm), 1,1 % (10 %/năm), 1,8 % (20 %/năm). Test `test_a_worn_battery_is_followed_training_by_training` chạy qua `train()` thật; một lần đọc lệch không đổi trung vị.
+- Bù lệch chỉ chạy song song: `gauge_offset_pct/at` trên hồ sơ, `shadowOffsetPct/shadowWhPerPct` trên mẫu, `charge.shadow` trong `/api/learning/<vid>/status` (đủ 5 lần có số so sánh). Không vào ước tính, điểm ngắt, Dung lượng pin còn lại.
+- Theo giờ: `manual_on` đọc Wh/% đã học cùng lượt kiểm tra trước ON để tính % hiển thị; đọc lỗi thì vẫn bật và dùng dung lượng; vẫn chỉ timer ngắt.
+- Dung lượng: app đọc `VehicleModel.capacityWhFrom` theo thứ tự như máy chủ (`nominalCapacityWh` > `batteryCapacityWh` > `batteryCapacity`) ở mô hình xe, thẻ gara, màn thông số. Không thêm hàm ghi vì phía ghi đã gom trong `_capacity_fields` và app không có chỗ sửa dung lượng. Không sửa lịch sử phiên. Đường dự đoán cũ `charging_fusion`/`personalization`: sạc thật không dùng (service khởi tạo `predictor=None`), không đổi.
+- Dung lượng pin còn lại: không đổi code `battery_health`. Xe chủ app giữ 99,4 % / 2385 Wh trước và sau huấn luyện (test khóa). Không nhận phiên 02/11 là pin đầy vì sẽ đổi số này thành 99,1 %.
+
+**Kiểm thử:** `pytest tests` 881 đạt / 15 bỏ qua; `flutter test` 1355 đạt / 213 bỏ qua; `flutter analyze` file đã sửa sạch. Sửa 1 test cũ `test_task126_charge_model` (26,15 → 26,37) vì đổi quy tắc có chủ đích. Fixture ẩn danh `tests/fixtures/owner_charge_samples.json`. Chưa deploy, chưa build APK, chưa thử trên máy.
+
+**Còn mở:** deploy API + worker, APK; sau deploy chủ app bấm Huấn luyện lại để dùng 26,50 (điểm ngắt đổi rất ít); sau 5 lần sạc có nhập % đọc `charge.shadow` để chủ app quyết định bật bù lệch hay không; đọc lại % sau 30–60 phút chưa đi xe để kiểm đồng hồ trễ. Riêng, chưa sửa: phiên 02/11 ghi `relay_off` dù đã có đuôi sạc; `battery_health` bỏ qua bài kiểm tra khi % đầu đúng 0 (`0.0 or 100`), nếu sửa phiên 02/11 sẽ thành 85,6 % do đồng hồ lệch; `batteryReadings` có `charge_end` trùng; xe Feliz khác có thể vẫn 2600 Wh (cần đọc rộng, chủ app duyệt riêng).
 
 ## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03–04/11/2026, chủ app chọn) — API và trang Admin đã deploy, MoMo còn đóng
 
