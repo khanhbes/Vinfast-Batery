@@ -12,6 +12,18 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 146. Task Completion Log — Rà độ lệch dự đoán % sạc trên dữ liệu thật (04/11/2026) — Mới phân tích, chưa sửa code
+
+Chỉ đọc một xe của chủ app (`az containerapp exec`, chủ app tự chạy script). 38 phiên; 9 mẫu đã học: 7 mẫu chấm được, 2 mẫu tới 100 % (`censored`). Đo điện tốt: phiên mục tiêu ngắt lệch ≤ 3,7 Wh so với `target_energy_wh`, công suất ổn định 440–450 W.
+
+**Sai số với Wh/% đang dùng (26,151):** bốn lần đến 21/10 lệch ≤ 1 %; ba lần sau +5,4 (24/10, Theo giờ, app lúc đó hiện −1,7 theo dung lượng 2600 Wh), −4,9 (26/10), +12,0 (31/10). MAE 7 mẫu 3,56, MAE 4 mẫu mới 5,81. Wh/% từng lần 22,81–32,41, trung vị 26,50.
+
+**Lỗi đã xác nhận bằng phát lại `charge_model`:** (1) `_robust_wh` lấy min với mọi mẫu `censored`: mẫu 02/11 (0→100, 2284 Wh, 22,84) kéo ứng viên xuống 22,841, lần Huấn luyện 04/11 bị `rejected_worse`; mô phỏng: 3 lần sạc tốt 26,5 Wh/% vẫn bị từ chối, 3 lần gần 23 Wh/% thì 22,841 được dùng. (2) Khi `rejected_worse`, `soc_mae` giữ 0,55 trong khi sai số thật 5,81; giá trị này vào độ tin cậy và khoảng thời gian dự đoán. Bỏ kẹp min chỉ đổi 26,15 → 26,50 nên **không tự hết lệch**: trên dữ liệu hiện có không quy tắc nào tốt hơn rõ (bỏ-một-ra: trung vị 3,74; số cố định 3,56; catalog 3,24; bỏ 2 lần cực đoan còn 1,6–1,8).
+
+**Nghi vấn chưa xác minh:** số đọc 58 % ngày 31/10 có thể đọc sau khi đã đi xe (máy chủ không lưu giờ đọc); % đầu 0 ngày 01/11 không khớp 2284 Wh (khoảng 13 % nếu theo 26,15–26,5 Wh/%); đồng hồ pin LFP có thể trôi khi lâu không sạc đầy (từ 06/09 tới 02/11 không có lần tới 100 %). Hai phiên cuối không có số đọc ảnh, ODO đứng ở 5093 từ 27/10. `batteryReadings` có số đọc `charge_end` trùng (6 lần cho một phiên).
+
+**Còn mở:** chủ app quyết định sửa cách học; đo lại 3–5 lần sạc (ảnh đồng hồ lúc cắm và ngay khi rút). Chưa chạy test vì chưa đổi code.
+
 ## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03–04/11/2026, chủ app chọn) — API và trang Admin đã deploy, MoMo còn đóng
 
 **Chủ app chọn:** thu tiền theo bản build (APK = MoMo, store = billing của store, chưa có tài khoản store nên chưa làm); trả trước theo kỳ; Pro → Ultra quy phần Pro còn lại thành tiền; mã giảm giá 1 lần/tài khoản + tổng lượt tùy chọn. **Đính chính (04/11):** chủ app chỉ có ví MoMo cá nhân, chưa có merchant nên chưa có khóa API.
