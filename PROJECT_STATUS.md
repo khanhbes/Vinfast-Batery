@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03/11/2026, chủ app chọn) — Code + test xong, chưa deploy
+## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03–04/11/2026, chủ app chọn) — API đã deploy, MoMo còn đóng, trang Admin chưa deploy
 
 **Chủ app chọn:** thu tiền theo bản build (APK = MoMo, store = billing của store, chưa có tài khoản store nên chưa làm); trả trước theo kỳ; Pro → Ultra quy phần Pro còn lại thành tiền; mã giảm giá 1 lần/tài khoản + tổng lượt tùy chọn. Đã có merchant MoMo.
 
@@ -29,7 +29,9 @@
 
 **Kiểm thử:** backend `test_qa145_payments.py` 22 test, toàn bộ `pytest tests` 861 đạt / 15 bỏ qua; app `qa145_payments_test.dart` + `qa135_premium_test.dart` 26 đạt, `flutter analyze` sạch; Admin `npm run lint` + `npm run build` đạt.
 
-**Còn mở:** chủ app đặt khóa MoMo môi trường test vào secret Azure (`MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_ENDPOINT`, `PAYMENT_PUBLIC_BASE_URL`, `PAYMENTS_ENABLED=true`); deploy API + Admin, build APK, thử sandbox trên Xiaomi 17 Ultra rồi chuyển khóa thật (thử 1.000đ bằng mã 99%, hoàn tiền); duyệt điều khoản; billing Google Play/App Store khi có tài khoản; khóa gói "localStorage" và gói "Đội xe" trên trang Admin chỉ là giao diện (không có ở máy chủ).
+**Deploy (04/11):** chủ app chọn bỏ nút khóa gói chỉ lưu trên trình duyệt và gói "Đội xe" khỏi trang Admin (commit `c0b1208`). Gate task161 từ worktree sạch: lần đầu `api-build` quá 1500 s vì máy đang build APK song song (log `qa145-api-build`, không có lỗi build), chạy lại `qa145b-*` đạt: Linux 854 đạt / 20 bỏ qua, boot Pass, worker smoke đạt. API `sha256:fb3b2148…` → revision `vinfast-api--api106-1104022131` (`qa145-rollout-20261103.json`, succeeded, không rollback); `/api/health`, `/api/ready`, `/dieu-khoan-premium`, `/thanh-toan/ket-qua` 200; `/api/billing/me`, `/api/billing/orders`, `/api/admin/billing/orders` không token 401; IPN không chữ ký 400. APK 1.3.18+221 đã cài lên Xiaomi 17 Ultra (cf4c58a7). Chưa thử thanh toán thật vì chưa có khóa MoMo. Trang Admin chưa deploy: lệnh deploy bị hệ thống quyền chặn.
+
+**Còn mở:** chủ app đặt khóa MoMo môi trường test vào secret Azure (`MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_ENDPOINT`, `PAYMENT_PUBLIC_BASE_URL`, `PAYMENTS_ENABLED=true`); thử sandbox trên Xiaomi 17 Ultra rồi chuyển khóa thật (thử 1.000đ bằng mã 99%, hoàn tiền); duyệt điều khoản; billing Google Play/App Store khi có tài khoản; deploy trang Admin.
 
 ## 144. Task Completion Log — Mã giảm giá tới 100% (02/11/2026, chủ app yêu cầu) — Đã deploy API + trang Admin
 
