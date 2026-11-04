@@ -14,7 +14,7 @@
 
 ## 145. Task Completion Log — Thanh toán Premium bằng MoMo (03–04/11/2026, chủ app chọn) — API đã deploy, MoMo còn đóng, trang Admin chưa deploy
 
-**Chủ app chọn:** thu tiền theo bản build (APK = MoMo, store = billing của store, chưa có tài khoản store nên chưa làm); trả trước theo kỳ; Pro → Ultra quy phần Pro còn lại thành tiền; mã giảm giá 1 lần/tài khoản + tổng lượt tùy chọn. Đã có merchant MoMo.
+**Chủ app chọn:** thu tiền theo bản build (APK = MoMo, store = billing của store, chưa có tài khoản store nên chưa làm); trả trước theo kỳ; Pro → Ultra quy phần Pro còn lại thành tiền; mã giảm giá 1 lần/tài khoản + tổng lượt tùy chọn. **Đính chính (04/11):** chủ app chỉ có ví MoMo cá nhân, chưa có merchant nên chưa có khóa API.
 
 **Máy chủ (`web/billing/`):**
 - `momo.py`: tạo đơn `captureWallet`, kiểm chữ ký IPN, tra cứu, hoàn tiền (HMAC-SHA256 theo thứ tự trường của MoMo).
@@ -30,6 +30,8 @@
 **Kiểm thử:** backend `test_qa145_payments.py` 22 test, toàn bộ `pytest tests` 861 đạt / 15 bỏ qua; app `qa145_payments_test.dart` + `qa135_premium_test.dart` 26 đạt, `flutter analyze` sạch; Admin `npm run lint` + `npm run build` đạt.
 
 **Deploy (04/11):** chủ app chọn bỏ nút khóa gói chỉ lưu trên trình duyệt và gói "Đội xe" khỏi trang Admin (commit `c0b1208`). Gate task161 từ worktree sạch: lần đầu `api-build` quá 1500 s vì máy đang build APK song song (log `qa145-api-build`, không có lỗi build), chạy lại `qa145b-*` đạt: Linux 854 đạt / 20 bỏ qua, boot Pass, worker smoke đạt. API `sha256:fb3b2148…` → revision `vinfast-api--api106-1104022131` (`qa145-rollout-20261103.json`, succeeded, không rollback); `/api/health`, `/api/ready`, `/dieu-khoan-premium`, `/thanh-toan/ket-qua` 200; `/api/billing/me`, `/api/billing/orders`, `/api/admin/billing/orders` không token 401; IPN không chữ ký 400. APK 1.3.18+221 đã cài lên Xiaomi 17 Ultra (cf4c58a7). Chưa thử thanh toán thật vì chưa có khóa MoMo. Trang Admin chưa deploy: lệnh deploy bị hệ thống quyền chặn.
+
+**Chế độ chưa thu tiền (04/11, chủ app chọn):** `PAYMENTS_ENABLED` giữ nguyên tắt; gói bật bằng mã giảm 100 % (máy chủ đã cho phép đơn miễn phí khi thanh toán tắt). App: sheet "Chưa mở thanh toán" có nút "Nhập mã giảm giá" mở và cuộn tới ô nhập mã; khi thanh toán tắt không hiện link điều khoản. Bỏ câu hứa "app nhắc trước khi hết hạn" (chưa làm) ở sheet và trang điều khoản; điều khoản không còn nêu MoMo (trang công khai đổi ở lần deploy API sau).
 
 **Còn mở:** chủ app đặt khóa MoMo môi trường test vào secret Azure (`MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY`, `MOMO_ENDPOINT`, `PAYMENT_PUBLIC_BASE_URL`, `PAYMENTS_ENABLED=true`); thử sandbox trên Xiaomi 17 Ultra rồi chuyển khóa thật (thử 1.000đ bằng mã 99%, hoàn tiền); duyệt điều khoản; billing Google Play/App Store khi có tài khoản; deploy trang Admin.
 

@@ -42,10 +42,11 @@ class PaymentSheet extends ConsumerStatefulWidget {
   /// free order (a 100 % code, or credit covering the price) goes through.
   final bool allowPaid;
 
+  /// While payments are closed (owner's choice, 04/11/2026) a plan is
+  /// turned on with a 100 % code.
   static const closedText =
-      'Pinova chưa nhận thanh toán trong bản này. Trong lúc chờ, bạn có thể '
-      'dùng thử miễn phí, hoặc gửi yêu cầu cho bộ phận hỗ trợ để được cấp '
-      'gói. Mã khuyến mãi đã nhập được giữ cho lần mua đầu.';
+      'Giai đoạn này Pinova chưa thu tiền. Nhập mã giảm giá 100% để kích hoạt '
+      'gói. Mã giảm một phần chỉ dùng được khi Pinova mở thanh toán.';
 
   /// Opens MoMo (tests pass a fake). True when something opened.
   final Future<bool> Function(Uri uri)? launcher;
@@ -333,7 +334,7 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
                   'Trả trước, không tự gia hạn.'
             : quote.kind == 'upgrade'
             ? 'Ultra bắt đầu ngay. Trả trước, không tự gia hạn.'
-            : 'Trả trước, không tự gia hạn. App nhắc bạn trước khi hết hạn.',
+            : 'Trả trước, không tự gia hạn.',
         style: LuxeText.caption,
       ),
       if (_error != null) ...[const SizedBox(height: 10), _ErrorText(_error!)],
@@ -358,14 +359,15 @@ class _PaymentSheetState extends ConsumerState<PaymentSheet> {
               : Icons.account_balance_wallet_rounded,
           onPressed: _pay,
         ),
-      TextButton(
-        key: const ValueKey('pay-terms'),
-        onPressed: () => launchUrl(
-          Uri.parse('${AppConstants.apiBaseUrl}/dieu-khoan-premium'),
-          mode: LaunchMode.externalApplication,
+      if (widget.allowPaid)
+        TextButton(
+          key: const ValueKey('pay-terms'),
+          onPressed: () => launchUrl(
+            Uri.parse('${AppConstants.apiBaseUrl}/dieu-khoan-premium'),
+            mode: LaunchMode.externalApplication,
+          ),
+          child: const Text('Điều khoản gói Premium'),
         ),
-        child: const Text('Điều khoản gói Premium'),
-      ),
     ];
   }
 

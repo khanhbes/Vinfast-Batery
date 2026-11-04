@@ -15,9 +15,9 @@ background:#f6f7f5}h1{font-size:1.5rem}li{margin:6px 0}</style></head><body>
 <h1>Điều khoản gói Pinova Premium</h1>
 <ol>
 <li><strong>Trả trước, không tự gia hạn.</strong> Gói Pro và Ultra mua theo 1 tháng (30 ngày) hoặc 1 năm
-(365 ngày). Pinova không tự trừ tiền khi hết hạn; app nhắc bạn trước 3 ngày.</li>
+(365 ngày). Pinova không tự trừ tiền khi hết hạn; số ngày còn lại hiện trong trang Premium.</li>
 <li><strong>Giá.</strong> Giá hiện trong app trước khi thanh toán là số tiền bạn trả.</li>
-<li><strong>Thanh toán.</strong> Bản Pinova tải trực tiếp thanh toán qua ví MoMo; bản trên Google Play hoặc
+<li><strong>Thanh toán.</strong> Kênh thanh toán hiện trong app trước khi bạn xác nhận; bản trên Google Play hoặc
 App Store thanh toán qua cửa hàng đó. Gói bật ngay khi cổng thanh toán xác nhận.</li>
 <li><strong>Gia hạn.</strong> Mua tiếp cùng gói thì thời gian mới được cộng vào sau ngày hết hạn hiện tại.</li>
 <li><strong>Nâng gói.</strong> Từ Pro lên Ultra: giá trị phần Pro đã trả mà chưa dùng được trừ vào giá Ultra,

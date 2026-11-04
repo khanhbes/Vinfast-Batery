@@ -174,8 +174,8 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
     final promo = plan.pendingPromo;
     final amount =
         promo?.finalPrice(tier, _period) ?? PlanTable.price(tier, _period);
-    // QA 145: the APK pays with MoMo; a store build only takes a free code
-    // here (the store's billing comes later).
+    // QA 145: the APK pays with MoMo when the server has it open; otherwise
+    // (now, and in a store build) only a free code goes through.
     final momo = AppConstants.directPayments && plan.momoAvailable;
     if (momo || amount == 0) {
       showLuxeSheet<void>(
@@ -194,22 +194,50 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             LuxeSheetHeader(
-              title: 'Thanh toán sắp mở',
+              title: 'Chưa mở thanh toán',
               caption: 'Gói ${tier.label} · ${_period.label}',
             ),
             const Text(PaymentSheet.closedText, style: LuxeText.body),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
+              child: FilledButton(
+                key: const ValueKey('premium-enter-code'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _openPromo();
+                },
+                child: const Text('Nhập mã giảm giá'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
               child: OutlinedButton(
                 onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Đã hiểu'),
+                child: const Text('Để sau'),
               ),
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _openPromo() {
+    setState(() => _promoOpen = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = GuideRegistry.keyPremiumPromo.currentContext;
+      if (mounted && target != null && target.mounted) {
+        Scrollable.ensureVisible(
+          target,
+          alignment: 0.3,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 320),
+        );
+      }
+    });
   }
 
   @override

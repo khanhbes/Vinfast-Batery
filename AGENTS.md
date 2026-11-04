@@ -251,6 +251,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Gói chỉ bật khi đơn `paid`: IPN MoMo (`POST /api/billing/momo/ipn`, kiểm chữ ký HMAC, sai số tiền → `review`), tra cứu khi app hỏi `/api/billing/orders/<id>` hoặc mở `/api/billing/me` (đối soát đơn chờ). Một đơn chỉ cấp một lần (marker create-once + `apply_purchase` bỏ qua `orderId` đã áp).
   - `paymentOrders/{id}` (+ bản sao `users/{uid}/paymentOrders`) chỉ Admin SDK; xóa tài khoản giữ bản ghi giao dịch gốc (kế toán). Mã khuyến mãi: 1 lần/tài khoản (`users/{uid}/billing/promoUses/codes/{CODE}`), `maxUses` tùy chọn, chỉ tiêu khi đơn được chốt.
   - Cấu hình: `PAYMENTS_ENABLED`, `PAYMENT_PUBLIC_BASE_URL`, `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` (secret), `MOMO_ENDPOINT` (mặc định sandbox). Thiếu → checkout 503, đơn miễn phí vẫn chạy. Trang công khai `/dieu-khoan-premium`, `/thanh-toan/ket-qua` (redirect MoMo). Admin: Gói & Khuyến mại → Giao dịch MoMo (hỏi lại, hoàn tiền = thu hồi gói của đơn).
+  - Hiện tại (04/11/2026, chủ app chọn): **chưa thu tiền**, `PAYMENTS_ENABLED` tắt, chủ app chưa có merchant MoMo (chỉ có ví cá nhân, không có khóa API). Gói bật bằng mã giảm 100 %; nút mua dẫn tới ô nhập mã. Không ghi lời hứa trên giao diện cho tính năng chưa có (nhắc hết hạn 3 ngày chưa làm).
 
 ### 3.7. BatteryBot (trợ lý AI)
 

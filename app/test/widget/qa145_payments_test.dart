@@ -11,6 +11,7 @@ import 'package:vinfast_battery/data/models/entitlement.dart';
 import 'package:vinfast_battery/features/auth/auth_providers.dart';
 import 'package:vinfast_battery/features/premium/payment_history_screen.dart';
 import 'package:vinfast_battery/features/premium/payment_sheet.dart';
+import 'package:vinfast_battery/features/premium/premium_screen.dart';
 
 /// QA 145: paying with MoMo — the server's quote, opening MoMo, waiting for
 /// the answer, the payment history; 320 dp at text ×1 and ×2.
@@ -89,6 +90,44 @@ class _FakeBilling extends BillingRepository {
   Future<List<PaymentOrder>> orders() async => [
     for (final o in history) PaymentOrder.fromMap(o),
   ];
+}
+
+/// Payments closed: a plan turns on only with a 100 % code.
+class _ClosedBilling extends _FakeBilling {
+  _ClosedBilling()
+    : super(
+        free: true,
+        quoteMap: const {
+          'tier': 'ultra',
+          'period': 'year',
+          'kind': 'new',
+          'base': 449000,
+          'afterPromo': 0,
+          'promoCode': 'FREE100',
+          'percentOff': 100,
+          'days': 365,
+          'amount': 0,
+          'newExpiresAt': '2027-11-04T03:00:00Z',
+        },
+      );
+
+  @override
+  Future<Entitlement> me() async => Entitlement.fromMap({
+    ..._plan('free'),
+    'payments': {'momo': false},
+  });
+
+  @override
+  Future<PromoQuote> redeemPromo(String code) async => PromoQuote.fromMap({
+    'code': code,
+    'percentOff': 100,
+    'validTo': '2027-02-01T00:00:00Z',
+    'prices': {
+      'ultra': {
+        'year': {'base': 449000, 'final': 0},
+      },
+    },
+  })!;
 }
 
 const _upgrade = {
@@ -278,6 +317,59 @@ void main() {
     await _pump(tester, _FakeBilling(quoteMap: _upgrade), allowPaid: false);
     expect(find.byKey(const ValueKey('pay-momo')), findsNothing);
     expect(find.text(PaymentSheet.closedText), findsOneWidget);
+  });
+
+  testWidgets('payments closed: the buy button leads to a 100% code', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(320, 3200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final container = ProviderContainer(
+      overrides: [
+        billingRepositoryProvider.overrideWithValue(_ClosedBilling()),
+        currentUidProvider.overrideWith((ref) => 'u1'),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: LuxeTheme.data(),
+          home: const PremiumScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 1500));
+    expect(container.read(entitlementProvider).momoAvailable, isFalse);
+    await tester.tap(find.byKey(const ValueKey('premium-buy-ultra')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.text('Chưa mở thanh toán'), findsOneWidget);
+    expect(find.text(PaymentSheet.closedText), findsOneWidget);
+    expect(find.textContaining('MoMo'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('premium-enter-code')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.text('Chưa mở thanh toán'), findsNothing);
+    final input = find.byKey(const ValueKey('premium-promo-input'));
+    expect(input, findsOneWidget);
+    await tester.enterText(input, 'FREE100');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byKey(const ValueKey('premium-promo-apply')));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump(const Duration(seconds: 2));
+    await tester.tap(find.byKey(const ValueKey('premium-buy-ultra')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 800));
+    expect(find.text('Kích hoạt miễn phí'), findsOneWidget);
+    expect(find.textContaining('MoMo'), findsNothing);
+    expect(find.byKey(const ValueKey('pay-terms')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('pay-momo')));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(container.read(entitlementProvider).tier, PlanTier.ultra);
+    await tester.pump(const Duration(seconds: 3));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('the server explains a refused change (moving down)', (
