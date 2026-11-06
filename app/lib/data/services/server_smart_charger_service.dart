@@ -776,6 +776,15 @@ class ServerSmartChargerService {
     ),
   );
 
+  /// QA 148: train by itself when enough new charges wait.
+  Future<void> setAutoTrain(String vehicleId, bool enabled) async {
+    await _request(
+      'PUT',
+      '/api/learning/${Uri.encodeComponent(vehicleId)}/auto-train',
+      body: {'enabled': enabled},
+    );
+  }
+
   Future<void> deletePersonalProfile(String vehicleId) async =>
       _request('DELETE', '/api/smart-charging/personal-profile/$vehicleId');
 
@@ -882,11 +891,16 @@ class ServerSmartChargerService {
     String sessionId,
     double soc, {
     double? odoKm,
+    bool riddenSinceCharge = false,
   }) async => SmartChargingSession.fromJson(
     await _request(
       'PATCH',
       '/api/smart-charging/sessions/$sessionId/actual-soc',
-      body: {'actualSoc': soc, 'odoKm': ?odoKm},
+      body: {
+        'actualSoc': soc,
+        'odoKm': ?odoKm,
+        if (riddenSinceCharge) 'riddenSinceCharge': true,
+      },
     ),
   );
 

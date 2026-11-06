@@ -11,6 +11,7 @@ import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../../data/services/charge_estimator.dart';
 import '../ai/dashboard_scan_screen.dart';
+import '../ai/widgets/edit_current_battery_sheet.dart';
 import '../premium/premium_gate.dart';
 import '../../core/theme/plan_style.dart';
 
@@ -145,6 +146,9 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
   bool _busy = false;
   String? _error;
   late double _current = (widget.currentSoc ?? 40).clamp(0, 75).toDouble();
+
+  /// QA 148: the plan runs hours from now on this number, so the owner sets it.
+  bool _currentConfirmed = false;
   late int _target = (widget.initialTarget ?? 85).clamp(80, 90);
   late TimeOfDay _wake =
       widget.initialWake ?? const TimeOfDay(hour: 6, minute: 30);
@@ -208,7 +212,30 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
     }
   }
 
+  Future<bool> _confirmCurrent() async {
+    var confirmed = false;
+    await EditCurrentBatterySheet.show(
+      context,
+      initialPercent: _current,
+      savedNote:
+          'Sạc đêm tính năng lượng theo số này. Đọc lại trên đồng hồ xe, vì số '
+          'đã lưu không trừ phần đã chạy.',
+      scan: () async =>
+          (await scanDashboard(context, lastOdoKm: widget.currentOdoKm))?.soc,
+      onSave: (value) {
+        confirmed = true;
+        setState(() {
+          _currentConfirmed = true;
+          _current = value.clamp(0, _target - 5).toDouble();
+        });
+      },
+    );
+    return confirmed;
+  }
+
   Future<void> _arm() async {
+    if (!_currentConfirmed && !await _confirmCurrent()) return;
+    if (!mounted) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -256,7 +283,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
     final read = await scanDashboard(context, lastOdoKm: widget.currentOdoKm);
     final soc = read?.soc;
     if (soc != null && mounted) {
-      setState(() => _current = soc.toDouble().clamp(0, _target - 5));
+      setState(() {
+        _currentConfirmed = true;
+        _current = soc.toDouble().clamp(0, _target - 5);
+      });
     }
   }
 
@@ -321,7 +351,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                       label: '${_current.round()}%',
                       onChanged: _busy
                           ? null
-                          : (v) => setState(() => _current = v.roundToDouble()),
+                          : (v) => setState(() {
+                              _currentConfirmed = true;
+                              _current = v.roundToDouble();
+                            }),
                     ),
                   ),
                   SizedBox(

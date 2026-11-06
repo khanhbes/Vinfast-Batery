@@ -86,6 +86,10 @@ class _ChargeControl extends ConsumerWidget {
               vehicleId: vehicleId,
               currentSoc: value.currentBattery.toDouble(),
               embedded: true,
+              confirmStartSoc: true,
+              startSocSavedAt: value.batteryDataUpdatedAt,
+              startSocSource: value.batteryDataSource,
+              currentOdoKm: value.currentOdo.toDouble(),
             ),
     );
   }

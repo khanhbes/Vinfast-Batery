@@ -42,10 +42,12 @@ abstract interface class SmartChargerRepository {
   });
 
   /// [odoKm] (Task 126) is the optional odometer read with the battery %.
+  /// [riddenSinceCharge] (QA 148): kept in the history, not learned from.
   Future<SmartChargeEnergySummary> confirmActualEndSoc(
     SmartChargingSession session,
     double soc, {
     double? odoKm,
+    bool riddenSinceCharge = false,
   });
   Future<void> recordStatusSample(
     SmartChargingSession session,
@@ -312,6 +314,7 @@ class DirectSmartChargerRepository implements SmartChargerRepository {
     SmartChargingSession session,
     double soc, {
     double? odoKm,
+    bool riddenSinceCharge = false,
   }) {
     final logs = _chargeLogs;
     if (logs == null) throw StateError('Charge log service is unavailable.');
@@ -597,11 +600,13 @@ class ServerSmartChargerRepository implements SmartChargerRepository {
     SmartChargingSession session,
     double soc, {
     double? odoKm,
+    bool riddenSinceCharge = false,
   }) async {
     final updated = await service.confirmActualSoc(
       session.sessionId,
       soc,
       odoKm: odoKm,
+      riddenSinceCharge: riddenSinceCharge,
     );
     final points = await service.telemetry(session.sessionId);
     return SmartChargeEnergySummary.calculate(

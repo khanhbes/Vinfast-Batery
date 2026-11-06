@@ -7,6 +7,7 @@ class VehicleLearningStatus {
     required this.vehicleId,
     required this.consentEnabled,
     this.trainAllowed = true,
+    this.autoTrain = false,
     required this.charge,
     required this.trip,
   });
@@ -17,6 +18,9 @@ class VehicleLearningStatus {
   /// The plan can train the personal models (QA 138: the server decides;
   /// an older server omits it and nothing changes).
   final bool trainAllowed;
+
+  /// QA 148: the charge estimate trains by itself; an older server omits it.
+  final bool autoTrain;
   final ModelTrainingStatus charge;
   final ModelTrainingStatus trip;
 
@@ -33,10 +37,11 @@ class VehicleLearningStatus {
       'learning' =>
         'Đang học · đã nạp ${(_num(raw['gainPct']) ?? 0).round()}/'
             '${(_num(raw['needGainPct']) ?? 100).round()}%',
+      'enough' when autoTrain => null,
       'enough' =>
         trainAllowed
             ? 'Đủ dữ liệu · bấm Huấn luyện'
-            : 'Đủ dữ liệu · Ultra để áp dụng',
+            : 'Đủ dữ liệu · bật Tự huấn luyện',
       _ => null,
     };
   }
@@ -66,6 +71,7 @@ class VehicleLearningStatus {
       vehicleId: data['vehicleId']?.toString() ?? '',
       consentEnabled: data['consentEnabled'] != false,
       trainAllowed: data['trainAllowed'] != false,
+      autoTrain: data['autoTrain'] == true,
       charge: ModelTrainingStatus.fromJson(data['charge']),
       trip: ModelTrainingStatus.fromJson(data['trip']),
     );
@@ -123,10 +129,6 @@ class ModelTrainingStatus {
         : 'AI nhỏ: đã đủ dữ liệu, sẽ thử khi huấn luyện';
   }
 
-  /// Partial charges since the last full one when a full charge is suggested.
-  int? get suggestFullAfter =>
-      _model['suggestFull'] == true ? _int(_model['chargesSinceFull']) : null;
-
   static ModelTrainingStatus fromJson(Object? raw) {
     final data = raw is Map
         ? Map<String, dynamic>.from(raw)
@@ -156,7 +158,11 @@ class TrainingReport {
     this.at,
     this.evaluation,
     this.layer,
+    this.auto = false,
   });
+
+  /// QA 148: this training ran by itself.
+  final bool auto;
 
   /// base | offset | ai: what the training selected on top of Wh/% (QA 147).
   final String? layer;
@@ -201,6 +207,7 @@ class TrainingReport {
       afterMae: _num(raw['afterMae']),
       at: DateTime.tryParse(raw['at']?.toString() ?? ''),
       evaluation: ModelEvaluation.fromJson(raw['evaluation']),
+      auto: raw['auto'] == true,
       layer: () {
         final value = raw['layer'];
         return value is Map ? value['selected']?.toString() : null;

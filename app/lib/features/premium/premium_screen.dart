@@ -1155,7 +1155,8 @@ class _CompareTable extends StatelessWidget {
     ('Giao diện tùy chọn, xuất file', '—', '✓', '✓'),
     ('Số xe', '1', '2', '10'),
     ('Sạc đêm an toàn', '—', '—', '✓'),
-    ('AI cá nhân (huấn luyện)', '—', '—', '✓'),
+    ('Ước tính sạc tự học theo xe', '✓', '✓', '✓'),
+    ('AI cá nhân: nút huấn luyện, AI nhỏ', '—', '—', '✓'),
     ('Giao diện Aurora', '—', '—', '✓'),
     ('Trợ giúp & khắc phục sự cố', '✓', '✓', '✓'),
   ];

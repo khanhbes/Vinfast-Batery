@@ -12,6 +12,37 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 148. Task Completion Log — Sạc đến % chính xác cho mọi người dùng: rà soát cả vòng dự đoán, ngắt, lịch sử, huấn luyện (06/11/2026, chủ app chọn) — Code + test xong, chưa deploy
+
+**Chủ app chọn:** Wh/1% tự học cho mọi gói (bù lệch, AI nhỏ, nút Huấn luyện, báo cáo vẫn Ultra); tự huấn luyện mặc định bật, có công tắc; bắt buộc xác nhận mức pin đầu khi số đã cũ; sửa trạng thái phiên 02/11.
+
+**Lỗi đã sửa:**
+- Mục tiêu 100% từng cắt theo năng lượng nên có thể ngắt trước khi đầy (model 22,84 cắt khoảng 87%), mất luôn lần reset đồng hồ và nhãn tự động. Nay chỉ kết thúc bằng tín hiệu đầy, sạc rảnh hoặc trần timer; % ước tính dừng ở 99 tới khi có tín hiệu đầy. Điều QA 147 ghi về sạc đầy trước đây không đúng hoàn toàn.
+- Pin đầu tự điền từ số lưu, không trừ phần đã chạy (lưu 80, thực 40, mục tiêu 90 chỉ tới khoảng 50). Nay số không phải vừa đọc trong 2 giờ, hoặc là số ước tính sau sạc, phải xác nhận trước khi dự đoán (`StartSocFreshness`, `EditCurrentBatterySheet` có quét đồng hồ). Sạc đêm cũng hỏi trước khi hẹn. Thẻ Pinova Bot dẫn về cùng màn này.
+- Lần tới 100% có trọng số 0,15 trong Wh/1% và không chấm điểm (`_scored`). Trước đây một lần sạc đầy lệch (22,84) đủ làm xe chỉ có nhãn tự động lệch trung bình 9,71% (dữ liệu chủ xe). Số của hãng mờ dần theo số lần sạc của xe: 1 lần đầy không kéo được, 2 lần thì được.
+- Ô nhập % không điền sẵn; phiên quá 6 giờ hỏi xe đã chạy chưa, đã chạy thì lưu nhưng không học (`riddenSinceCharge`).
+- Bù lệch chỉ dùng một lần: phiên kết thúc (≥ 30 Wh) xóa offset trong hồ sơ, offset của phiên nằm trên chính phiên (`carried_offset_pct`). Lớp bù lệch và AI cần quyền `learning_train` lúc dự đoán.
+- Finetune AI chỉ chấm trên lần sạc sau `model.at`, kiểm tra theo thời gian; dưới 3 lần mới thì giữ nguyên. Trước đây chấm trên dữ liệu vừa học nên gần như luôn đạt.
+- `nominalCapacityWh` của xe thắng số app gửi. Lần huấn luyện đầu kém hơn số của hãng thì giữ số của hãng. Cửa sổ 12 mẫu sắp theo ngày sạc. Nhắc sạc đầy đếm từ lịch sử, gồm cả lần không nhập %.
+
+**Tự huấn luyện:** `queue_charge_label` lưu nhãn, rồi `_auto_train_charge` chạy finetune khi `ready` (2 mẫu lần đầu, 3 mẫu các lần sau), giữ quy tắc kém hơn thì giữ số cũ; lỗi không mất nhãn. Có quyền thì chọn lớp; không quyền thì về `base`, giữ `ai_model`; worker không biết gói nên giữ nguyên lớp và không cần `assistant/`. Công tắc `PUT /api/learning/<vid>/auto-train`, AI cá nhân hiện "Tự cập nhật ngày …". Chuyến đi vẫn huấn luyện bằng nút.
+
+**Mô phỏng (dữ liệu giả, 60 seed, sai số trung bình lúc ngắt; dùng để so quy tắc, không phải độ chính xác thật):**
+- Không nhập %, xe khớp hãng: Pro trước 1,90% → sau 1,80%.
+- Không nhập %, hãng lệch 8%: 3,90% → 2,33%.
+- Hay sạc đầy: 1,44% → 1,30%.
+- Nhập mọi lần, hãng lệch 8%: 3,90% → 1,81%.
+- Nhập mọi lần, chai 20%/năm: 3,02% → 1,89%.
+- Mọi gói nay bằng mức Ultra từng bấm đủ lần (lệch dưới 0,05%). 10% số lần vẫn lệch khoảng 6% vì mô hình giả có lần đồng hồ hụt, không đoán trước được.
+
+**Không sửa được bằng code:** 7 lần sạc của chủ xe: số của hãng 26,67 lệch 3,24%, số đã học 26,5 lệch 3,20%, nên phần lớn sai số đến từ đồng hồ xe. Lần hụt đầu tiên, tới khoảng 11%, không đoán trước được. Bù lệch trên 7 lần này còn 2,13% (trước khi đổi trọng số là 1,97%), nhưng với một lần hụt đơn lẻ chỉ dời sai số sang lần sau, với độ trôi kéo dài thì gấp đôi; vì vậy vẫn qua cổng và được chấm lại mỗi lần huấn luyện. Dòng xe khác và pin axit-chì chưa có số đo.
+
+**Dung lượng cũ:** không cần script mới. `qa140_feliz_capacity.py` và `qa143_catalog_specs.py` đã có chế độ chạy thử chỉ đọc và liệt kê xe còn số cũ.
+
+**Kiểm thử:** `test_qa148_charge_accuracy.py`, `qa148_charge_accuracy_test.dart`; `pytest tests` 940 đạt / 15 bỏ qua; `flutter test` 1381 đạt / 213 bỏ qua; `flutter analyze lib` và file test đã sửa sạch. Dung lượng pin còn lại vẫn 99,4% / 2385 Wh, chủ xe vẫn 26,50.
+
+**Hạn chế:** chưa deploy, chưa APK, chưa có lần sạc thật qua bản này, chưa thử 100% thật tới tín hiệu đầy. Bản ghi 02/11 chưa sửa (script cho chủ app chạy, mặc định chỉ đọc).
+
 ## 147. Task Completion Log — Dự đoán % sạc nhiều lớp: Wh/%, bù lệch đồng hồ, AI nhỏ, nhắc sạc đầy (04/11/2026, chủ app chọn) — Code + test xong, chưa deploy
 
 **Chủ app chọn:** kết hợp phương án A với các phương án sau, tránh lệch nhất có thể; đủ dữ liệu thì huấn luyện AI nhỏ, từ đó chỉ finetune.

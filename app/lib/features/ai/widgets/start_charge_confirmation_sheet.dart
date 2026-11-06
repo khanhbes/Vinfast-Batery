@@ -181,6 +181,7 @@ class _StartChargeConfirmationSheetState
           LuxeReveal(
             index: 3,
             child: _Acknowledgement(
+              currentSoc: widget.currentSoc,
               value: _acknowledged,
               onChanged: (v) {
                 HapticFeedback.selectionClick();
@@ -434,8 +435,14 @@ class _SocJourney extends StatelessWidget {
   );
 }
 
+/// QA 148: what the charge relies on, not a disclaimer to tick through.
 class _Acknowledgement extends StatelessWidget {
-  const _Acknowledgement({required this.value, required this.onChanged});
+  const _Acknowledgement({
+    required this.currentSoc,
+    required this.value,
+    required this.onChanged,
+  });
+  final int currentSoc;
   final bool value;
   final ValueChanged<bool> onChanged;
 
@@ -474,10 +481,10 @@ class _Acknowledgement extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            const Expanded(
+            Expanded(
               child: Text(
-                'Pin hiện tại là giá trị ước tính. Tôi đã hiểu.',
-                style: TextStyle(
+                '$currentSoc% đúng với số trên đồng hồ xe.',
+                style: const TextStyle(
                   color: LuxeColors.text,
                   fontSize: 13,
                   height: 1.35,

@@ -109,6 +109,36 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
     }
   }
 
+  Future<void> _toggleAutoTrain(bool enabled) async {
+    setState(() => _busy = true);
+    try {
+      await _service.setAutoTrain(widget.vehicleId, enabled);
+      if (!mounted) return;
+      AppPopup.showSuccess(
+        enabled ? 'Đã bật Tự huấn luyện' : 'Đã tắt Tự huấn luyện',
+      );
+      await _load();
+    } catch (error) {
+      AppPopup.showError(
+        'Không thể cập nhật Tự huấn luyện',
+        detail: AppErrorFormatter.format(error),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// When the charge estimate last updated by itself; null otherwise.
+  String? _autoNote(ModelTrainingStatus charge) {
+    final report = charge.report;
+    final at = report?.at?.toLocal();
+    if (report == null || !report.auto || at == null) return null;
+    final day = '${at.day}/${at.month}';
+    return report.promoted
+        ? ' Tự cập nhật ngày $day.'
+        : ' Tự kiểm tra ngày $day, giữ số cũ vì bản mới không tốt hơn.';
+  }
+
   Future<void> _train(String model, String mode) async {
     // Collecting data is free; training the personal model is Ultra.
     if (!PremiumGate.check(context, ref, PremiumFeature.learningTrain)) return;
@@ -294,9 +324,9 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                 eyebrow: 'AI cá nhân',
                 title: 'Mô hình riêng cho xe',
                 caption:
-                    'App tự thu thập dữ liệu sạc và chuyến đi của xe này. Khi đủ '
-                    'dữ liệu mới, app báo để bạn bấm Huấn luyện. Dữ liệu chỉ '
-                    'dùng cho xe này.',
+                    'App tự thu thập dữ liệu sạc và chuyến đi của xe này, và tự '
+                    'cập nhật ước tính sạc khi đủ dữ liệu mới. Dữ liệu chỉ dùng '
+                    'cho xe này.',
               ),
             ),
             const SizedBox(height: 22),
@@ -320,8 +350,9 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                   key: const ValueKey('learning-train-ultra'),
                   icon: Icons.workspace_premium_rounded,
                   message:
-                      'Huấn luyện mô hình riêng có trong gói Ultra. Dữ liệu '
-                      'vẫn của bạn: xem, tắt hoặc xóa ở cuối trang.',
+                      'Ước tính sạc tự học theo xe ở mọi gói. Nút Huấn luyện, '
+                      'bù lệch đồng hồ và AI nhỏ có trong gói Ultra. Dữ liệu vẫn '
+                      'của bạn: xem, tắt hoặc xóa ở cuối trang.',
                   action: PlanTag(
                     tier: PremiumFeature.learningTrain.tier,
                     semanticLabel: 'Xem gói Ultra để huấn luyện AI cá nhân',
@@ -351,7 +382,8 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                   tag: status.chargeLearningTag,
                   sources:
                       'Học từ % bạn đọc trên đồng hồ sau sạc và lúc app tự nhận '
-                      'biết pin đầy (công suất dưới 40 W suốt 5 phút).',
+                      'biết pin đầy (công suất dưới 40 W suốt 5 phút).'
+                      '${_autoNote(status.charge) ?? ''}',
                   busy: _training == 'charge',
                   enabled: consent && _training == null && trainAllowed,
                   onTrain: () => _train('charge', 'finetune'),
@@ -410,6 +442,25 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                     value: consent,
                     semanticLabel: 'Cho phép AI học từ dữ liệu xe',
                     onChanged: _busy || _training != null ? null : _toggle,
+                  ),
+                ),
+                LuxeSettingsRow(
+                  key: const ValueKey('auto-train-row'),
+                  icon: Icons.autorenew_rounded,
+                  accent: consent && (status?.autoTrain ?? true)
+                      ? context.planAccent
+                      : null,
+                  title: 'Tự huấn luyện khi đủ dữ liệu',
+                  subtitle:
+                      'Tự cập nhật ước tính sạc, chỉ dùng bản mới khi không kém '
+                      'bản cũ. Tắt để tự bấm Huấn luyện.',
+                  trailing: LuxeSwitch(
+                    value: consent && (status?.autoTrain ?? true),
+                    semanticLabel: 'Tự huấn luyện khi đủ dữ liệu',
+                    onChanged:
+                        _busy || _training != null || !consent || status == null
+                        ? null
+                        : _toggleAutoTrain,
                   ),
                 ),
               ],

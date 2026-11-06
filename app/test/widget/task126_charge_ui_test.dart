@@ -93,8 +93,8 @@ void main() {
         await tester.tap(find.text('Mở'));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        // Pre-filled with the rounded estimate.
-        expect(find.text('Lưu 79%'), findsOneWidget);
+        // QA 148: nothing is pre-filled; the estimate only places the chips.
+        expect(find.text('Chọn số trên xe'), findsOneWidget);
         await tester.ensureVisible(
           find.byKey(const ValueKey('actual-soc-plus')),
         );

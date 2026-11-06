@@ -12,19 +12,33 @@ class EditCurrentBatterySheet extends StatefulWidget {
     super.key,
     required this.initialPercent,
     required this.onSave,
+    this.savedNote,
+    this.scan,
   });
 
   final double initialPercent;
   final ValueChanged<double> onSave;
 
+  /// QA 148: asking before a charge, because the saved number may be old.
+  final String? savedNote;
+
+  /// Reads the % from the dashboard; null when the caller has no scan.
+  final Future<int?> Function()? scan;
+
   static Future<void> show(
     BuildContext context, {
     required double initialPercent,
     required ValueChanged<double> onSave,
+    String? savedNote,
+    Future<int?> Function()? scan,
   }) => showLuxeSheet<void>(
     context,
-    builder: (_) =>
-        EditCurrentBatterySheet(initialPercent: initialPercent, onSave: onSave),
+    builder: (_) => EditCurrentBatterySheet(
+      initialPercent: initialPercent,
+      onSave: onSave,
+      savedNote: savedNote,
+      scan: scan,
+    ),
   );
 
   @override
@@ -34,11 +48,24 @@ class EditCurrentBatterySheet extends StatefulWidget {
 
 class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
   late double _soc;
+  bool _scanning = false;
 
   @override
   void initState() {
     super.initState();
     _soc = widget.initialPercent.clamp(0.0, 100.0);
+  }
+
+  Future<void> _scan() async {
+    setState(() => _scanning = true);
+    try {
+      final read = await widget.scan!();
+      if (mounted && read != null) _updateSoc(read.toDouble());
+    } on Object {
+      // The owner can still set it by hand.
+    } finally {
+      if (mounted) setState(() => _scanning = false);
+    }
   }
 
   void _updateSoc(double val) {
@@ -70,8 +97,10 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           LuxeSheetHeader(
-            eyebrow: 'Pin hiện tại',
-            title: 'Chỉnh mức pin hiện tại',
+            eyebrow: widget.savedNote == null ? 'Pin hiện tại' : 'Trước khi sạc',
+            title: widget.savedNote == null
+                ? 'Chỉnh mức pin hiện tại'
+                : 'Đồng hồ xe đang báo bao nhiêu %?',
             caption:
                 'Điều chỉnh mức pin thực tế nếu xe chưa đồng bộ với ứng dụng',
             trailing: LuxeCircleButton(
@@ -122,6 +151,27 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
               ),
             ),
           ),
+          if (widget.savedNote != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              widget.savedNote!,
+              key: const ValueKey('start-soc-saved-note'),
+              style: LuxeText.caption.copyWith(color: LuxeColors.champagne),
+            ),
+          ],
+          if (widget.scan != null) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.tonalIcon(
+                key: const ValueKey('start-soc-scan'),
+                onPressed: _scanning ? null : _scan,
+                icon: const Icon(Icons.document_scanner_rounded),
+                label: const Text('Quét đồng hồ để tự đọc'),
+                style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           Row(
             children: [
@@ -170,6 +220,7 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
           ),
           const SizedBox(height: 20),
           FilledButton(
+            key: const ValueKey('start-soc-confirm'),
             onPressed: () {
               HapticFeedback.lightImpact();
               widget.onSave(_soc.roundToDouble());
@@ -178,7 +229,12 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(54),
             ),
-            child: const Text('Xác nhận mức pin'),
+            child: Text(
+              widget.savedNote != null &&
+                      rounded == widget.initialPercent.round()
+                  ? 'Đúng số trên xe'
+                  : 'Xác nhận mức pin',
+            ),
           ),
         ],
       ),

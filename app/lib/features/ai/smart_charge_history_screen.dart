@@ -2353,12 +2353,14 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
       context,
       estimatedSoc: session.estimatedSoc,
       startSoc: session.startSoc,
+      endedAt: session.stoppedAt,
       onSave: (reading) async {
         try {
           summary = await controller.confirmActualEndSoc(
             session,
             reading.soc,
             odoKm: reading.odoKm,
+            riddenSinceCharge: reading.ridden,
           );
           return null;
         } catch (error) {
@@ -2381,7 +2383,9 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
     });
     AppPopup.showSuccess(
       'Đã lưu ${reading.soc.toStringAsFixed(0)}%',
-      detail: 'Đã thêm vào dữ liệu học; app báo khi đủ để huấn luyện.',
+      detail: reading.ridden
+          ? 'Không dùng để học vì xe đã chạy sau khi sạc.'
+          : 'Đã thêm vào dữ liệu học.',
     );
     unawaited(TrainingReadiness.refresh(session.vehicleId));
   }

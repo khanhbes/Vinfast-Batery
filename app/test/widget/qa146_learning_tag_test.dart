@@ -77,14 +77,14 @@ void main() {
       );
     });
 
-    test('enough data: only Ultra can apply it', () {
+    test('enough data: the button, or the switch for other plans', () {
       expect(
         _status(_learning('enough')).chargeLearningTag,
         'Đủ dữ liệu · bấm Huấn luyện',
       );
       expect(
         _status(_learning('enough'), trainAllowed: false).chargeLearningTag,
-        'Đủ dữ liệu · Ultra để áp dụng',
+        'Đủ dữ liệu · bật Tự huấn luyện',
       );
     });
 
@@ -140,18 +140,6 @@ void main() {
       // An older server sends nothing and nothing is shown.
       expect(charge(null).layerLabel, isNull);
       expect(charge(null).aiProgressLabel, isNull);
-      expect(charge(null).suggestFullAfter, isNull);
-    });
-
-    test('a full charge is suggested only when the server says so', () {
-      expect(
-        charge({'suggestFull': true, 'chargesSinceFull': 6}).suggestFullAfter,
-        6,
-      );
-      expect(
-        charge({'suggestFull': false, 'chargesSinceFull': 2}).suggestFullAfter,
-        isNull,
-      );
     });
 
     test('the training report names the selected layer', () {

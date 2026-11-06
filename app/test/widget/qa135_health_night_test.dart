@@ -145,6 +145,14 @@ void main() {
       );
       expect(control.label, 'Vuốt để hẹn sạc 85%');
       control.onConfirmed();
+      await tester.pump(const Duration(milliseconds: 500));
+      // QA 148: the plan runs on this number, so the owner confirms it first.
+      expect(api.armed, isEmpty);
+      final confirm = find.byKey(const ValueKey('start-soc-confirm'));
+      await tester.ensureVisible(confirm);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(confirm);
+      await tester.pump(const Duration(milliseconds: 500));
       await tester.pump(const Duration(milliseconds: 300));
       expect(api.armed.single['target'], 85);
       expect(api.armed.single['current'], 40.0);

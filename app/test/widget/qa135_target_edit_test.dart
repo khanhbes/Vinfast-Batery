@@ -138,6 +138,11 @@ void main() {
         height: scale == 1 ? 1300 : 2600,
       );
       expect(tester.takeException(), isNull);
+      // QA 148: nothing is pre-filled, a number is chosen first.
+      final chip = find.widgetWithText(ChoiceChip, '79%');
+      await tester.ensureVisible(chip);
+      await tester.tap(chip);
+      await tester.pump(const Duration(milliseconds: 300));
       final save = find.byKey(const ValueKey('actual-soc-save'));
       await tester.ensureVisible(save);
       await tester.tap(save);

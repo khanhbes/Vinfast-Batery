@@ -2204,12 +2204,14 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     SmartChargingSession session,
     double soc, {
     double? odoKm,
+    bool riddenSinceCharge = false,
   }) async {
     _repository ??= await SmartChargerRepositoryFactory.create();
     final summary = await _repository!.confirmActualEndSoc(
       session,
       soc,
       odoKm: odoKm,
+      riddenSinceCharge: riddenSinceCharge,
     );
     _askedActualSoc.add(session.sessionId);
     if (!_disposed) {

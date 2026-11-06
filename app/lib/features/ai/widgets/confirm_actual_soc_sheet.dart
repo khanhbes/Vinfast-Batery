@@ -9,24 +9,33 @@ import 'battery_reading_sheet.dart';
 import '../../../core/utils/number_text.dart';
 
 /// What the user read on the scooter after a charge (Task 126).
-typedef ActualSocReading = ({double soc, double? odoKm});
+typedef ActualSocReading = ({double soc, double? odoKm, bool ridden});
 
 /// "Đồng hồ xe đang báo bao nhiêu %?" — the scooter has no BMS link, so the
 /// number on its display is the only ground truth the charge model can learn
-/// from. Pre-filled with the estimate; ODO is optional (it teaches km per %).
+/// from. Nothing is pre-filled (QA 148): one tap on the estimate used to save it as
+/// a reading, teaching the model that it was right. ODO is optional (it teaches km
+/// per %). The whole sheet is optional too.
 class ConfirmActualSocSheet extends StatefulWidget {
   const ConfirmActualSocSheet({
     super.key,
     required this.estimatedSoc,
     required this.startSoc,
     this.currentOdoKm,
+    this.endedAt,
     this.reader,
     this.onSave,
   });
 
+  /// Longer ago than this, the scooter may have been ridden since the charge.
+  static const askRiddenAfter = Duration(hours: 6);
+
   final double? estimatedSoc;
   final double startSoc;
   final double? currentOdoKm;
+
+  /// When the charge ended, to ask about riding on a late reading.
+  final DateTime? endedAt;
 
   /// Saves on the server while the sheet shows progress (QA 135); returns
   /// the reason when it failed (the sheet stays open with the numbers).
@@ -40,6 +49,7 @@ class ConfirmActualSocSheet extends StatefulWidget {
     required double? estimatedSoc,
     required double startSoc,
     double? currentOdoKm,
+    DateTime? endedAt,
     DashboardReadFn? reader,
     Future<String?> Function(ActualSocReading reading)? onSave,
   }) => showLuxeSheet<ActualSocReading>(
@@ -48,6 +58,7 @@ class ConfirmActualSocSheet extends StatefulWidget {
       estimatedSoc: estimatedSoc,
       startSoc: startSoc,
       currentOdoKm: currentOdoKm,
+      endedAt: endedAt,
       reader: reader,
       onSave: onSave,
     ),
@@ -59,6 +70,10 @@ class ConfirmActualSocSheet extends StatefulWidget {
 
 class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
   late double _soc;
+
+  /// The owner chose or scanned a number; until then nothing can be saved.
+  bool _chosen = false;
+  bool? _ridden;
   final _odo = TextEditingController();
   String? _odoError;
   bool _reading = false;
@@ -67,6 +82,14 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
   bool _saving = false;
 
   double get _minimum => (widget.startSoc - 5).clamp(0, 100).toDouble();
+
+  bool get _askRidden {
+    final ended = widget.endedAt;
+    return ended != null &&
+        DateTime.now().difference(ended) > ConfirmActualSocSheet.askRiddenAfter;
+  }
+
+  bool get _canSave => _chosen && (!_askRidden || _ridden != null);
 
   @override
   void initState() {
@@ -86,7 +109,10 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
   void _set(double value) {
     final next = value.clamp(_minimum, 100.0).roundToDouble();
     if (next != _soc) HapticFeedback.selectionClick();
-    setState(() => _soc = next);
+    setState(() {
+      _soc = next;
+      _chosen = true;
+    });
   }
 
   /// Fill % and ODO from a dashboard photo read on the phone.
@@ -105,6 +131,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
       setState(() {
         if (result.soc != null) {
           _soc = result.soc!.toDouble().clamp(_minimum, 100.0);
+          _chosen = true;
         }
         if (result.odoKm != null) {
           final km = result.odoKm!;
@@ -144,7 +171,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
         return false;
       }
     }
-    final reading = (soc: _soc, odoKm: odo);
+    final reading = (soc: _soc, odoKm: odo, ridden: _ridden == true);
     final save = widget.onSave;
     if (save == null) {
       HapticFeedback.lightImpact();
@@ -225,12 +252,14 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
           const SizedBox(height: 16),
           Center(
             child: LuxeRing(
-              value: _soc / 100,
+              value: _chosen ? _soc / 100 : 0,
               size: 160,
               stroke: 9,
               color: LuxeColors.platinum,
               duration: const Duration(milliseconds: 220),
-              semanticLabel: 'Pin trên xe $rounded phần trăm',
+              semanticLabel: _chosen
+                  ? 'Pin trên xe $rounded phần trăm'
+                  : 'Chưa chọn số trên xe',
               child: ExcludeSemantics(
                 child: Padding(
                   padding: const EdgeInsets.all(26),
@@ -241,7 +270,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
                       textBaseline: TextBaseline.alphabetic,
                       children: [
                         LuxeMetalText(
-                          '$rounded',
+                          _chosen ? '$rounded' : '—',
                           key: const ValueKey('actual-soc-value'),
                           style: const TextStyle(
                             fontSize: 52,
@@ -301,7 +330,7 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
               for (final value in chips)
                 ChoiceChip(
                   label: Text('$value%'),
-                  selected: rounded == value,
+                  selected: _chosen && rounded == value,
                   onSelected: (_) => _set(value.toDouble()),
                   materialTapTargetSize: MaterialTapTargetSize.padded,
                 ),
@@ -329,14 +358,51 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
               errorMaxLines: 3,
             ),
           ),
+          if (_askRidden) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'Từ lúc rút sạc, xe đã chạy chưa?',
+              style: TextStyle(color: LuxeColors.text, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  key: const ValueKey('actual-soc-not-ridden'),
+                  label: const Text('Chưa chạy'),
+                  selected: _ridden == false,
+                  onSelected: (_) => setState(() => _ridden = false),
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                ),
+                ChoiceChip(
+                  key: const ValueKey('actual-soc-ridden'),
+                  label: const Text('Đã chạy'),
+                  selected: _ridden == true,
+                  onSelected: (_) => setState(() => _ridden = true),
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                ),
+              ],
+            ),
+            if (_ridden == true) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Số này vẫn được lưu nhưng không dùng để học, vì pin đã giảm '
+                'sau khi chạy.',
+                key: ValueKey('actual-soc-ridden-note'),
+                style: LuxeText.caption,
+              ),
+            ],
+          ],
           const SizedBox(height: 14),
           const LuxeNotice(
             icon: Icons.school_rounded,
             color: LuxeColors.steel,
             message:
-                'Xe không có kết nối pin, nên app học từ số bạn đọc trên đồng '
-                'hồ: lần sạc sau sẽ tự ngắt sát mục tiêu hơn. ODO giúp dự '
-                'đoán quãng đường cho từng % pin.',
+                'Không nhập cũng được, xe vẫn tự ngắt. Xe không có kết nối pin, '
+                'nên số bạn đọc trên đồng hồ giúp lần sau ngắt sát mục tiêu '
+                'hơn. ODO giúp dự đoán quãng đường cho từng % pin.',
           ),
           const SizedBox(height: 18),
           if (_saveError != null) ...[
@@ -350,10 +416,10 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
           ],
           LuxeSubmitButton(
             key: const ValueKey('actual-soc-save'),
-            label: 'Lưu $rounded%',
+            label: _chosen ? 'Lưu $rounded%' : 'Chọn số trên xe',
             busyLabel: 'Đang lưu…',
             doneLabel: 'Đã lưu $rounded%',
-            onPressed: _reading ? null : _save,
+            onPressed: _reading || !_canSave ? null : _save,
             onBusyChanged: (busy) => setState(() => _saving = busy),
           ),
           const SizedBox(height: 6),

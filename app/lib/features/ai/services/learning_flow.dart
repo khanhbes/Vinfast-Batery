@@ -13,7 +13,8 @@ import '../widgets/battery_reading_sheet.dart';
 
 /// Task 127: data is collected silently; when a model has enough new data
 /// the owner is told once (notification + in-app hint) and trains it from
-/// "AI cá nhân". Never trains on its own.
+/// "AI cá nhân". QA 148: charges train by themselves on the server unless the
+/// owner switched that off, so there is nothing to announce for them.
 abstract final class TrainingReadiness {
   static String _key(String vehicleId, String model) =>
       'training_ready_notified_${vehicleId}_$model';
@@ -24,7 +25,7 @@ abstract final class TrainingReadiness {
     final prefs = await SharedPreferences.getInstance();
     final ready = <String>[];
     for (final (model, value) in [
-      ('charge', status.charge),
+      if (!status.autoTrain) ('charge', status.charge),
       ('trip', status.trip),
     ]) {
       if (!value.ready) continue;

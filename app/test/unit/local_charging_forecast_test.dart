@@ -51,6 +51,7 @@ class _Server extends ServerSmartChargerService {
     String sessionId,
     double soc, {
     double? odoKm,
+    bool riddenSinceCharge = false,
   }) async {
     historyConfirmations++;
     throw const SmartChargerException('QA history offline', code: 'qaHistory');

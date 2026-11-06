@@ -758,6 +758,10 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
         builder: (_) => SmartChargingControlScreen(
           vehicleId: vehicleId,
           currentSoc: vehicle.currentBattery.toDouble(),
+          confirmStartSoc: true,
+          startSocSavedAt: vehicle.batteryDataUpdatedAt,
+          startSocSource: vehicle.batteryDataSource,
+          currentOdoKm: vehicle.currentOdo.toDouble(),
         ),
       ),
     );

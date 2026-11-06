@@ -195,7 +195,7 @@ void main() {
       expect(find.textContaining('chia sẻ xe'), findsNothing);
       expect(find.textContaining('Chi phí theo tháng'), findsNothing);
       expect(find.textContaining('chi phí theo tháng'), findsNothing);
-      expect(find.text('AI cá nhân (huấn luyện)'), findsOneWidget);
+      expect(find.text('AI cá nhân: nút huấn luyện, AI nhỏ'), findsOneWidget);
       expect(find.text('Nhiều'), findsNothing);
     });
 

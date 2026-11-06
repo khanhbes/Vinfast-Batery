@@ -180,6 +180,122 @@ void main() {
     expect(find.text('SẠC THEO DỰ ĐOÁN'), findsOneWidget);
   });
 
+  // QA 148: the energy to deliver comes from the start %, and the saved one knows
+  // nothing about riding.
+  group('start % before a forecast', () {
+    Widget screen(
+      HarnessController controller, {
+      DateTime? savedAt,
+      String? source,
+    }) => ProviderScope(
+      overrides: [
+        smartChargingControllerProvider.overrideWith((ref, args) => controller),
+      ],
+      child: MaterialApp(
+        navigatorKey: AppPopup.navigatorKey,
+        scaffoldMessengerKey: AppPopup.messengerKey,
+        home: SmartChargingControlScreen(
+          vehicleId: 'VF-001',
+          currentSoc: 20,
+          confirmStartSoc: true,
+          startSocSavedAt: savedAt,
+          startSocSource: source,
+        ),
+      ),
+    );
+
+    Future<void> tapForecast(WidgetTester tester) async {
+      final button = find.byKey(const ValueKey('create-plan-button'));
+      await tester.ensureVisible(button);
+      await tester.pump();
+      await tester.tap(button);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    void tall(WidgetTester tester) {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+    }
+
+    testWidgets('an old number is confirmed first', (tester) async {
+      tall(tester);
+      final controller = harness();
+      publishControlConnection(controller);
+      await tester.pumpWidget(
+        screen(
+          controller,
+          savedAt: DateTime.now().subtract(const Duration(days: 2)),
+          source: 'reading_manual',
+        ),
+      );
+      expect(find.byKey(const ValueKey('start-soc-stale')), findsOneWidget);
+      await tapForecast(tester);
+      expect(find.byKey(const ValueKey('plan-preview')), findsNothing);
+      final confirm = find.byKey(const ValueKey('start-soc-confirm'));
+      expect(confirm, findsOneWidget);
+      await tester.ensureVisible(confirm);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(confirm);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('plan-preview')), findsOneWidget);
+      expect(find.byKey(const ValueKey('start-soc-stale')), findsNothing);
+    });
+
+    testWidgets('the estimate of the last charge is never taken as read', (
+      tester,
+    ) async {
+      tall(tester);
+      final controller = harness();
+      publishControlConnection(controller);
+      await tester.pumpWidget(
+        screen(
+          controller,
+          savedAt: DateTime.now(),
+          source: 'smart_charge_estimated',
+        ),
+      );
+      await tapForecast(tester);
+      expect(find.byKey(const ValueKey('start-soc-confirm')), findsOneWidget);
+    });
+
+    testWidgets('closing the question makes no forecast', (tester) async {
+      tall(tester);
+      final controller = harness();
+      publishControlConnection(controller);
+      await tester.pumpWidget(screen(controller));
+      await tapForecast(tester);
+      Navigator.of(
+        tester.element(find.byKey(const ValueKey('start-soc-confirm'))),
+      ).pop();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byKey(const ValueKey('plan-preview')), findsNothing);
+    });
+
+    testWidgets('a fresh reading goes straight to the forecast', (
+      tester,
+    ) async {
+      tall(tester);
+      final controller = harness();
+      publishControlConnection(controller);
+      await tester.pumpWidget(
+        screen(
+          controller,
+          savedAt: DateTime.now().subtract(const Duration(minutes: 10)),
+          source: 'reading_photo',
+        ),
+      );
+      expect(find.byKey(const ValueKey('start-soc-stale')), findsNothing);
+      await tapForecast(tester);
+      expect(find.byKey(const ValueKey('start-soc-confirm')), findsNothing);
+      expect(find.byKey(const ValueKey('plan-preview')), findsOneWidget);
+    });
+  });
+
   testWidgets('requires estimated SOC acknowledgement before start', (
     tester,
   ) async {
