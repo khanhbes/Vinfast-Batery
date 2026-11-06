@@ -72,6 +72,7 @@ def _vn_clock(instant: datetime) -> str:
 # half-interval + Cloud OFF latency) counts as already delivered, so the
 # outlet switches off within a fraction of 1 % of the target.
 TARGET_LEAD_SECONDS = 20
+GAUGE_SETTLE_MIN_WH = 30.0  # the same line as a junk session (history_quality)
 # Ride-through (Task 126): a failed READ while a verified charge runs is a
 # connection gap, not an unknown relay. The Shelly keeps its own ceiling timer,
 # so the charge stays bounded; cutting it on reconnect (old recovery_off) lost
@@ -434,7 +435,12 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             raise SmartChargeError("capacityUnavailable",
                                    "Xe chưa có dung lượng pin đã được xác minh.", 409)
         # QA 147: only what the owner's training selected; 0 for most vehicles.
-        correction = charge_ai.correction(learned, current, target, self.clock())
+        # QA 148: the layers come with the plan that can train.
+        layers_allowed = (learned is not None and learned.layer != "base"
+                          and (self.entitlements is None
+                               or self.entitlements.allows(uid, "learning_train")))
+        correction = (charge_ai.correction(learned, current, target, self.clock())
+                      if layers_allowed else 0.0)
         estimate = charge_model.estimate(params, current + correction, target)
         seconds = estimate.seconds
         if seconds <= 0 or seconds > self.max_minutes * 60:
@@ -483,6 +489,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             estimate_high_seconds=estimate.high_seconds,
             wh_per_pct=round(params.wh_per_pct, 3),
             soc_correction_pct=correction,
+            carried_offset_pct=learned.gauge_offset_pct if learned else None,
             charge_power_w=round(params.power_w, 1),
             power_source=params.power_source,
             soc_mae=params.soc_mae,
@@ -647,12 +654,16 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         reading = _optional_float(getattr(status, "energy_wh", None))
         if reading is not None and session.last_meter_energy_wh is not None:
             energy += max(0.0, reading - session.last_meter_energy_wh)
-        if (session.stop_mode == "target" and session.target_energy_wh is not None
-                and charge_model.target_reached(energy, session.target_energy_wh, 0, 0)):
+        reached = (session.stop_mode == "target" and session.target_energy_wh is not None
+                   and charge_model.target_reached(energy, session.target_energy_wh, 0, 0))
+        # QA 148: a charge to 100 % keeps its full-battery result and label.
+        if reached and session.target_soc < charge_model.FULL_TARGET_PCT:
             return "target_reached"
         if (session.tail_since is not None
                 and self._tail_follows_taper(session, float(session.peak_power_w or 0))):
             return "battery_full"
+        if reached:
+            return "target_reached"
         if (session.stop_mode == "target" and session.idle_since is not None
                 and (now - session.idle_since).total_seconds() >= charge_model.IDLE_CUTOFF_SECONDS):
             return "charger_idle"
@@ -691,7 +702,12 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
     def _target_outcome(self, uid: str, session: ChargingSession, status, now) -> str | None:
         """Why a target charge should end now, or ``None`` to keep charging."""
         power = max(0.0, float(status.power_w or 0))
+        # QA 148: a charge to 100 % ends on the charger's full signal. Cutting on
+        # energy could stop it before full (a low Wh/% stopped at about 87 %), so
+        # the gauge never reset and no automatic label was made. The device timer
+        # still bounds it.
         if (session.target_energy_wh is not None
+                and session.target_soc < charge_model.FULL_TARGET_PCT
                 and charge_model.target_reached(session.energy_used_wh, session.target_energy_wh,
                                                 power, TARGET_LEAD_SECONDS)):
             return "target_reached"
@@ -747,6 +763,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         """Target charge: energy left at the measured power (same model as the
         preview). Timed charge: the Shelly timer."""
         if session.stop_mode == "target" and session.model_wh_per_pct and session.estimated_soc is not None:
+            if (session.target_soc >= charge_model.FULL_TARGET_PCT
+                    and session.estimated_soc >= charge_model.FULL_TARGET_PCT - 1):
+                return None  # waiting for the charger's full signal: no honest ETA
             power = float(status.power_w or 0)
             if power < charge_model.IDLE_POWER_W:
                 power = float(session.average_power_w or 0)
@@ -1068,6 +1087,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             stop_mode="target" if target_mode else "timer",
             model_wh_per_pct=preview.wh_per_pct if target_mode else None,
             soc_correction_pct=preview.soc_correction_pct if target_mode else 0.0,
+            carried_offset_pct=preview.carried_offset_pct,
             target_energy_wh=(round(preview.wh_per_pct * max(
                 0.0, preview.target_soc - preview.current_soc - preview.soc_correction_pct), 2)
                               if target_mode else None),
@@ -1264,9 +1284,31 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                 raise
             return stored
         self.repository.upsert_charge_log(uid, session)
+        self._spend_gauge_offset(uid, session)
         # save_session releases both the in-memory and Firestore device lease.
         self._emit_push(uid, session)
         return session
+
+    def _spend_gauge_offset(self, uid: str, session: ChargingSession) -> None:
+        """QA 148: what the gauge owed was settled by this charge, labelled or not.
+        Without this an old offset moved a later cutoff too. Never affects the OFF."""
+        if not session.carried_offset_pct or session.energy_used_wh < GAUGE_SETTLE_MIN_WH:
+            return
+        try:
+            profile = self.repository.get_personal_profile(uid, session.vehicle_id)
+            learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
+            if profile is None or not learned.gauge_offset_pct:
+                return
+            updated_at = _datetime(learned.gauge_offset_at)
+            if updated_at is not None and updated_at > session.created_at:
+                return  # a newer reading already replaced it
+            learned.gauge_offset_pct = 0.0
+            learned.gauge_offset_at = (session.stopped_at or self.clock()).isoformat()
+            profile.learned = learned.to_dict()
+            self.repository.save_personal_profile(profile)
+        except Exception as error:
+            print(f"[smart-charge] gauge offset not cleared ({type(error).__name__})",
+                  file=sys.stderr, flush=True)
 
     def stop(
         self,
@@ -1729,8 +1771,13 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                                f"Phiên sạc vừa kết thúc trước khi {action}; ổ sạc đã tắt.", 409)
 
     def confirm_actual_soc(self, uid: str, session_id: str, actual_soc: float,
-                           odo_km: float | None = None) -> ChargingSession:
-        """Record the % the user read on the scooter and learn from it."""
+                           odo_km: float | None = None, *,
+                           ridden_since_charge: bool = False) -> ChargingSession:
+        """Record the % the user read on the scooter and learn from it.
+
+        QA 148: a reading taken after riding is not the end of this charge. It is
+        kept in the history but never trained on.
+        """
         if not math.isfinite(actual_soc) or not 0 <= actual_soc <= 100:
             raise SmartChargeError("invalidSoc", "% pin thực tế phải từ 0 đến 100")
         session = self.repository.get_session_or_charge_log(uid, session_id)
@@ -1748,14 +1795,16 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             raise SmartChargeError("invalidSoc", "% sau khi sạc không thể thấp hơn % lúc bắt đầu.")
         estimated = session.estimated_soc
         session.actual_end_soc = float(actual_soc)
-        session.soc_error = round(float(estimated) - float(actual_soc), 1) if estimated is not None else None
+        session.soc_error = (round(float(estimated) - float(actual_soc), 1)
+                             if estimated is not None and not ridden_since_charge else None)
         if odo_km is not None and math.isfinite(odo_km) and 0 <= odo_km <= 999999:
             session.end_odo_km = float(odo_km)
         gain = session.actual_end_soc - session.start_soc
         if gain > 0 and session.energy_used_wh > 0:
             session.wh_per_soc_percent = round(session.energy_used_wh / gain, 2)
         session.end_soc_source = "user"
-        decision = self._learn_from_confirmation(uid, session)
+        decision = ("ridden_after_charge" if ridden_since_charge
+                    else self._learn_from_confirmation(uid, session))
         session.training_eligible = decision == "queued"
         session.training_state = "queued" if decision == "queued" else "skipped"
         session.training_reason = decision
@@ -2001,7 +2050,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         # provenance flag retain their historical behavior.
         if vehicle.get("hasSohData") is False:
             result.pop("stateOfHealth", None)
-        if result.get("estimatedCapacityWh") in (None, 0) and vehicle.get("nominalCapacityWh"):
+        # QA 148: the vehicle record decides, as the comment above says. An older
+        # app could send a capacity the catalog has since corrected.
+        if vehicle.get("nominalCapacityWh"):
             result["estimatedCapacityWh"] = vehicle["nominalCapacityWh"]
         return result
 
@@ -2033,6 +2084,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                 share = min(1.0, session.energy_used_wh / session.target_energy_wh)
                 session.estimated_soc = min(100.0, max(
                     session.start_soc, session.estimated_soc + session.soc_correction_pct * share))
+            if session.stop_mode == "target" and session.target_soc >= charge_model.FULL_TARGET_PCT:
+                # QA 148: only the charger's full signal says 100 %.
+                session.estimated_soc = min(charge_model.FULL_TARGET_PCT - 1, session.estimated_soc)
             session.soc_estimate_source = "shelly_energy"
             session.soc_estimate_quality = "live" if session.energy_quality == "good" else "partial"
             session.soc_estimation_version = 3
@@ -2211,6 +2265,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             # QA 146: the live % of a timed charge uses what this vehicle
             # learned; the timer alone still decides when it stops.
             model_wh_per_pct=_timed_wh_per_pct(checks["learned"], vehicle),
+            carried_offset_pct=_carried_offset(checks["learned"]),
         )
         # Device lock + new session row in one transaction (was two).
         if not self.repository.claim_device_and_create_session(uid, session):
@@ -2419,6 +2474,15 @@ def _timed_wh_per_pct(learned_future, vehicle: dict) -> float | None:
     params = charge_model.params_for(capacity_wh=_optional_float(vehicle.get("nominalCapacityWh")),
                                      learned=learned)
     return round(params.wh_per_pct, 3) if params else None
+
+
+def _carried_offset(learned_future) -> float | None:
+    """What the gauge owed when this charge began; ``None`` if unknown."""
+    try:
+        learned = learned_future.result()
+    except Exception:
+        return None
+    return learned.gauge_offset_pct if learned else None
 
 
 def _display_target_soc(current_soc, target_soc) -> float:

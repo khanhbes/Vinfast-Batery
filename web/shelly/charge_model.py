@@ -55,11 +55,17 @@ MAX_PROFILE_SAMPLES = 12
 MAX_PENDING_SAMPLES = 24
 HALF_LIFE_DAYS = 90.0
 # QA 146: one charge counts by the % it gained (a long charge is less hurt by a
-# gauge error of a few %). A charge that ended at 100 % without the full-battery
-# signal counts less, because the battery may have filled before it ended. The
-# catalog value counts like a short charge, so it only matters at the start.
+# gauge error of a few %). The catalog value counts like a short charge, so it only
+# matters at the start.
+# QA 148: a charge that ended at 100 % counts far less, with or without the
+# full-battery signal: the gauge resets there, so its Wh/% says how far the gauge
+# had drifted (the owner's two 0 -> 100: 26.15 and 22.84). One such charge cannot
+# move the catalog value (15 < 20); two can (_robust_wh). Learning 22.84 from one
+# would miss the owner's partial charges by 9.7 % on average.
 PRIOR_GAIN_PCT = 20.0
-CENSORED_WEIGHT = 0.25
+FULL_CHARGE_WEIGHT = 0.15
+# A target of 100 % ends on the charger's own full signal, never on energy.
+FULL_TARGET_PCT = 100.0
 # "Đang học" (QA 146): the vehicle's own charges cover at least one full cycle.
 LEARNING_MIN_CHARGES = 5
 LEARNING_MIN_GAIN_PCT = 100.0
@@ -421,7 +427,7 @@ def honest_mae(profile: LearnedProfile) -> float | None:
         return profile.layer_mae  # measured on charges that layer had not seen
     stored = profile.soc_mae
     charges = [*profile.samples, *profile.pending]
-    if not profile.wh_per_pct or not any(not item.get("censored") for item in charges):
+    if not profile.wh_per_pct or not any(_scored(item) for item in charges):
         return stored
     live = round(_mae_with(charges, profile.wh_per_pct), 2)
     return live if stored is None else max(stored, live)
@@ -450,8 +456,10 @@ def learning_progress(profile: LearnedProfile) -> dict:
 def gauge_offset_after(start_pct: float, energy_wh: float, wh_per_pct: float,
                        actual_end_pct: float) -> float:
     """What the gauge owes after this charge. It is settled on the next charge,
-    so it is not added up (owner's 7 charges: mean error 1.97 %, 2.94 % when added
-    up, 3.29 % without it). A full battery settles it at once."""
+    so it is not added up (owner's 7 charges: mean error about 2 %, 3.3 % without
+    it). Only 7 charges: a single shortfall just moves the error to the charge after
+    the catch-up, and a steady drift doubles it, so it moves a cutoff only after real
+    charges proved it, at each training again. A full battery settles it at once."""
     if actual_end_pct >= GAUGE_RESET_END_PCT:
         return 0.0
     offset = start_pct + energy_wh / wh_per_pct - actual_end_pct
@@ -511,7 +519,8 @@ def train(
     merged: dict[str, dict] = {}
     for index, item in enumerate([*profile.samples, *profile.pending]):
         merged[str(item.get("sessionId") or f"_{index}")] = item
-    samples = list(merged.values())[-MAX_PROFILE_SAMPLES:]
+    # By the charge's date: correcting an old charge's % must not push out a newer one.
+    samples = sorted(merged.values(), key=lambda item: str(item.get("at") or ""))[-MAX_PROFILE_SAMPLES:]
     weigh_now = None if retrain else now
     candidate_wh = _robust_wh(samples, base_wh_per_pct, weigh_now)
     tapers = [(item.get("taperStartPct"), item.get("taperPowerRatio")) for item in samples
@@ -545,14 +554,16 @@ def train(
               "added": len(profile.pending), "beforeMae": before,
               "afterMae": after, "whPerPct": candidate.wh_per_pct,
               "evaluation": evaluation}
-    if (before is not None and after is not None and profile.wh_per_pct
-            and after > before + 0.5):
+    # Before anything was learned, the value to beat is the catalog's (QA 148).
+    reference = before if profile.wh_per_pct else evaluation["base"]["mae"]
+    if reference is not None and after is not None and after > reference + 0.5:
         # Keep the proven estimate; the new charges stay stored for later.
         kept = LearnedProfile(**{**profile.__dict__, "samples": samples, "pending": [],
                                  "trained_at": now.isoformat(),
-                                 "soc_mae": _round2(_mae_with(samples, profile.wh_per_pct))})
+                                 "soc_mae": (_round2(_mae_with(samples, profile.wh_per_pct))
+                                             if profile.wh_per_pct else None)})
         return kept, {**report, "decision": "rejected_worse", "whPerPct": profile.wh_per_pct,
-                      "afterMae": _round2(before)}
+                      "afterMae": _round2(reference)}
     return candidate, {**report, "decision": "promoted" if candidate.wh_per_pct else "no_data"}
 
 
@@ -564,11 +575,12 @@ def _evaluate(samples: list[dict], profile: LearnedProfile, base: float | None,
     the new model fitted WITHOUT that charge (leave-one-out) and the catalog
     default. New (pending) charges are the test set when there are any, so the
     model in use has not seen them; otherwise every stored charge is used.
-    Charges that ended at 100 % without the full-battery signal only bound the
-    value and are listed but not scored.
+    Charges that ended at 100 % are listed but not scored (QA 148): the charger
+    ended them, so the estimate had nothing to get right, and scoring them favoured
+    a Wh/% too low for every other charge.
     """
     pending_ids = {str(item.get("sessionId")) for item in profile.pending}
-    scored = [item for item in samples if not item.get("censored")]
+    scored = [item for item in samples if _scored(item)]
     fresh = [item for item in scored if str(item.get("sessionId")) in pending_ids]
     test = fresh or scored
     rows = []
@@ -666,6 +678,11 @@ def _gain(item: dict) -> float:
     return max(0.0, float(item.get("actualEndPct") or 0) - float(item.get("startPct") or 0))
 
 
+def _scored(item: dict) -> bool:
+    """A charge the estimate decided: it did not end at 100 %."""
+    return not item.get("censored") and float(item.get("actualEndPct") or 0) < GAUGE_RESET_END_PCT
+
+
 def _robust_wh(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
     """Median weighted by % gained and recency, starting from the catalog value.
 
@@ -675,17 +692,20 @@ def _robust_wh(samples: list[dict], base: float | None, now: datetime | None) ->
     separates a battery that wears from one odd gauge reading.
     """
     pairs = [(float(item["whPerPct"]),
-              _gain(item) * _weight(item, now) * (CENSORED_WEIGHT if item.get("censored") else 1.0))
+              _gain(item) * _weight(item, now)
+              * (1.0 if _scored(item) else FULL_CHARGE_WEIGHT))
              for item in samples]
     if base:
-        pairs.append((base, PRIOR_GAIN_PCT))
+        # The catalog fades with the vehicle's own charges: one full charge cannot
+        # move it, a second one that agrees can, whatever % they started from.
+        pairs.append((base, PRIOR_GAIN_PCT / max(1, len(samples))))
     return _weighted_median(pairs)
 
 
 def _loo_mae(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
     errors = []
     for index, item in enumerate(samples):
-        if item.get("censored"):
+        if not _scored(item):
             continue
         others = samples[:index] + samples[index + 1:]
         wh = _robust_wh(others, base, now)
@@ -696,7 +716,7 @@ def _loo_mae(samples: list[dict], base: float | None, now: datetime | None) -> f
 
 def _mae_with(samples: list[dict], wh: float) -> float:
     errors = [abs(_predicted_end(item, wh) - float(item["actualEndPct"]))
-              for item in samples if not item.get("censored")]
+              for item in samples if _scored(item)]
     return sum(errors) / len(errors) if errors else 0.0
 
 

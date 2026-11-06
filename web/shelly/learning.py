@@ -8,9 +8,11 @@ Data is collected silently:
 * rides: trips recorded from the trip planner, rides imported from a CSV, and
   odometer segments between two battery/ODO readings with no charge between.
 
-The estimates change only when the owner presses "Huấn luyện" (finetune) or
-"Huấn luyện lại" (retrain); both keep the current model if the new one is not
-better. Readiness (enough new data) is reported so the app can tell the owner.
+Charge estimates change on "Huấn luyện" (finetune), "Huấn luyện lại" (retrain) or,
+unless the owner switched it off, by themselves once enough new charges wait
+(QA 148). All keep the current model if the new one is not better. Rides still train
+only on the button. Every plan learns its own Wh/%; the layers on top of it and the
+buttons come with the plan that can train.
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -166,7 +169,63 @@ class VehicleLearningMixin:
         self.repository.save_personal_profile(profile)
         self.repository.append_audit(uid, "charge_label_queued", session_id=session.session_id,
                                      label_source=label_source)
+        self._auto_train_charge(uid, profile, queued, base, now)
         return decision
+
+    def _auto_train_charge(self, uid: str, profile, learned, base: float | None, now: datetime) -> None:
+        """QA 148: people who never open the training screen still get an estimate
+        that follows their vehicle. The label is already saved; a failure here only
+        leaves it waiting for the next one."""
+        if not profile.auto_train or not profile.consent_enabled:
+            return
+        if not charge_model.training_status(learned)["ready"]:
+            return
+        try:
+            entitlements = getattr(self, "entitlements", None)
+            # The worker does not know the plan: it leaves the layer as it is.
+            layers = entitlements.allows(uid, "learning_train") if entitlements is not None else None
+            _, report = self._train_charge(profile, learned, base, now, mode="finetune", layers=layers)
+            profile.training_reports = {**(profile.training_reports or {}),
+                                        "charge": {**report, "model": "charge", "auto": True, "at": _iso(now)}}
+            profile.last_trained_at = now
+            profile.updated_at = now
+            self.repository.save_personal_profile(profile)
+            self.repository.append_audit(uid, "personal_model_trained", vehicle_id=profile.vehicle_id,
+                                         model="charge", mode="auto", decision=report["decision"])
+        except Exception as error:
+            print(f"[learning] automatic training failed ({type(error).__name__})",
+                  file=sys.stderr, flush=True)
+
+    @staticmethod
+    def _train_charge(profile, learned, base: float | None, now: datetime, *, mode: str,
+                      layers: bool | None) -> tuple[charge_model.LearnedProfile, dict]:
+        """One training on ``profile``. ``layers``: True selects the layer, False
+        returns to the plain Wh/% (the model stays for a later plan), None keeps it."""
+        updated, report = charge_model.train(learned, base_wh_per_pct=base, now=now, mode=mode)
+        if layers:
+            updated, layer = charge_ai.select_layer(updated, base=base, now=now)
+            report = {**report, "layer": layer}
+        elif layers is False:
+            updated = charge_model.LearnedProfile(**{**updated.__dict__, "layer": "base", "layer_mae": None})
+        profile.learned = updated.to_dict()
+        profile.valid_sessions = len(updated.samples)
+        profile.median_power_w = updated.power_w
+        profile.validation_mape = updated.soc_mae
+        profile.active = updated.wh_per_pct is not None
+        if report["decision"] == "promoted":
+            profile.profile_version += 1
+            profile.adapter_version = f"personal-v{profile.profile_version}"
+        return updated, report
+
+    def set_auto_train(self, uid: str, vehicle_id: str, enabled: bool) -> dict:
+        self._owned_vehicle(uid, vehicle_id)
+        profile = self.personal_profile(uid, vehicle_id)
+        profile.auto_train = bool(enabled)
+        profile.updated_at = self.clock()
+        self.repository.save_personal_profile(profile)
+        self.repository.append_audit(uid, "personal_ai_auto_train_changed", vehicle_id=vehicle_id,
+                                     enabled=bool(enabled))
+        return {"vehicleId": vehicle_id, "autoTrain": profile.auto_train}
 
     # -- readings ------------------------------------------------------------
     def add_battery_reading(self, uid: str, vehicle_id: str, body: dict, *,
@@ -328,6 +387,7 @@ class VehicleLearningMixin:
         entitlements = getattr(self, "entitlements", None)
         return {"vehicleId": vehicle_id,
                 "consentEnabled": profile.consent_enabled if profile else True,
+                "autoTrain": profile.auto_train if profile else True,
                 # QA 138 (QA-07): the app nudges "train now" only when the
                 # plan can train; the data stays collected either way.
                 "trainAllowed": entitlements is None or entitlements.allows(uid, "learning_train"),
@@ -397,17 +457,7 @@ class VehicleLearningMixin:
             if not learned.pending and mode == "finetune":
                 raise self._learning_error("nothingNew", "Chưa có dữ liệu sạc mới để huấn luyện.", 409)
             base = self._charge_base(vehicle)
-            updated, report = charge_model.train(learned, base_wh_per_pct=base, now=now, mode=mode)
-            updated, layer = charge_ai.select_layer(updated, base=base, now=now)
-            report = {**report, "layer": layer}
-            profile.learned = updated.to_dict()
-            profile.valid_sessions = len(updated.samples)
-            profile.median_power_w = updated.power_w
-            profile.validation_mape = updated.soc_mae
-            profile.active = updated.wh_per_pct is not None
-            if report["decision"] == "promoted":
-                profile.profile_version += 1
-                profile.adapter_version = f"personal-v{profile.profile_version}"
+            _, report = self._train_charge(profile, learned, base, now, mode=mode, layers=True)
         else:
             rides = self.repository.trip_samples(uid, vehicle_id)
             trained_ids = set(profile.trip_trained_ids)
@@ -456,7 +506,9 @@ def _gauge_shadow(learned, session, end_pct: float, at: str,
         newest, this = _parse(learned.gauge_offset_at), _parse(at)
         if newest is not None and this is not None and this < newest:
             return None, None
-        carried = learned.gauge_offset_pct
+        # QA 148: the charge's own record; the profile's was cleared when it ended.
+        carried = (session.carried_offset_pct if session.carried_offset_pct is not None
+                   else learned.gauge_offset_pct)
     return carried, charge_model.gauge_offset_after(
         session.start_soc, session.energy_used_wh, wh_per_pct, end_pct)
 

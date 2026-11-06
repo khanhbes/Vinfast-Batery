@@ -84,7 +84,9 @@ def test_settling_the_offset_on_the_next_charge_fits_the_owner():
     plain = sum(abs(step["residual"]) for step in steps) / len(steps)
     settled = sum(abs(step["residual"] - step["offset"]) for step in steps) / len(steps)
     assert plain == pytest.approx(3.29, abs=0.05)
-    assert settled == pytest.approx(1.97, abs=0.05)
+    # 1.97 while a 100 % charge weighed 0.25; QA 148 made it 0.15, which also moved
+    # the Wh/% this replay starts from.
+    assert settled == pytest.approx(2.13, abs=0.05)
 
 
 def test_the_owner_keeps_the_plain_layer_until_real_charges_prove_it():
@@ -198,13 +200,22 @@ def _profile(rows, **fields):
 
 
 def test_small_model_learns_a_real_pattern_and_beats_the_simple_layer():
-    rows = _fleet(60, lag=1.0, noise=0.5)
+    rows = _fleet(60, lag=1.0, noise=0.5, seed=1)
     updated, report = charge_ai.select_layer(_profile(rows), base=BASE, now=NOW + timedelta(days=200))
     assert report["aiDecision"] == "promoted" and updated.layer == "ai"
     assert report["ai"]["n"] >= charge_ai.AI_MIN_TEST
     assert report["ai"]["mae"] < report["aiBaseline"]["mae"] * 0.7
     assert len(updated.ai_model["weights"]) == len(charge_ai.FEATURES)
     assert charge_model.honest_mae(updated) == report["ai"]["mae"]
+
+
+def test_most_vehicles_with_a_real_pattern_get_the_small_model():
+    # The bias rule refuses it on some seeds even with a better error; that is the
+    # gate being careful, so one seed proves little.
+    won = sum(charge_ai.select_layer(_profile(_fleet(60, lag=1.0, noise=0.5, seed=seed)), base=BASE,
+                                     now=NOW + timedelta(days=200))[0].layer == "ai"
+              for seed in range(40))
+    assert won >= 24
 
 
 @pytest.mark.parametrize("noise", [1.0, 3.0])
@@ -224,7 +235,7 @@ def test_small_model_waits_for_enough_charges_and_days():
 
 
 def test_once_trained_the_small_model_is_only_fine_tuned():
-    rows = _fleet(60, lag=1.0, noise=0.5)
+    rows = _fleet(60, lag=1.0, noise=0.5, seed=1)
     first, _ = charge_ai.select_layer(_profile(rows), base=BASE, now=NOW + timedelta(days=200))
     more = [*rows, *[{**item, "sessionId": f"n{index}",
                       "at": (NOW + timedelta(days=200 + index)).isoformat()}
@@ -232,7 +243,8 @@ def test_once_trained_the_small_model_is_only_fine_tuned():
     grown = LearnedProfile(**{**first.__dict__, "ledger": more, "samples": more[-12:]})
     second, report = charge_ai.select_layer(grown, base=BASE, now=NOW + timedelta(days=210))
     assert report["aiDecision"] in ("finetuned", "kept") and second.layer == "ai"
-    assert "aiBaseline" not in report  # no new fit against the simple layer
+    # Judged only on the charges it had not seen, against the simple layer (QA 148).
+    assert report["ai"]["n"] == report["aiBaseline"]["n"] == 4
     if report["aiDecision"] == "finetuned":
         assert second.ai_model["version"] == first.ai_model["version"] + 1
     # Starting from the current weights: it moves, it does not start over.
@@ -262,7 +274,7 @@ def test_prediction_stays_close_while_the_battery_wears():
 
 def test_training_through_the_service_reports_the_layer():
     service, repo, _, _ = _service()
-    rows = _fleet(60, lag=1.0, noise=0.5)
+    rows = _fleet(60, lag=1.0, noise=0.5, seed=1)
     _store(repo, service, LearnedProfile(wh_per_pct=26.3, samples=rows[-12:], ledger=rows))
     result = service.train_model("owner", "car", "charge", "retrain")
     assert result["report"]["layer"]["selected"] == "ai"
@@ -274,7 +286,7 @@ def test_training_through_the_service_reports_the_layer():
 
 def test_remaining_capacity_ignores_every_layer():
     before = charge_model.battery_health(SAMPLES, 2400)
-    rows = _fleet(60, lag=1.0, noise=0.5)
+    rows = _fleet(60, lag=1.0, noise=0.5, seed=1)
     updated, _ = charge_ai.select_layer(LearnedProfile(wh_per_pct=26.5, samples=list(SAMPLES), ledger=rows),
                                         base=BASE, now=NOW + timedelta(days=200))
     assert updated.layer == "ai"

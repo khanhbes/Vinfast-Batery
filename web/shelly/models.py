@@ -65,6 +65,8 @@ class PersonalChargingProfile:
     owner_uid: str
     vehicle_id: str
     consent_enabled: bool = False
+    # QA 148: train by itself when enough new charges wait; the owner's switch.
+    auto_train: bool = True
     valid_sessions: int = 0
     power_sessions: int = 0
     eta_bias_ratio: float = 0.0
@@ -112,6 +114,7 @@ class PersonalChargingProfile:
         value = {
             "vehicleId": self.vehicle_id,
             "consentEnabled": self.consent_enabled,
+            "autoTrain": self.auto_train,
             "validSessions": self.valid_sessions,
             "powerSessions": self.power_sessions,
             "etaBiasRatio": self.eta_bias_ratio,
@@ -269,6 +272,7 @@ class ChargePreview:
     estimate_high_seconds: int | None = None
     wh_per_pct: float | None = None
     soc_correction_pct: float = 0.0
+    carried_offset_pct: float | None = None
     charge_power_w: float | None = None
     power_source: str | None = None
     soc_mae: float | None = None
@@ -312,6 +316,7 @@ class ChargePreview:
             "estimateHighSeconds": self.estimate_high_seconds,
             "whPerPct": self.wh_per_pct,
             "socCorrectionPct": self.soc_correction_pct,
+            "carriedOffsetPct": self.carried_offset_pct,
             "chargePowerW": self.charge_power_w,
             "powerSource": self.power_source,
             "socMae": self.soc_mae,
@@ -404,6 +409,8 @@ class ChargingSession:
     target_energy_wh: float | None = None
     # QA 147: % the selected layer expects the gauge to add beyond the energy.
     soc_correction_pct: float = 0.0
+    # QA 148: what the gauge owed when this charge began; it settles here.
+    carried_offset_pct: float | None = None
     idle_since: datetime | None = None
     unsafe_samples: int = 0
     soc_error: float | None = None
@@ -506,6 +513,7 @@ class ChargingSession:
             "model_wh_per_pct": self.model_wh_per_pct,
             "target_energy_wh": self.target_energy_wh,
             "soc_correction_pct": self.soc_correction_pct,
+            "carried_offset_pct": self.carried_offset_pct,
             "idle_since": iso(self.idle_since),
             "unsafe_samples": self.unsafe_samples,
             "soc_error": self.soc_error,

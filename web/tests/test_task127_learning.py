@@ -132,6 +132,7 @@ def _finished_target_session(service, provider, clock, key, start=20, gain_wh=15
 
 def test_confirmations_wait_for_training_and_report_readiness():
     service, repo, provider, clock = _service()
+    service.set_auto_train("owner", "car", False)  # QA 148: the owner's switch
     for index, end in enumerate((79, 80)):
         session = _finished_target_session(service, provider, clock, f"c{index}")
         service.confirm_actual_soc("owner", session.session_id, end)
@@ -289,6 +290,7 @@ def test_history_mixes_legacy_naive_and_aware_timestamps():
 
 def test_charge_training_reports_an_objective_comparison():
     service, repo, provider, clock = _service()
+    service.set_auto_train("owner", "car", False)  # QA 148: the owner's switch
     for index, end in enumerate((79, 80, 78)):
         session = _finished_target_session(service, provider, clock, f"e{index}")
         service.confirm_actual_soc("owner", session.session_id, end)

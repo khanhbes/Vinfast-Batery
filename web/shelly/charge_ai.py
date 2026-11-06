@@ -35,7 +35,7 @@ WALK_MIN_TRAIN = 10
 MAE_RATIO = 0.95
 RMSE_RATIO = 1.03
 BIAS_SLACK = 0.1
-FINETUNE_RECENT = 10
+FINETUNE_MIN_UNSEEN = 3
 FINETUNE_TOLERANCE = 0.2
 DEMOTE_MARGIN = 0.5
 # Few samples, few features, strong pull: towards zero for the first fit, towards
@@ -173,6 +173,43 @@ def _walk_forward(scored: list[dict]) -> list[tuple[dict, float]]:
     return result
 
 
+def _finetune(model: dict, profile: LearnedProfile, scored: list[dict], simple: str, simple_extra,
+              simple_mae: float | None, report: dict, now: datetime) -> tuple[str, float | None]:
+    """Fine-tune on the charges the model has not seen, and judge it on those alone
+    (QA 148): judged on what it was just fitted to, a new fit always looked better
+    and a bad model was never paused. The ``model`` dict is updated in place."""
+    fitted_at = _at({"at": model.get("at")})
+    start = next((index for index, step in enumerate(scored)
+                  if fitted_at is None or step["at"] > fitted_at), len(scored))
+    unseen = scored[start:]
+    if len(unseen) < FINETUNE_MIN_UNSEEN:
+        report["aiDecision"] = "kept"
+        if profile.layer == "ai":
+            return "ai", profile.layer_mae
+        return simple, simple_mae
+    old = list(model.get("weights") or [])
+    ages = [charge_model._weight(step["item"], now) for step in scored]
+
+    def fit(count: int) -> list[float]:
+        return ridge([s["x"] for s in scored[:count]], [s["residual"] for s in scored[:count]],
+                     weights=ages[:count], prior=old, strength=RIDGE_FINETUNE)
+
+    old_stats = _stats(_pairs(unseen, lambda step: _predict(old, step["x"])))
+    new_stats = _stats([(min(100.0, step["plain"] + _predict(fit(start + offset), step["x"])), step["actual"])
+                        for offset, step in enumerate(unseen)])
+    simple_stats = _stats(_pairs(unseen, simple_extra))
+    keep_new = new_stats["mae"] <= old_stats["mae"] + FINETUNE_TOLERANCE
+    stats = new_stats if keep_new else old_stats
+    report.update({"ai": stats, "aiBaseline": simple_stats, "aiDecision": "finetuned" if keep_new else "kept"})
+    if keep_new:
+        model.update({"weights": [round(value, 5) for value in fit(len(scored))], "charges": len(scored),
+                      "at": now.isoformat(), "version": int(model.get("version") or 1) + 1})
+    if stats["mae"] > simple_stats["mae"] + DEMOTE_MARGIN:
+        report["aiDecision"] = "paused_worse"  # weights stay; the next training tries again
+        return simple, simple_mae
+    return "ai", stats["mae"]
+
+
 def _span_days(rows: list[dict]) -> float:
     dates = [at for item in rows if (at := _at(item)) is not None]
     return (max(dates) - min(dates)).total_seconds() / 86400 if len(dates) >= 2 else 0.0
@@ -196,23 +233,7 @@ def select_layer(profile: LearnedProfile, *, base: float | None,
     layer_mae = shadow["withOffset"]["mae"] if offset_wins else None
     selected = simple
     if model:
-        recent = scored[-FINETUNE_RECENT:]
-        old = list(model.get("weights") or [])
-        ages = [charge_model._weight(step["item"], now) for step in scored]
-        new = ridge([s["x"] for s in scored], [s["residual"] for s in scored], weights=ages,
-                    prior=old, strength=RIDGE_FINETUNE)
-        old_stats = _stats(_pairs(recent, lambda step: _predict(old, step["x"])))
-        new_stats = _stats(_pairs(recent, lambda step: _predict(new, step["x"])))
-        simple_stats = _stats(_pairs(recent, simple_extra))
-        keep_new = new_stats["mae"] is not None and new_stats["mae"] <= old_stats["mae"] + FINETUNE_TOLERANCE
-        weights, stats = (new, new_stats) if keep_new else (old, old_stats)
-        report.update({"ai": stats, "aiDecision": "finetuned" if keep_new else "kept"})
-        model.update({"weights": [round(value, 5) for value in weights], "charges": len(scored),
-                      "at": now.isoformat(), "version": int(model.get("version") or 1) + (1 if keep_new else 0)})
-        if stats["mae"] is not None and simple_stats["mae"] is not None and stats["mae"] > simple_stats["mae"] + DEMOTE_MARGIN:
-            report["aiDecision"] = "paused_worse"  # weights stay; the next training tries again
-        else:
-            selected, layer_mae = "ai", stats["mae"]
+        selected, layer_mae = _finetune(model, profile, scored, simple, simple_extra, layer_mae, report, now)
     elif len(scored) >= AI_MIN_CHARGES and _span_days(rows) >= AI_MIN_DAYS:
         tested = _walk_forward(scored)
         ai_stats = _stats([(min(100.0, step["plain"] + value), step["actual"]) for step, value in tested])

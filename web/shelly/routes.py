@@ -771,7 +771,8 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
             return jsonify({"success": False, "error": {
                 "code": "invalidSoc", "userMessage": "% pin thực tế không hợp lệ."}}), 400
         def action():
-            session = service.confirm_actual_soc(uid, session_id, actual, odo)
+            session = service.confirm_actual_soc(uid, session_id, actual, odo,
+                                                 ridden_since_charge=body.get("riddenSinceCharge") is True)
             value = session.to_dict()
             try:
                 value["training"] = service.learning_status(uid, session.vehicle_id)
@@ -811,6 +812,12 @@ def create_blueprint(service, repository, auth_resolver, trust_verifier=None, de
     @authenticated
     def charge_assessment(uid, vehicle_id):
         return execute(lambda: ok(service.charge_assessment(uid, vehicle_id)))
+
+    @bp.put("/api/learning/<vehicle_id>/auto-train")
+    @authenticated
+    def learning_auto_train(uid, vehicle_id):
+        body = request.get_json(silent=True) or {}
+        return execute(lambda: ok(service.set_auto_train(uid, vehicle_id, body.get("enabled") is True)))
 
     @bp.post("/api/learning/<vehicle_id>/train")
     @authenticated
