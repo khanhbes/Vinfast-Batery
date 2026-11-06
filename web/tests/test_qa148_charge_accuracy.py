@@ -402,3 +402,39 @@ def test_a_reading_after_riding_stays_in_history_but_is_not_learned_from():
     assert done.actual_end_soc == 55 and done.training_reason == "ridden_after_charge"
     assert done.training_eligible is False and done.soc_error is None
     assert _learned(repo).pending == []
+
+
+# ── the routes the app calls ───────────────────────────────────────────────
+
+def _client(service, repo):
+    from flask import Flask
+
+    from shelly.routes import create_blueprint
+
+    app = Flask(__name__)
+    app.register_blueprint(create_blueprint(service, repo, lambda: ("owner", None, "user")))
+    return app.test_client()
+
+
+def test_the_switch_and_the_riding_answer_reach_the_service():
+    service, repo, provider, clock = _service()
+    client = _client(service, repo)
+    response = client.put("/api/learning/car/auto-train", json={"enabled": False})
+    assert response.status_code == 200 and response.get_json()["data"]["autoTrain"] is False
+    assert repo.get_personal_profile("owner", "car").auto_train is False
+
+    session = _finish(service, provider, clock, "route")
+    response = client.patch(f"/api/smart-charging/sessions/{session.session_id}/actual-soc",
+                            json={"actualSoc": 55, "riddenSinceCharge": True})
+    assert response.status_code == 200
+    assert repo.get_session("owner", session.session_id).training_reason == "ridden_after_charge"
+    assert _learned(repo).pending == []
+
+
+def test_an_older_app_that_sends_no_riding_answer_still_trains():
+    service, repo, provider, clock = _service()
+    session = _finish(service, provider, clock, "old-app")
+    response = _client(service, repo).patch(f"/api/smart-charging/sessions/{session.session_id}/actual-soc",
+                                            json={"actualSoc": 80})
+    assert response.status_code == 200
+    assert len(_learned(repo).pending) == 1

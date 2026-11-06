@@ -39,7 +39,7 @@
 
 **Dung lượng cũ:** không cần script mới. `qa140_feliz_capacity.py` và `qa143_catalog_specs.py` đã có chế độ chạy thử chỉ đọc và liệt kê xe còn số cũ.
 
-**Kiểm thử:** `test_qa148_charge_accuracy.py`, `qa148_charge_accuracy_test.dart`; `pytest tests` 940 đạt / 15 bỏ qua; `flutter test` 1381 đạt / 213 bỏ qua; `flutter analyze lib` và file test đã sửa sạch. Dung lượng pin còn lại vẫn 99,4% / 2385 Wh, chủ xe vẫn 26,50.
+**Kiểm thử:** `test_qa148_charge_accuracy.py`, `qa148_charge_accuracy_test.dart`; `pytest tests` 942 đạt / 15 bỏ qua; `flutter test` 1383 đạt / 213 bỏ qua; `flutter analyze lib` và file test đã sửa sạch. Dung lượng pin còn lại vẫn 99,4% / 2385 Wh, chủ xe vẫn 26,50.
 
 **Hạn chế:** chưa deploy, chưa APK, chưa có lần sạc thật qua bản này, chưa thử 100% thật tới tín hiệu đầy. Bản ghi 02/11 chưa sửa (script cho chủ app chạy, mặc định chỉ đọc).
 

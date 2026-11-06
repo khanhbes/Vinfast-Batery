@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
+import 'package:vinfast_battery/core/widgets/luxe_settings.dart';
 import 'package:vinfast_battery/data/models/personal_charging_profile.dart';
 import 'package:vinfast_battery/data/models/vehicle_learning_status.dart';
 import 'package:vinfast_battery/data/services/dashboard_reader.dart';
@@ -37,7 +38,17 @@ Map<String, dynamic> _statusJson({int chargePending = 3, int trained = 2}) => {
 class _LearningService implements ServerSmartChargerService {
   final trained = <String>[];
   final imported = <List<Map<String, dynamic>>>[];
+  final autoTrain = <bool>[];
   var status = VehicleLearningStatus.fromJson(_statusJson())!;
+
+  @override
+  Future<void> setAutoTrain(String vehicleId, bool enabled) async {
+    autoTrain.add(enabled);
+    status = VehicleLearningStatus.fromJson({
+      ..._statusJson(),
+      'autoTrain': enabled,
+    })!;
+  }
 
   @override
   Future<PersonalChargingProfile> getPersonalProfile(String vehicleId) async =>
@@ -237,6 +248,37 @@ void main() {
       expect(find.textContaining('soc: 79.0'), findsOneWidget);
       expect(find.textContaining('odoKm: 1234.0'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('AI cá nhân: the owner can switch auto training x$scale', (
+      tester,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(320, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final service = _LearningService();
+      service.status = VehicleLearningStatus.fromJson({
+        ..._statusJson(),
+        'autoTrain': true,
+      })!;
+      await tester.pumpWidget(
+        _app(
+          PersonalAiSettingsScreen(vehicleId: 'car', service: service),
+          scale,
+        ),
+      );
+      await _settle(tester);
+      final row = find.byKey(const ValueKey('auto-train-row'));
+      await _scrollTo(tester, row);
+      final toggle = find.descendant(of: row, matching: find.byType(LuxeSwitch));
+      expect(tester.widget<LuxeSwitch>(toggle).value, isTrue);
+      await tester.ensureVisible(toggle);
+      await tester.pump();
+      await tester.tap(toggle);
+      await _settle(tester);
+      expect(service.autoTrain, [false]);
+      expect(tester.widget<LuxeSwitch>(toggle).value, isFalse);
+      expect(tester.takeException(), isNull);
+      await tester.pump(const Duration(seconds: 5));
     });
 
     testWidgets('AI cá nhân: ready model trains on demand x$scale', (
