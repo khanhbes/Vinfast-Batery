@@ -107,6 +107,8 @@ class PromptAssembler:
                     "model",
                     "plate",
                     "batteryPercent",
+                    # QA 149: the % is a running charge's estimate.
+                    "batteryCharging",
                     "odoKm",
                     "sohPercent",
                     "capacityWh",

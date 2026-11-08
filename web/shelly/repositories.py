@@ -1910,12 +1910,15 @@ class SmartChargeRepository:
     def history(self, uid: str, limit: int = 20) -> list[ChargingSession]:
         with self._lock:
             self._last_history_skipped = 0
-        with self._lock:
-            values = list(self._sessions.get(uid, {}).values())
-        if not values and self.db:
+            cached = {item.session_id: item for item in self._sessions.get(uid, {}).values()}
+        values: list[ChargingSession] = []
+        if self.db:
             # ChargeLogs is the canonical durable history. Read it first so
             # terminal summaries restored from older sessions remain visible
             # even when their nested runtime session document is missing.
+            # QA 149: always, not only when this process has nothing cached:
+            # with one running charge in memory the cache came back alone and
+            # the owner's habits read "1 charge in 60 days" with 8 on record.
             values = self._charge_log_history(uid, limit)
         if not values and self.db:
             snapshots = self.db.collection("users").document(uid).collection("smartChargingSessions").order_by("created_at", direction="DESCENDING").limit(limit).stream()
@@ -1931,9 +1934,14 @@ class SmartChargeRepository:
                 self._last_history_skipped = skipped
             with self._lock:
                 for session in values:
-                    self._sessions.setdefault(uid, {})[session.session_id] = session
+                    # Never replace a session this process holds: it may be
+                    # newer than the stored copy (a running charge).
+                    self._sessions.setdefault(uid, {}).setdefault(session.session_id, session)
                     self._idempotency[(uid, session.idempotency_key)] = session.session_id
-        values = [item for item in values if item.hidden_at is None]
+        # The copy in memory wins for a session in both (fresher state).
+        merged = {item.session_id: item for item in values}
+        merged.update(cached)
+        values = [item for item in merged.values() if item.hidden_at is None]
         # Legacy rows carry naive timestamps (Task 127: sorting them with
         # aware ones raised TypeError on real data).
         return sorted(values, key=lambda item: _aware(item.created_at), reverse=True)[:limit]
@@ -1964,7 +1972,8 @@ class SmartChargeRepository:
             with self._lock:
                 self._last_history_skipped += skipped
                 for session in values:
-                    self._sessions.setdefault(uid, {})[session.session_id] = session
+                    # Never replace a session this process holds (QA 149).
+                    self._sessions.setdefault(uid, {}).setdefault(session.session_id, session)
                     self._idempotency[(uid, session.idempotency_key)] = session.session_id
             return values
         except Exception:
