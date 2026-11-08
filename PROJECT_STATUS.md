@@ -47,6 +47,8 @@
 
 **Kiểm thử:** `flutter test` 1399 đạt / 216 bỏ qua; `flutter analyze` sạch; `pytest tests` 944 đạt / 15 bỏ qua. Test mới: màn Bắt đầu phát lại cảnh khi vuốt lại, test 4 trang ở 320 dp chữ ×1,5 và 412 dp; test quét như trên. Khung hình để xem bằng mắt: `test/visual/qa149_motion_review_test.dart` (chỉ chạy khi đặt `QA149_OUT` và `QA139_FONTS`).
 
+**APK:** 1.3.23+226, `app/build/app/outputs/flutter-apk/app-profile.apk`, 166,1 MB, SHA-256 `1C29247F009B72E98DB1197314C735E80864D33FCC649BD4EDB39618E4489B4C`, chưa cài (điện thoại đã ngắt adb).
+
 **Hạn chế:** chưa cài APK có bản này lên máy, các hiệu ứng mới mới xem qua khung hình dựng trên máy tính. Sửa lịch sử là phía máy chủ: cần deploy (máy chủ vẫn bản QA 146, `deploy164.ps1` chưa chạy được). Hình viền Feliz dựng theo ảnh của chủ app, chưa đo trên xe. Quét chậm hơn khoảng một khung để đổi lấy việc không khóa sai. Bài thử dùng 6 ảnh của cùng một số (68%, 4818 km).
 
 ## 148. Task Completion Log — Sạc đến % chính xác cho mọi người dùng: rà soát cả vòng dự đoán, ngắt, lịch sử, huấn luyện (06/11/2026, chủ app chọn) — Code + test xong, chưa deploy
