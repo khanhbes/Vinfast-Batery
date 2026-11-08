@@ -48,7 +48,7 @@
   - Viên "Đang sạc" nổi che thẻ giữa Tổng quan: viên nằm trong dải riêng ngay trên thanh tab (`bottomNavigationBar` là cột viên + thanh tab), không còn nổi trên trang; nút bot nằm trên dải này.
   - AI cá nhân "Đã huấn luyện từ 77 chuyến" cạnh "Chưa đủ dữ liệu để đánh giá": lần huấn luyện không có dữ liệu kiểm tra mà xe đã có mô hình thì ghi "Chưa có dữ liệu mới để kiểm tra nên vẫn dùng bản đã học"; bản mới được dùng mà chưa có dữ liệu kiểm tra thì ghi rõ chưa đo được sai số (`TrainingResultSheet.verdict(trained:)`).
   - Test: `test/widget/qa149_overlap_test.dart`. Phiên 02/11 vẫn "Gián đoạn" tới khi chạy script sửa (sau deploy).
-  - Phiên bản 1.3.24+227. APK `app/build/app/outputs/flutter-apk/app-profile.apk`, 166,1 MB, SHA-256 `52840641A77D3EDE36A19C1AFBC24856E6014FC98805572AAEEB2D12176381E9`, chưa cài (điện thoại chưa kết nối adb).
+  - Phiên bản 1.3.24+227. APK `app/build/app/outputs/flutter-apk/app-profile.apk`, 166,1 MB, SHA-256 `52840641A77D3EDE36A19C1AFBC24856E6014FC98805572AAEEB2D12176381E9`, đã cài lên Xiaomi `cf4c58a7` bằng `adb install -r` (09/11/2026, giữ đăng nhập): app mở được, cuộn Tổng quan xong nút bot về lại mép, thẻ Dung lượng ghi 9 lần sạc (lịch sử đọc đủ sau deploy). Lúc cài xe không sạc nên chưa thấy viên "Đang sạc" ở dải mới trên máy.
 
 **Kiểm thử:** `flutter test` 1399 đạt / 216 bỏ qua; `flutter analyze` sạch; `pytest tests` 944 đạt / 15 bỏ qua. Test mới: màn Bắt đầu phát lại cảnh khi vuốt lại, test 4 trang ở 320 dp chữ ×1,5 và 412 dp; test quét như trên. Khung hình để xem bằng mắt: `test/visual/qa149_motion_review_test.dart` (chỉ chạy khi đặt `QA149_OUT` và `QA139_FONTS`).
 
