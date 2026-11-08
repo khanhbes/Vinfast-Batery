@@ -97,7 +97,9 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           LuxeSheetHeader(
-            eyebrow: widget.savedNote == null ? 'Pin hiện tại' : 'Trước khi sạc',
+            eyebrow: widget.savedNote == null
+                ? 'Pin hiện tại'
+                : 'Trước khi sạc',
             title: widget.savedNote == null
                 ? 'Chỉnh mức pin hiện tại'
                 : 'Đồng hồ xe đang báo bao nhiêu %?',

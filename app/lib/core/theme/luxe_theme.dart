@@ -214,63 +214,10 @@ abstract final class LuxeTheme {
           overlayColor: const WidgetStatePropertyAll(Color(0x14000000)),
           // Brushed platinum pill (Pro: silver to steel; Ultra: a flowing
           // aurora); a quiet glass pill when disabled.
-          backgroundBuilder: (context, states, child) {
-            final disabled = states.contains(WidgetState.disabled);
-            if (!disabled && plan.isUltra) {
-              return PlanFlow(
-                builder: (context, phase) => DecoratedBox(
-                  decoration: ShapeDecoration(
-                    shape: const StadiumBorder(
-                      side: BorderSide(color: Color(0x66FFFFFF)),
-                    ),
-                    gradient: planFlowGradient(phase),
-                    shadows: const [
-                      BoxShadow(
-                        color: Color(0x558B5CF6),
-                        blurRadius: 22,
-                        spreadRadius: -6,
-                      ),
-                    ],
-                  ),
-                  child: child,
-                ),
-              );
-            }
-            return DecoratedBox(
-              decoration: ShapeDecoration(
-                shape: StadiumBorder(
-                  side: BorderSide(
-                    color: disabled
-                        ? LuxeColors.hairline
-                        : const Color(0x66FFFFFF),
-                  ),
-                ),
-                gradient: disabled
-                    ? null
-                    : LinearGradient(
-                        begin: plan.isPro
-                            ? Alignment.topLeft
-                            : Alignment.topCenter,
-                        end: plan.isPro
-                            ? Alignment.bottomRight
-                            : Alignment.bottomCenter,
-                        colors: plan.accentColors,
-                        stops: const [0.0, 0.6, 1.0],
-                      ),
-                color: disabled ? LuxeColors.glass : null,
-                shadows: disabled
-                    ? null
-                    : const [
-                        BoxShadow(
-                          color: Color(0x33FFFFFF),
-                          blurRadius: 18,
-                          spreadRadius: -6,
-                        ),
-                      ],
-              ),
-              child: child,
-            );
-          },
+          backgroundBuilder: (context, states, child) => LuxePressScale(
+            pressed: states.contains(WidgetState.pressed),
+            child: _filledFill(context, plan, states, child),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -594,11 +541,103 @@ abstract final class LuxeTheme {
   }
 }
 
+/// QA 149: a pressed control gives a little, like a physical key, and
+/// springs back on release. Still under "reduce motion".
+class LuxePressScale extends StatelessWidget {
+  const LuxePressScale({
+    super.key,
+    required this.pressed,
+    required this.child,
+    this.depth = 0.97,
+  });
+
+  final bool pressed;
+  final double depth;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    return AnimatedScale(
+      scale: pressed && !reduced ? depth : 1,
+      duration: Duration(milliseconds: reduced ? 0 : (pressed ? 110 : 260)),
+      curve: pressed ? Curves.easeOutCubic : Curves.easeOutBack,
+      child: child,
+    );
+  }
+}
+
+/// The filled button's fill for [plan] (QA 136), under its press scale.
+Widget _filledFill(
+  BuildContext context,
+  PlanStyle plan,
+  Set<WidgetState> states,
+  Widget? child,
+) {
+  final disabled = states.contains(WidgetState.disabled);
+  if (!disabled && plan.isUltra) {
+    return PlanFlow(
+      builder: (context, phase) => DecoratedBox(
+        decoration: ShapeDecoration(
+          shape: const StadiumBorder(
+            side: BorderSide(color: Color(0x66FFFFFF)),
+          ),
+          gradient: planFlowGradient(phase),
+          shadows: const [
+            BoxShadow(
+              color: Color(0x558B5CF6),
+              blurRadius: 22,
+              spreadRadius: -6,
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
+  return DecoratedBox(
+    decoration: ShapeDecoration(
+      shape: StadiumBorder(
+        side: BorderSide(
+          color: disabled ? LuxeColors.hairline : const Color(0x66FFFFFF),
+        ),
+      ),
+      gradient: disabled
+          ? null
+          : LinearGradient(
+              begin: plan.isPro ? Alignment.topLeft : Alignment.topCenter,
+              end: plan.isPro ? Alignment.bottomRight : Alignment.bottomCenter,
+              colors: plan.accentColors,
+              stops: const [0.0, 0.6, 1.0],
+            ),
+      color: disabled ? LuxeColors.glass : null,
+      shadows: disabled
+          ? null
+          : const [
+              BoxShadow(
+                color: Color(0x33FFFFFF),
+                blurRadius: 18,
+                spreadRadius: -6,
+              ),
+            ],
+    ),
+    child: child,
+  );
+}
+
 /// Route transition for every MaterialPageRoute: the incoming page fades and
 /// rises on the luxe curve while the page beneath recedes a touch, so pushes
 /// read as depth rather than a slide. Instant under reduced motion.
+/// QA 149: a longer, film-like move: the new page settles from slightly
+/// smaller (a dolly in), the page beneath dims and sinks back.
 class LuxePageTransitionsBuilder extends PageTransitionsBuilder {
   const LuxePageTransitionsBuilder();
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 460);
+
+  @override
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 340);
 
   @override
   Widget buildTransitions<T>(
@@ -625,11 +664,16 @@ class LuxePageTransitionsBuilder extends PageTransitionsBuilder {
       builder: (context, child) {
         final t = enter.value;
         final r = recede.value;
+        // Opacity arrives early so the page is readable while it settles.
+        final fade = (t / 0.6).clamp(0.0, 1.0);
         return Opacity(
-          opacity: (t * (1 - 0.35 * r)).clamp(0.0, 1.0),
+          opacity: (fade * (1 - 0.4 * r)).clamp(0.0, 1.0),
           child: Transform.translate(
-            offset: Offset(0, 28 * (1 - t)),
-            child: Transform.scale(scale: 1 - 0.02 * r, child: child),
+            offset: Offset(0, 24 * (1 - t)),
+            child: Transform.scale(
+              scale: (0.965 + 0.035 * t) * (1 - 0.035 * r),
+              child: child,
+            ),
           ),
         );
       },
@@ -895,7 +939,8 @@ class _LuxeRevealState extends State<LuxeReveal>
       opacity: _t.value,
       child: Transform.translate(
         offset: Offset(0, widget.offset * (1 - _t.value)),
-        child: child,
+        // QA 149: a touch of depth as it rises.
+        child: Transform.scale(scale: 0.985 + 0.015 * _t.value, child: child),
       ),
     ),
   );

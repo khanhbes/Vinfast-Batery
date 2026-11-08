@@ -267,7 +267,11 @@ class CompactMetricsHero extends StatelessWidget {
     required this.vehicle,
     this.learned,
     this.rangePending = false,
+    this.charging = false,
   });
+
+  /// QA 149: a charge is running; the % is the charge's estimate.
+  final bool charging;
 
   /// QA 141: the learned model has not answered yet; range shows "—".
   final bool rangePending;
@@ -279,7 +283,11 @@ class CompactMetricsHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final f = HeroFigures(vehicle, learned, rangePending: rangePending);
     final cells = [
-      ('Pin hiện tại', f.percent == null ? '—' : '${f.percent}%', true),
+      (
+        charging ? 'Đang sạc · ước tính' : 'Pin hiện tại',
+        f.percent == null ? '—' : '${f.percent}%',
+        true,
+      ),
       (
         'Quãng đường ước tính',
         f.rangeKm == null ? '—' : '${f.rangeKm} km',

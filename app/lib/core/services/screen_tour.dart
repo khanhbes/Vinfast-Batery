@@ -113,6 +113,8 @@ abstract final class ScreenTour {
       showDontShowAgain: false,
       onFinish: done,
       onSkip: done,
+      // QA 149: closes with the screen it explains.
+      route: ModalRoute.of(context),
     );
     return entry != null;
   }

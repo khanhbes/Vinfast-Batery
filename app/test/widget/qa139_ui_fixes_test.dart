@@ -501,6 +501,7 @@ void main() {
         'lib/core/widgets/luxe_kit.dart', // shimmer while loading
         'lib/features/achievements/widgets/achievement_unlock_ceremony.dart',
         'lib/features/ai/assistant_sheet.dart', // typing dots
+        'lib/features/ai/dashboard_scan_screen.dart', // scanning (QA 149)
         'lib/features/ai/smart_charging_control_screen.dart', // relay ON
         'lib/features/ai/widgets/active_charging_card_v2.dart', // charging
         'lib/features/ai/widgets/breathing_bot_avatar.dart', // streaming

@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/active_charging_session_coordinator.dart';
 import 'app_providers.dart';
@@ -45,6 +46,26 @@ final activeChargingSessionProvider =
       // onDispose(dispose) tripped a debug assert (Task 125).
       return ActiveChargingSessionCoordinator();
     });
+
+/// QA 149: a vehicle's battery % while it charges (the running charge's
+/// estimate), or null when it does not charge. The vehicle record keeps
+/// the % from before the charge until the session ends, so screens showing
+/// "the battery now" read this first (the phone showed 9% at 28%).
+final chargingEstimateProvider = Provider.family<int?, String>((
+  ref,
+  vehicleId,
+) {
+  // No Firebase (widget tests, a failed start): no session source at all.
+  if (Firebase.apps.isEmpty) return null;
+  final soc = ref
+      .watch(activeChargingSessionProvider)
+      .sessions
+      .where((s) => s.vehicleId == vehicleId && s.session?.estimatedSoc != null)
+      .firstOrNull
+      ?.session
+      ?.estimatedSoc;
+  return soc?.round().clamp(0, 100);
+});
 
 /// App refresh coordinator - quản lý pull-to-refresh toàn app
 class AppRefreshCoordinator {

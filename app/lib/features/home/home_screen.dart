@@ -191,7 +191,21 @@ class HomeScreen extends ConsumerWidget {
                             child: KeyedSubtree(
                               key: GuideRegistry.keyBatterySummary,
                               child: vehicleAsync.when(
-                                data: (vehicle) {
+                                data: (stored) {
+                                  // QA 149: while this vehicle charges, the
+                                  // charge's live estimate, not the % from
+                                  // before it (the phone showed 9% at 28%).
+                                  final live = ref.watch(
+                                    chargingEstimateProvider(vehicleId),
+                                  );
+                                  final charging =
+                                      live != null && stored != null;
+                                  final vehicle = charging
+                                      ? stored.copyWith(
+                                          currentBattery: live,
+                                          hasBatteryData: true,
+                                        )
+                                      : stored;
                                   final learnedAsync = ref.watch(
                                     learnedModelsProvider(vehicleId),
                                   );
@@ -207,6 +221,7 @@ class HomeScreen extends ConsumerWidget {
                                         vehicle: vehicle,
                                         learned: learned,
                                         rangePending: pending,
+                                        charging: charging,
                                       ),
                                       DashboardStyle.lcd => LcdClusterHero(
                                         vehicle: vehicle,
@@ -218,6 +233,7 @@ class HomeScreen extends ConsumerWidget {
                                           vehicle: vehicle,
                                           learned: learned,
                                           rangePending: pending,
+                                          charging: charging,
                                         ),
                                       DashboardStyle.minimal => MinimalHero(
                                         vehicle: vehicle,

@@ -1087,7 +1087,9 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           ? null
           : 'Đạt $targetSoc% sau khoảng ${formatChargeDuration(estimate.duration)} '
                 '· khoảng ${formatClock(estimate.finishAt)} '
-                '(${estimate.powerW.round()} W đo thực tế)';
+                // A number never wraps away from its unit (QA 149: the
+                // phone showed "(431" and "W đo thực tế)" on two lines).
+                '(${estimate.powerW.round()} W đo thực tế)';
     }
 
     final card = ActiveChargingCardV2(

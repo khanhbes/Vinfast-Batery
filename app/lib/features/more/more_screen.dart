@@ -208,6 +208,11 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                   contactInfo: '$contactInfo',
                   loading: _isLoadingUser,
                   vehicle: vehicleContext,
+                  chargingPercent: ref.watch(
+                    chargingEstimateProvider(
+                      vehicleContext.vehicle?.vehicleId ?? '',
+                    ),
+                  ),
                   rank: achievements.rank,
                   points: achievements.points,
                   rankProgress: achievements.rankProgress,
@@ -358,7 +363,11 @@ class _ProfileCard extends StatelessWidget {
     required this.rankProgress,
     required this.onOpenProfile,
     required this.onSelectVehicle,
+    this.chargingPercent,
   });
+
+  /// QA 149: the running charge's estimate (null when not charging).
+  final int? chargingPercent;
 
   final String displayName;
   final String contactInfo;
@@ -498,13 +507,25 @@ class _ProfileCard extends StatelessWidget {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (v != null && v.hasBatteryData) ...[
+                            if (chargingPercent != null) ...[
+                              const Icon(
+                                Icons.bolt_rounded,
+                                size: 16,
+                                color: LuxeColors.emerald,
+                                semanticLabel: 'Đang sạc',
+                              ),
+                              const SizedBox(width: 2),
+                            ],
+                            if (v != null &&
+                                (v.hasBatteryData ||
+                                    chargingPercent != null)) ...[
                               _MiniBattery(
-                                percent: v.currentBattery.toDouble(),
+                                percent: (chargingPercent ?? v.currentBattery)
+                                    .toDouble(),
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                '${v.currentBattery}%',
+                                '${chargingPercent ?? v.currentBattery}%',
                                 style: const TextStyle(
                                   color: LuxeColors.platinumHi,
                                   fontSize: 14,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -103,11 +104,13 @@ class AssistantContextCoordinator extends ChangeNotifier {
     VehicleModel? vehicle,
     int? currentTab,
     DateTime? now,
+    bool charging = false,
   }) {
     final currentTime = now ?? DateTime.now();
 
-    // 1. Cảnh báo pin yếu (< 20%)
-    if (vehicle != null && vehicle.currentBattery < 20) {
+    // 1. Cảnh báo pin yếu (< 20%). QA 149: never while the vehicle charges
+    // (it offered to plan a charge for "9%" during a running one).
+    if (vehicle != null && vehicle.currentBattery < 20 && !charging) {
       if (_canTrigger('low_battery_${vehicle.vehicleId}', currentTime)) {
         _recordTrigger('low_battery_${vehicle.vehicleId}', currentTime);
         showBubble(
@@ -129,9 +132,11 @@ class AssistantContextCoordinator extends ChangeNotifier {
           'morning_${currentTime.year}_${currentTime.month}_${currentTime.day}';
       if (_canTrigger(dateKey, currentTime)) {
         _recordTrigger(dateKey, currentTime);
-        final batteryText = vehicle != null
-            ? 'Pin xe đang ở mức ${vehicle.currentBattery}%'
-            : 'Hệ thống đã sẵn sàng';
+        final batteryText = vehicle == null
+            ? 'Hệ thống đã sẵn sàng'
+            : charging
+            ? 'Xe đang sạc'
+            : 'Pin xe đang ở mức ${vehicle.currentBattery}%';
         showBubble(
           'Chào buổi sáng! $batteryText, sẵn sàng cho ngày mới rồi nhé!',
           mood: BatteryBotMood.greeting,
@@ -175,11 +180,21 @@ final assistantContextCoordinatorProvider =
       final coordinator = AssistantContextCoordinator();
 
       // Tự động lắng nghe thay đổi tab
+      // No Firebase (widget tests): no session source, so not charging.
+      bool charging(VehicleModel? vehicle) =>
+          vehicle != null &&
+          Firebase.apps.isNotEmpty &&
+          ref
+              .read(activeChargingSessionProvider)
+              .sessions
+              .any((s) => s.vehicleId == vehicle.vehicleId);
+
       ref.listen<int>(currentTabProvider, (_, nextTab) {
         final vehicleContext = ref.read(vehicleContextProvider);
         coordinator.evaluateContext(
           vehicle: vehicleContext.vehicle,
           currentTab: nextTab,
+          charging: charging(vehicleContext.vehicle),
         );
       });
 
@@ -189,6 +204,7 @@ final assistantContextCoordinatorProvider =
         coordinator.evaluateContext(
           vehicle: nextContext.vehicle,
           currentTab: currentTab,
+          charging: charging(nextContext.vehicle),
         );
       });
 

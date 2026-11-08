@@ -45,6 +45,7 @@ class CoachMarkOverlay extends StatefulWidget {
     void Function(bool dontShowAgain)? onDontShowAgain,
     bool showDontShowAgain = true,
     OverlayState? overlay,
+    ModalRoute<dynamic>? route,
   }) {
     final targetOverlay =
         overlay ??
@@ -55,12 +56,26 @@ class CoachMarkOverlay extends StatefulWidget {
     }
     dismissActive();
     late final OverlayEntry entry;
+    // QA 149: the guide lives in the navigator's overlay, above every route.
+    // Closing the screen it explains (Pinova Bot's sheet) left it on the app
+    // waiting for an anchor that was gone, and it blocked every tap. It now
+    // closes with its screen, unseen, so it shows again on the next visit.
+    late final AnimationStatusListener onRoute;
     void close(VoidCallback? callback) {
+      route?.animation?.removeStatusListener(onRoute);
       // An obsolete overlay must not close or complete its replacement.
       if (!identical(_activeEntry, entry)) return;
       dismissActive();
       callback?.call();
     }
+
+    onRoute = (status) {
+      if (status == AnimationStatus.reverse ||
+          status == AnimationStatus.dismissed) {
+        close(null);
+      }
+    };
+    route?.animation?.addStatusListener(onRoute);
 
     entry = OverlayEntry(
       builder: (_) => CoachMarkOverlay(

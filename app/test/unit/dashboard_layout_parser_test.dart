@@ -112,8 +112,10 @@ void main() {
     DashboardLayoutReading frame(int? soc, double? odo) =>
         DashboardLayoutReading(soc: soc, odoKm: odo, odoConfident: odo != null);
 
-    test('locks after three agreeing frames', () {
+    // QA 149: four agreeing frames (three locked a split "63").
+    test('locks after four agreeing frames', () {
       final vote = DashboardScanVote()
+        ..add(frame(68, 4818))
         ..add(frame(68, 4818))
         ..add(frame(68, 4818));
       expect(vote.anyLocked, isFalse);
@@ -128,7 +130,8 @@ void main() {
         ..add(frame(68, 4818))
         ..add(frame(88, 4318))
         ..add(frame(68, 4818))
-        ..add(frame(null, null));
+        ..add(frame(null, null))
+        ..add(frame(68, 4818));
       expect(vote.anyLocked, isFalse);
       vote.add(frame(68, 4818));
       expect(vote.socLocked, 68);

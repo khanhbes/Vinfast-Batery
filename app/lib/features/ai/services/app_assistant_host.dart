@@ -79,7 +79,15 @@ class AppAssistantActionHost implements AssistantActionHost {
 
   @override
   Map<String, dynamic> context() {
-    final vehicle = _vehicle;
+    final stored = _vehicle;
+    // QA 149: while it charges, the charge's estimate (the bot said "9%"
+    // and warned of a low battery during a running charge).
+    final live = stored == null
+        ? null
+        : ref.read(chargingEstimateProvider(stored.vehicleId));
+    final vehicle = live == null
+        ? stored
+        : stored!.copyWith(currentBattery: live, hasBatteryData: true);
     final vehicles = ref.read(allVehiclesProvider).valueOrNull ?? const [];
     final tab = ref.read(currentTabProvider);
     final connection = ShellyConnectionCoordinator.shared.current;
@@ -118,6 +126,7 @@ class AppAssistantActionHost implements AssistantActionHost {
               : vehicle.vehicleName,
           'model': vehicle.vinfastModelName ?? vehicle.vehicleName,
           if (vehicle.hasBatteryData) 'batteryPercent': vehicle.currentBattery,
+          if (live != null) 'batteryCharging': true,
           'odoKm': vehicle.currentOdo,
           if (vehicle.hasSohData) 'sohPercent': vehicle.stateOfHealth,
           if (vehicle.batteryCapacityWh > 0)

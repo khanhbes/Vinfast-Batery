@@ -198,11 +198,18 @@ class _InteractiveAssistantSheetState
       final user = Firebase.apps.isEmpty
           ? null
           : FirebaseAuth.instance.currentUser;
+      // QA 149: no "low battery" card while the vehicle charges.
+      final live = vehicle == null
+          ? null
+          : ref.read(chargingEstimateProvider(vehicle.vehicleId));
 
       final suggestions = await suggestionService.fetchSuggestions(
         userId: user?.uid ?? 'guest',
         vehicleId: vehicle?.vehicleId,
-        currentSoc: vehicle?.hasBatteryData == true
+        chargingStatus: live != null ? 'charging' : null,
+        currentSoc: live != null
+            ? live.toDouble()
+            : vehicle?.hasBatteryData == true
             ? vehicle!.currentBattery.toDouble()
             : null,
         currentSoh: vehicle?.hasSohData == true
@@ -1092,6 +1099,9 @@ class _InteractiveAssistantSheetState
     final uiColors = AppUiColors.of(context);
     final vehicleContext = ref.watch(vehicleContextProvider);
     final vehicle = vehicleContext.vehicle;
+    final chargingNow = vehicle == null
+        ? null
+        : ref.watch(chargingEstimateProvider(vehicle.vehicleId));
     final coordinator = ref.watch(assistantContextCoordinatorProvider);
 
     final chips = coordinator.quickActionChips.isNotEmpty
@@ -1250,8 +1260,12 @@ class _InteractiveAssistantSheetState
                                                 ),
                                               ),
                                               Text(
-                                                vehicle == null ||
-                                                        !vehicle.hasBatteryData
+                                                vehicle != null &&
+                                                        chargingNow != null
+                                                    ? 'Đang sạc · ước tính $chargingNow%'
+                                                    : vehicle == null ||
+                                                          !vehicle
+                                                              .hasBatteryData
                                                     ? 'Chưa có dữ liệu pin'
                                                     : 'Pin ${vehicle.currentBattery}% · Dữ liệu hồ sơ',
                                                 key: const Key(

@@ -89,7 +89,7 @@ void main() {
 
   test('the temperature is voted but never holds the scan back', () {
     final vote = DashboardScanVote();
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 4; i++) {
       vote.add(
         const DashboardLayoutReading(
           soc: 68,

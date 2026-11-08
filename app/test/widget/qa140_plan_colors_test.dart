@@ -23,7 +23,7 @@ const _emeraldAllowed = <String, int>{
   // live charging, command steps, done states, charging dial.
   'features/achievements/models/achievement.dart': 1,
   'features/ai/ai_models_screen.dart': 3,
-  'features/ai/dashboard_scan_screen.dart': 3,
+  'features/ai/dashboard_scan_screen.dart': 4, // + locked zones (QA 149)
   'features/ai/smart_charge_history_screen.dart': 2,
   'features/ai/smart_charging_control_screen.dart': 1,
   'features/ai/widgets/action_confirmation_card.dart': 2,
@@ -35,7 +35,7 @@ const _emeraldAllowed = <String, int>{
   'features/ai/widgets/recent_sessions_section_v2.dart': 2,
   'features/ai/widgets/session_soc_summary.dart': 1,
   'features/maintenance/maintenance_screen.dart': 1,
-  'features/more/more_screen.dart': 1,
+  'features/more/more_screen.dart': 2, // + charging bolt (QA 149)
   'features/more/widgets/luxe_tile_grid.dart': 1,
   'features/notifications/notification_center_screen.dart': 1,
   'features/settings/widgets/training_result_sheet.dart': 1,

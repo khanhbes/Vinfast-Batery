@@ -7,6 +7,10 @@ import '../../../core/theme/luxe_theme.dart';
 /// Capacity left after each charge (QA 141): one dot per charge, straight
 /// lines, a % scale and the first/last date. The smooth sparkline it
 /// replaces had no scale and its curve dipped where no charge was measured.
+/// QA 149: the scale stops at 100 %. One charge's figure carries the gauge's
+/// error of a few %, and the owner's phone showed "120 %" for a battery
+/// that cannot hold more than new: such a charge sits on the 100 % line as
+/// a hollow dot, and a line under the chart says why the dots move.
 class HealthTrendChart extends StatelessWidget {
   const HealthTrendChart({super.key, required this.points});
 
@@ -21,8 +25,9 @@ class HealthTrendChart extends StatelessWidget {
     ];
     if (clean.length < 2) return const SizedBox.shrink();
     final values = [for (final p in clean) p.$2];
-    final low = (values.reduce(math.min) / 5).floor() * 5.0;
-    final high = math.max(100.0, (values.reduce(math.max) / 5).ceil() * 5.0);
+    final low = math.min(90.0, (values.reduce(math.min) / 5).floor() * 5.0);
+    const high = 100.0;
+    final over = values.any((v) => v > high);
     String date(DateTime? d) => d == null ? '' : '${d.day}/${d.month}';
     final scaler = MediaQuery.textScalerOf(context);
     return Semantics(
@@ -64,6 +69,16 @@ class HealthTrendChart extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            over
+                ? 'Mỗi điểm là một lần sạc. Đồng hồ xe lệch vài % nên các '
+                      'điểm dao động; điểm rỗng là lần đo vượt 100%.'
+                : 'Mỗi điểm là một lần sạc. Đồng hồ xe lệch vài % nên các '
+                      'điểm dao động.',
+            key: const ValueKey('health-trend-note'),
+            style: LuxeText.caption,
           ),
         ],
       ),
@@ -112,7 +127,7 @@ class _TrendPainter extends CustomPainter {
     final step = values.length == 1 ? 0.0 : chart.width / (values.length - 1);
     final dots = [
       for (var i = 0; i < values.length; i++)
-        Offset(chart.left + step * i, y(values[i])),
+        Offset(chart.left + step * i, y(math.min(values[i], high))),
     ];
     final line = Paint()
       ..color = LuxeColors.champagne.withValues(alpha: 0.7)
@@ -121,10 +136,18 @@ class _TrendPainter extends CustomPainter {
     canvas.drawPath(Path()..addPolygon(dots, false), line);
     for (var i = 0; i < dots.length; i++) {
       final last = i == dots.length - 1;
+      final clipped = values[i] > high;
+      if (clipped) {
+        // Above what a battery can hold: the gauge's error, drawn hollow.
+        canvas.drawCircle(dots[i], 3.4, Paint()..color = LuxeColors.background);
+      }
       canvas.drawCircle(
         dots[i],
-        last ? 4.5 : 3,
-        Paint()..color = LuxeColors.champagne,
+        last ? 4.5 : 3.4,
+        Paint()
+          ..color = LuxeColors.champagne
+          ..style = clipped ? PaintingStyle.stroke : PaintingStyle.fill
+          ..strokeWidth = 1.6,
       );
     }
   }

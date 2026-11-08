@@ -35,13 +35,13 @@ void main() {
           textScale: scale,
         ),
       );
-      for (var page = 0; page < 3; page++) {
-        await tester.pump(const Duration(seconds: 2));
+      for (var page = 0; page < 4; page++) {
+        await tester.pump(const Duration(seconds: 3));
         expect(tester.takeException(), isNull, reason: 'page $page');
         final cta = find.byType(FilledButton);
         expect(cta.hitTestable(), findsOneWidget);
         expect(tester.getSize(cta).height, greaterThanOrEqualTo(48));
-        if (page < 2) {
+        if (page < 3) {
           await tester.tap(cta);
           await tester.pump();
           await tester.pump(const Duration(milliseconds: 700));
@@ -67,12 +67,58 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     await tester.tap(find.text('Bỏ qua'));
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump(const Duration(milliseconds: 1400));
     expect(find.text('Tạo tài khoản'), findsOneWidget);
     await tester.tap(find.byType(FilledButton));
     expect(created, 1);
     await tester.tap(find.textContaining('Tôi đã có tài khoản'));
     expect(signedIn, 1);
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  // QA 149: each page is a short scene that plays when it comes into view,
+  // rewinds once it has left and plays again on the way back; nothing loops.
+  testWidgets('a scene replays when the owner swipes back to it', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(412, 915));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      host(GettingStartedScreen(onCreateAccount: () {}, onSignIn: () {})),
+    );
+    double opacityOf(String text) => tester
+        .widget<Opacity>(
+          find
+              .ancestor(of: find.text(text), matching: find.byType(Opacity))
+              .first,
+        )
+        .opacity;
+    const body1 =
+        'Mức pin, sức khỏe pin và quãng đường còn lại của từng xe, rõ ràng trong một chạm.';
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opacityOf(body1), lessThan(0.2), reason: 'the scene has just begun');
+    await tester.pump(GettingStartedScreen.sceneDuration);
+    expect(opacityOf(body1), 1.0);
+    expect(tester.hasRunningAnimations, isFalse, reason: 'one pass only');
+    await tester.tap(find.byType(FilledButton));
+    await tester.pump();
+    for (var i = 0; i < 12; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    await tester.pump(GettingStartedScreen.sceneDuration);
+    await tester.drag(find.byType(PageView), const Offset(330, 0));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(
+      opacityOf(body1),
+      lessThan(1.0),
+      reason: 'page 1 plays its scene again',
+    );
+    for (var i = 0; i < 40; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(opacityOf(body1), 1.0);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
 

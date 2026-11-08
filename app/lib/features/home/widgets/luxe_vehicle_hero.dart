@@ -20,8 +20,12 @@ class LuxeVehicleHero extends StatefulWidget {
     required this.vehicle,
     this.learned,
     this.rangePending = false,
+    this.charging = false,
   });
   final VehicleModel? vehicle;
+
+  /// QA 149: a charge is running; the % is the charge's estimate.
+  final bool charging;
 
   /// QA 141: the learned model has not answered yet; range shows "—".
   final bool rangePending;
@@ -92,7 +96,11 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
     return Semantics(
       container: true,
       label:
-          '$name, $plate${percent == null ? '' : ', pin $percent phần trăm'}',
+          '$name, $plate${percent == null
+              ? ''
+              : widget.charging
+              ? ', đang sạc, pin ước tính $percent phần trăm'
+              : ', pin $percent phần trăm'}',
       child: LuxeGlass(
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: Column(
@@ -258,7 +266,12 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                         ),
                       ),
                       const SizedBox(height: 2),
-                      const Text('Pin hiện tại', style: LuxeText.caption),
+                      Text(
+                        widget.charging
+                            ? 'Đang sạc · ước tính'
+                            : 'Pin hiện tại',
+                        style: LuxeText.caption,
+                      ),
                     ],
                   ),
                 ),

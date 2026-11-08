@@ -320,10 +320,10 @@ void main() {
     }
     expect(vote.socLocked, 68);
     final early = DashboardScanVote();
-    for (final soc in [8, 8, 8]) {
+    for (final soc in [8, 8, 8, 8]) {
       early.add(DashboardLayoutReading(soc: soc, socConfident: true));
     }
-    // Three "8" in a row with no longer reading in view is a real 8 %.
+    // Four "8" in a row with no longer reading in view is a real 8 %.
     expect(early.socLocked, 8);
     final odo = DashboardScanVote();
     for (final v in [48.0, 4818.0, 48.0, 4818.0]) {

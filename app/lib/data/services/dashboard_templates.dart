@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 /// Where each number sits on one model's instrument cluster (QA 142). The
@@ -16,7 +17,49 @@ class DashboardTemplate {
     required this.odo,
     required this.temp,
     required this.ignore,
+    this.glass,
   });
+
+  /// QA 149: the glass as a smooth closed curve, the way the cluster really
+  /// looks (the polygon in [outline] drew a hard trapezoid). Each entry is
+  /// `[x, y]` (a line, the first one moves) or `[c1x, c1y, c2x, c2y, x, y]`
+  /// (a cubic curve), all fractions of the glass.
+  final List<List<double>>? glass;
+
+  /// The glass traced in [r]: the smooth curve when there is one, otherwise
+  /// the outline polygon with softened corners.
+  Path glassPath(Rect r) {
+    Offset at(double x, double y) =>
+        Offset(r.left + x * r.width, r.top + y * r.height);
+    final path = Path();
+    final curve = glass;
+    if (curve != null && curve.isNotEmpty) {
+      for (var i = 0; i < curve.length; i++) {
+        final s = curve[i];
+        if (i == 0 || s.length == 2) {
+          final p = at(s[s.length - 2], s[s.length - 1]);
+          i == 0 ? path.moveTo(p.dx, p.dy) : path.lineTo(p.dx, p.dy);
+        } else {
+          final c1 = at(s[0], s[1]), c2 = at(s[2], s[3]), p = at(s[4], s[5]);
+          path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, p.dx, p.dy);
+        }
+      }
+      return path..close();
+    }
+    // Rounded polygon: each corner cut a fifth of its shorter edge.
+    final points = [for (final p in outline) at(p.dx, p.dy)];
+    for (var i = 0; i < points.length; i++) {
+      final prev = points[(i - 1 + points.length) % points.length];
+      final p = points[i];
+      final next = points[(i + 1) % points.length];
+      final cut = 0.2 * (math.min((p - prev).distance, (next - p).distance));
+      final a = p + (prev - p) / (prev - p).distance * cut;
+      final b = p + (next - p) / (next - p).distance * cut;
+      i == 0 ? path.moveTo(a.dx, a.dy) : path.lineTo(a.dx, a.dy);
+      path.quadraticBezierTo(p.dx, p.dy, b.dx, b.dy);
+    }
+    return path..close();
+  }
 
   final String id;
 
@@ -54,6 +97,22 @@ class DashboardTemplate {
     odo: Rect.fromLTRB(0.11, 0.58, 0.49, 0.73),
     temp: Rect.fromLTRB(0.36, 0.74, 0.63, 0.89),
     ignore: Rect.fromLTRB(0.40, 0.32, 0.68, 0.57),
+    // QA 149: a badge, not a trapezoid: the top is square with soft
+    // corners, the sides run straight down most of the way and then sweep
+    // in to a rounded bottom (the owner's photos, 01/11/2026).
+    glass: [
+      [0.08, 0.0],
+      [0.92, 0.0],
+      [0.97, 0.0, 1.0, 0.03, 1.0, 0.09],
+      [1.0, 0.62],
+      [1.0, 0.80, 0.95, 0.92, 0.86, 0.975],
+      [0.83, 0.992, 0.80, 1.0, 0.76, 1.0],
+      [0.24, 1.0],
+      [0.20, 1.0, 0.17, 0.992, 0.14, 0.975],
+      [0.05, 0.92, 0.0, 0.80, 0.0, 0.62],
+      [0.0, 0.09],
+      [0.0, 0.03, 0.03, 0.0, 0.08, 0.0],
+    ],
   );
 
   static const all = [feliz2025];

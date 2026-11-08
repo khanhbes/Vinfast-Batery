@@ -237,6 +237,14 @@ abstract final class DashboardLayoutParser {
   /// temperature 0–100.
   static const maxOdoKm = 999999.0;
 
+  /// Height of a %, ODO or temperature digit as a share of the glass
+  /// (QA 149): the owner's frames are 7–11 %, the speed 19–24 %.
+  static const minDigitHeight = 0.05;
+  static const maxDigitHeight = 0.16;
+
+  /// The most an ODO may run ahead of the last known one (QA 149).
+  static const maxOdoLeapKm = 3000.0;
+
   /// Reads the numbers by zone when the owner lined the cluster up with
   /// [template] (QA 142). [window] is the template's glass inside the
   /// image the [tokens] come from. Each zone's digits are joined left to
@@ -256,11 +264,18 @@ abstract final class DashboardLayoutParser {
       window.top + z.bottom * window.height,
     );
     final ignore = zone(template.ignore);
+    // QA 149: the %, ODO and temperature digits stand 7–11 % of the glass
+    // tall on the owner's frames, the speed 19–24 %, specks under 5 %. A
+    // frame lined up a little off put the speed's "00" in the % zone.
+    bool digitSized(Rect box) =>
+        box.height >= minDigitHeight * window.height &&
+        box.height <= maxDigitHeight * window.height;
     ({String digits, Rect box})? read(Rect area) {
       final inside = [
         for (final t in tokens)
           if (area.contains(t.box.center) &&
               !ignore.contains(t.box.center) &&
+              digitSized(t.box) &&
               RegExp(r'\d').hasMatch(t.text))
             t,
       ]..sort((a, b) => a.box.left.compareTo(b.box.left));
@@ -300,9 +315,17 @@ abstract final class DashboardLayoutParser {
           last != null &&
           last >= 100 &&
           odoDigits.length < last.round().toString().length;
+      // QA 149: and it does not leap: a wrong first digit read "4818" as
+      // "9818". Far beyond the last ODO is a misread, not a ride.
+      final leap =
+          value != null &&
+          last != null &&
+          last > 0 &&
+          value > last + maxOdoLeapKm;
       if (value != null &&
           value <= maxOdoKm &&
           !shrunk &&
+          !leap &&
           (last == null || last <= 0 || value >= last - 1)) {
         odo = value;
       }
@@ -311,7 +334,9 @@ abstract final class DashboardLayoutParser {
     // zone is not an ODO because no other number was found.
     final slack = window.shortestSide * 0.06;
     bool near(Rect? box, Rect z) =>
-        box != null && zone(z).inflate(slack).contains(box.center);
+        box != null &&
+        zone(z).inflate(slack).contains(box.center) &&
+        digitSized(box);
     final layoutSoc = near(layout.socBox, template.soc) ? layout.soc : null;
     final layoutOdo = near(layout.odoBox, template.odo) ? layout.odoKm : null;
     final layoutTemp = near(layout.tempBox, template.temp)
@@ -607,13 +632,18 @@ class _Item {
 }
 
 /// Locks a value once several frames agree (QA 131): one frame can misread
-/// a segment through glare; the same number in 3 of the last 6 frames —
-/// and most frames that saw a number — is what the dashboard says.
+/// a segment through glare; the same number in 4 of the last 8 frames, most
+/// frames that saw a number, and 2 votes clear of any other reading
+/// (QA 149: 3 of 6 locked "63" for the owner's 68 % when the two split) is
+/// what the dashboard says.
 class DashboardScanVote {
-  DashboardScanVote({this.window = 6, this.needed = 3});
+  DashboardScanVote({this.window = 8, this.needed = 4, this.margin = 2});
 
   final int window;
   final int needed;
+
+  /// Votes the winner must be ahead of the runner-up.
+  final int margin;
   final List<int?> _socs = [];
   final List<double?> _odos = [];
   final List<int?> _temps = [];
@@ -684,15 +714,26 @@ class DashboardScanVote {
     final keys = counts.keys.toList();
     final merged = {...counts};
     for (final short in keys) {
+      // QA 149: only a longer number read in 2 frames or more takes the
+      // shorter one's votes: one spurious "88" took a real 8 %.
       final hosts = keys.where(
-        (long) => DashboardLayoutParser.contains(digits(long), digits(short)),
+        (long) =>
+            counts[long]! >= 2 &&
+            DashboardLayoutParser.contains(digits(long), digits(short)),
       );
       if (hosts.isEmpty) continue;
       final host = hosts.reduce((a, b) => counts[a]! >= counts[b]! ? a : b);
       merged[host] = merged[host]! + counts[short]!;
       merged.remove(short);
     }
-    final best = merged.entries.reduce((a, b) => a.value >= b.value ? a : b);
-    return best.value >= needed && best.value >= seen * 0.6 ? best.key : null;
+    final ranked = merged.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final best = ranked.first;
+    final runnerUp = ranked.length > 1 ? ranked[1].value : 0;
+    return best.value >= needed &&
+            best.value >= seen * 0.6 &&
+            best.value - runnerUp >= margin
+        ? best.key
+        : null;
   }
 }

@@ -14,6 +14,9 @@ class AppPopup {
   static final messengerKey = GlobalKey<ScaffoldMessengerState>();
   static final navigatorKey = GlobalKey<NavigatorState>();
   static OverlayEntry? _entry;
+
+  /// Every notice inserted and not removed yet, built or not (QA 149).
+  static final Set<OverlayEntry> _inserted = <OverlayEntry>{};
   static Timer? _timer;
   static bool _safetyNoticeVisible = false;
   static bool get safetyNoticeVisible => _safetyNoticeVisible;
@@ -158,14 +161,29 @@ class AppPopup {
     _safetyNoticeVisible = false;
     _timer?.cancel();
     _timer = null;
-    final entry = _entry;
     _entry = null;
-    if (entry != null && entry.mounted) {
-      try {
-        entry.remove();
-      } catch (_) {
-        // Guard against double removal or unmounted race condition
-      }
+    // QA 149: remove every notice that went in, built or not. A notice
+    // replaced in the frame it was inserted was not "mounted" yet, so it was
+    // skipped, lost its timer and stayed on screen for good ("Đã bắt đầu
+    // sạc" for 35 minutes, its X dismissing nothing).
+    for (final entry in _inserted.toList()) {
+      _remove(entry);
+    }
+  }
+
+  /// Removes [entry] alone: its own timer and its own close button.
+  static void _remove(OverlayEntry entry) {
+    _inserted.remove(entry);
+    if (identical(_entry, entry)) {
+      _entry = null;
+      _timer?.cancel();
+      _timer = null;
+      _safetyNoticeVisible = false;
+    }
+    try {
+      entry.remove();
+    } catch (_) {
+      // Already removed with its overlay.
     }
   }
 
@@ -224,14 +242,15 @@ class AppPopup {
     }
     dismiss();
     _safetyNoticeVisible = persistent && kind == AppNoticeKind.warning;
-    final newEntry = OverlayEntry(
+    late final OverlayEntry newEntry;
+    newEntry = OverlayEntry(
       builder: (context) => _NoticeOverlay(
         kind: kind,
         title: title,
         detail: detail,
         action: action,
         actionLabel: actionLabel,
-        onDismiss: dismiss,
+        onDismiss: () => _remove(newEntry),
         toastKey: signature,
       ),
     );
@@ -246,12 +265,13 @@ class AppPopup {
       }
       try {
         currentOverlay.insert(newEntry);
+        _inserted.add(newEntry);
         if (!persistent) {
           _timer = Timer(
             kind == AppNoticeKind.error
                 ? const Duration(milliseconds: 3500)
                 : const Duration(milliseconds: 3000),
-            dismiss,
+            () => _remove(newEntry),
           );
         }
       } catch (_) {

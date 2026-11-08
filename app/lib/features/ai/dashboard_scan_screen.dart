@@ -14,6 +14,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/theme/plan_style.dart';
 import '../../core/utils/number_text.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/services/pinova_api.dart';
@@ -361,7 +362,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     if (guide is! RenderBox || stack is! RenderBox) return null;
     if (!guide.hasSize || !stack.hasSize) return null;
     final screen = stack.size;
-    final window = _GuidePainter.windowFor(
+    final window = DashboardScanGuide.windowFor(
       guide.size,
       widget.template,
     ).shift(guide.localToGlobal(Offset.zero, ancestor: stack));
@@ -733,13 +734,13 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                 ),
                 Expanded(
                   child: _problem == _CameraProblem.none
-                      ? CustomPaint(
+                      ? DashboardScanGuide(
                           key: _guideKey,
-                          painter: _GuidePainter(
-                            ready: ready,
-                            template: widget.template,
-                          ),
-                          child: const SizedBox.expand(),
+                          ready: ready,
+                          template: widget.template,
+                          scanning: ready && !_done && !_capturing,
+                          socLocked: _vote.socLocked != null,
+                          odoLocked: _vote.odoLocked != null,
                         )
                       : _CameraProblemView(
                           denied: _problem == _CameraProblem.denied,
@@ -1115,15 +1116,29 @@ class _ScanTile extends StatelessWidget {
   }
 }
 
-/// Dims the frame around the viewfinder. With a template (QA 142) the
-/// window has the cluster's proportions and shows its glass and the zones
-/// of the battery %, ODO and temperature to line up; without one, a plain
-/// window with platinum corners.
-class _GuidePainter extends CustomPainter {
-  _GuidePainter({required this.ready, this.template});
+/// The viewfinder (QA 149). With a template the window is the cluster's own
+/// glass, a soft-edged cut-out with a glow along it instead of a hard
+/// polygon; a light reads down the glass while the scanner works (a real
+/// activity: it stops when nothing is scanned or motion is reduced); the
+/// zones of the battery %, ODO and temperature turn emerald once their
+/// number is locked. Without a template, a rounded window with soft corners.
+class DashboardScanGuide extends StatefulWidget {
+  const DashboardScanGuide({
+    super.key,
+    required this.ready,
+    this.template,
+    this.scanning = false,
+    this.socLocked = false,
+    this.odoLocked = false,
+  });
 
   final bool ready;
   final DashboardTemplate? template;
+
+  /// Frames are being read: the reading light runs.
+  final bool scanning;
+  final bool socLocked;
+  final bool odoLocked;
 
   /// The window the owner aims at (also the part of the frame read).
   static Rect windowFor(Size size, [DashboardTemplate? template]) {
@@ -1144,23 +1159,211 @@ class _GuidePainter extends CustomPainter {
   }
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final rect = windowFor(size, template);
-    if (rect.width <= 0 || rect.height <= 0) return;
-    final window = RRect.fromRectAndRadius(rect, const Radius.circular(26));
-    canvas.drawPath(
-      Path()
-        ..fillType = PathFillType.evenOdd
-        ..addRect(Offset.zero & size)
-        ..addRRect(window),
-      Paint()..color = Colors.black.withValues(alpha: ready ? 0.45 : 0.0),
-    );
-    final t = template;
-    if (t == null) {
-      _corners(canvas, window.outerRect);
-    } else {
-      _cluster(canvas, rect, t);
+  State<DashboardScanGuide> createState() => _DashboardScanGuideState();
+}
+
+class _DashboardScanGuideState extends State<DashboardScanGuide>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _light = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2600),
+  );
+
+  void _sync() {
+    final run =
+        widget.scanning &&
+        widget.ready &&
+        !MediaQuery.disableAnimationsOf(context);
+    if (run && !_light.isAnimating) {
+      _light.repeat();
+    } else if (!run && _light.isAnimating) {
+      _light.stop();
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(DashboardScanGuide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _sync();
+  }
+
+  @override
+  void dispose() {
+    _light.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _light,
+    builder: (context, _) => CustomPaint(
+      painter: _GuidePainter(
+        ready: widget.ready,
+        template: widget.template,
+        light: _light.isAnimating ? _light.value : null,
+        socLocked: widget.socLocked,
+        odoLocked: widget.odoLocked,
+        accent: context.planAccent,
+      ),
+      child: const SizedBox.expand(),
+    ),
+  );
+}
+
+class _GuidePainter extends CustomPainter {
+  _GuidePainter({
+    required this.ready,
+    required this.accent,
+    this.template,
+    this.light,
+    this.socLocked = false,
+    this.odoLocked = false,
+  });
+
+  final bool ready;
+  final DashboardTemplate? template;
+
+  /// 0..1 of the reading light's pass, null when it is not running.
+  final double? light;
+  final bool socLocked;
+  final bool odoLocked;
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = DashboardScanGuide.windowFor(size, template);
+    if (rect.width <= 0 || rect.height <= 0) return;
+    final t = template;
+    final glass =
+        t?.glassPath(rect) ??
+        (Path()
+          ..addRRect(RRect.fromRectAndRadius(rect, const Radius.circular(28))));
+
+    if (ready) {
+      // Dim the room around the glass, then soften the cut so the edge
+      // fades into the camera picture instead of a hard line.
+      canvas.drawPath(
+        Path()
+          ..fillType = PathFillType.evenOdd
+          ..addRect(Offset.zero & size)
+          ..addPath(glass, Offset.zero),
+        Paint()..color = Colors.black.withValues(alpha: 0.55),
+      );
+      canvas.save();
+      canvas.clipPath(glass);
+      canvas.drawPath(
+        glass,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 22
+          ..color = Colors.black.withValues(alpha: 0.30)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12),
+      );
+      canvas.restore();
+    }
+
+    // A soft glow along the glass, then its fine edge.
+    canvas.drawPath(
+      glass,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 9
+        ..color = accent.withValues(alpha: 0.22)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+    );
+    canvas.drawPath(
+      glass,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..strokeJoin = StrokeJoin.round
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            LuxeColors.platinumHi.withValues(alpha: 0.95),
+            accent.withValues(alpha: 0.9),
+            LuxeColors.platinumHi.withValues(alpha: 0.75),
+          ],
+          stops: const [0.0, 0.55, 1.0],
+        ).createShader(rect),
+    );
+
+    final l = light;
+    if (l != null) {
+      // A highlight runs once round the glass per pass.
+      final metric = glass.computeMetrics().first;
+      final len = metric.length;
+      final head = len * l;
+      final tail = len * 0.14;
+      final from = head - tail;
+      final comet = from >= 0
+          ? metric.extractPath(from, head)
+          : (metric.extractPath(len + from, len)
+              ..addPath(metric.extractPath(0, head), Offset.zero));
+      canvas.drawPath(
+        comet,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 6
+          ..strokeCap = StrokeCap.round
+          ..color = accent.withValues(alpha: 0.45)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      canvas.drawPath(
+        comet,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round
+          ..color = Colors.white.withValues(alpha: 0.9),
+      );
+      // And a reading light goes down the glass and back.
+      final down = l < 0.5 ? l * 2 : 2 - l * 2;
+      final y =
+          rect.top +
+          rect.height * (0.08 + 0.84 * Curves.easeInOut.transform(down));
+      canvas.save();
+      canvas.clipPath(glass);
+      canvas.drawRect(
+        Rect.fromLTRB(rect.left, y - 26, rect.right, y + 26),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              accent.withValues(alpha: 0),
+              accent.withValues(alpha: 0.16),
+              accent.withValues(alpha: 0),
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ).createShader(Rect.fromLTRB(rect.left, y - 26, rect.right, y + 26)),
+      );
+      canvas.drawLine(
+        Offset(rect.left, y),
+        Offset(rect.right, y),
+        Paint()
+          ..strokeWidth = 1.2
+          ..shader = LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: 0.55),
+              Colors.white.withValues(alpha: 0),
+            ],
+            stops: const [0.0, 0.5, 1.0],
+          ).createShader(Rect.fromLTWH(rect.left, y - 1, rect.width, 2)),
+      );
+      canvas.restore();
+    }
+
+    if (t != null) _zones(canvas, rect, t);
+
     final hint = TextPainter(
       text: TextSpan(
         text: t == null
@@ -1172,95 +1375,84 @@ class _GuidePainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       maxLines: 2,
     )..layout(maxWidth: rect.width - 24);
-    final below = rect.bottom + 12;
+    final below = rect.bottom + 14;
     final y = below + hint.height <= size.height
         ? below
         : rect.bottom - hint.height - 12;
     hint.paint(canvas, Offset(size.width / 2 - hint.width / 2, y));
   }
 
-  void _corners(Canvas canvas, Rect r) {
-    final corner = Paint()
-      ..color = LuxeColors.platinum.withValues(alpha: 0.85)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..strokeCap = StrokeCap.round;
-    const arm = 26.0;
-    for (final (x, y, dx, dy) in [
-      (r.left, r.top, 1.0, 1.0),
-      (r.right, r.top, -1.0, 1.0),
-      (r.left, r.bottom, 1.0, -1.0),
-      (r.right, r.bottom, -1.0, -1.0),
-    ]) {
-      canvas.drawPath(
-        Path()
-          ..moveTo(x, y + dy * arm)
-          ..lineTo(x, y + dy * 10)
-          ..quadraticBezierTo(x, y, x + dx * 10, y)
-          ..lineTo(x + dx * arm, y),
-        corner,
-      );
-    }
-  }
-
-  void _cluster(Canvas canvas, Rect r, DashboardTemplate t) {
-    Offset at(Offset f) =>
-        Offset(r.left + f.dx * r.width, r.top + f.dy * r.height);
+  void _zones(Canvas canvas, Rect r, DashboardTemplate t) {
     Rect zone(Rect z) => Rect.fromLTRB(
       r.left + z.left * r.width,
       r.top + z.top * r.height,
       r.left + z.right * r.width,
       r.top + z.bottom * r.height,
     );
-    final glass = Path()..addPolygon([for (final p in t.outline) at(p)], true);
-    canvas.drawPath(
-      glass,
-      Paint()
-        ..color = LuxeColors.platinumHi.withValues(alpha: 0.9)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..strokeJoin = StrokeJoin.round,
+    final ignored = RRect.fromRectAndRadius(
+      zone(t.ignore),
+      const Radius.circular(12),
     );
-    final ignored = zone(t.ignore);
     canvas.drawRRect(
-      RRect.fromRectAndRadius(ignored, const Radius.circular(8)),
+      ignored,
       Paint()
-        ..color = Colors.white.withValues(alpha: 0.18)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1,
+        ..strokeWidth = 1
+        ..color = Colors.white.withValues(alpha: 0.14),
     );
-    for (final (z, label) in [
-      (t.soc, '% PIN'),
-      (t.odo, 'ODO'),
-      (t.temp, '°C PIN'),
+    for (final (z, label, locked) in [
+      (t.soc, '% PIN', socLocked),
+      (t.odo, 'ODO', odoLocked),
+      (t.temp, '°C PIN', false),
     ]) {
-      final box = zone(z);
+      final box = RRect.fromRectAndRadius(zone(z), const Radius.circular(12));
+      final color = locked ? LuxeColors.emerald : LuxeColors.champagne;
       canvas.drawRRect(
-        RRect.fromRectAndRadius(box, const Radius.circular(8)),
-        Paint()
-          ..color = LuxeColors.champagne.withValues(alpha: 0.85)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.6,
+        box,
+        Paint()..color = color.withValues(alpha: locked ? 0.16 : 0.07),
       );
+      canvas.drawRRect(
+        box,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = locked ? 1.8 : 1.3
+          ..color = color.withValues(alpha: locked ? 0.95 : 0.75),
+      );
+      // The zone's name on a small pill above it.
       final text = TextPainter(
         text: TextSpan(
-          text: label,
-          style: const TextStyle(
-            color: LuxeColors.champagne,
+          text: locked ? '$label ✓' : label,
+          style: TextStyle(
+            color: locked ? PlanColors.ink : LuxeColors.background,
             fontSize: 11,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.6,
           ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      text.paint(canvas, Offset(box.left + 4, box.top - text.height - 2));
+      final pill = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          box.left + 6,
+          box.top - text.height - 6,
+          text.width + 12,
+          text.height + 4,
+        ),
+        const Radius.circular(99),
+      );
+      canvas.drawRRect(pill, Paint()..color = color.withValues(alpha: 0.92));
+      text.paint(canvas, Offset(pill.left + 6, pill.top + 2));
     }
   }
 
   @override
   bool shouldRepaint(_GuidePainter old) =>
-      old.ready != ready || old.template != template;
+      old.ready != ready ||
+      old.template != template ||
+      old.light != light ||
+      old.socLocked != socLocked ||
+      old.odoLocked != odoLocked ||
+      old.accent != accent;
 }
 
 /// Outlines where the % and ODO were found (image → preview coordinates).
