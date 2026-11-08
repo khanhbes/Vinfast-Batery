@@ -708,7 +708,7 @@ class _ModelCard extends StatelessWidget {
           if (report != null) ...[
             const SizedBox(height: 8),
             Text(
-              'Lần gần nhất: ${TrainingResultSheet.verdict(report)}',
+              'Lần gần nhất: ${TrainingResultSheet.verdict(report, trained: status.trained)}',
               style: LuxeText.caption.copyWith(fontSize: 12.5),
             ),
             if (report.evaluation != null)

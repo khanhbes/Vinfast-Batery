@@ -79,8 +79,19 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
     // covering cards and chips ("Cập nhật % pin & ODO", "100% Đầy pin" —
     // QA 129). QA 141: about 36 × 48 dp stays visible (16 dp was hard to
     // see and to tap).
-    final effectiveRight = isDocked ? -16.0 : _right;
-    final effectiveOpacity = isDocked ? 0.75 : 1.0;
+    // QA 149: off the screen while the user scrolls down (tiles slid under
+    // the tucked-in button), back tucked in when the scroll stops.
+    final away = coordinator.isScrollingAway && !isBubbleVisible;
+    final effectiveRight = away
+        ? -80.0
+        : isDocked
+        ? -16.0
+        : _right;
+    final effectiveOpacity = away
+        ? 0.0
+        : isDocked
+        ? 0.75
+        : 1.0;
     final effectiveScale = isDocked ? 0.86 : 1.0;
     final showBubble = isBubbleVisible && !isDocked && bubbleText != null;
 
@@ -89,171 +100,186 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
       curve: Curves.easeOutCubic,
       bottom: _bottom,
       right: effectiveRight,
-      child: GestureDetector(
-        onPanUpdate: (details) {
-          if (isDocked) {
-            ref.read(assistantContextCoordinatorProvider).setDocked(false);
-          }
-          setState(() {
-            // Cập nhật vị trí kéo thả trong vùng an toàn của màn hình
-            _bottom = (_bottom - details.delta.dy).clamp(
-              16.0,
-              screenSize.height - 180.0,
-            );
-            _right = (_right - details.delta.dx).clamp(
-              16.0,
-              screenSize.width - 80.0,
-            );
-          });
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Bong bóng lời thoại ngữ cảnh (Proactive Speech Bubble)
-            AnimatedOpacity(
-              opacity: showBubble ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
-              child: AnimatedScale(
-                scale: showBubble ? 1.0 : 0.8,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOutBack,
-                child: showBubble
-                    ? Container(
-                        margin: const EdgeInsets.only(bottom: 8),
-                        constraints: BoxConstraints(
-                          maxWidth: screenSize.width * 0.72,
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xF2121315),
-                          borderRadius: BorderRadius.circular(
-                            20,
-                          ).copyWith(bottomRight: const Radius.circular(6)),
-                          border: Border.all(
-                            color: context.planAccent.withValues(alpha: 0.45),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: context.planAccent.withValues(alpha: 0.15),
-                              blurRadius: 18,
+      child: IgnorePointer(
+        ignoring: away,
+        child: ExcludeSemantics(
+          excluding: away,
+          child: GestureDetector(
+            onPanUpdate: (details) {
+              if (isDocked) {
+                ref.read(assistantContextCoordinatorProvider).setDocked(false);
+              }
+              setState(() {
+                // Cập nhật vị trí kéo thả trong vùng an toàn của màn hình
+                _bottom = (_bottom - details.delta.dy).clamp(
+                  16.0,
+                  screenSize.height - 180.0,
+                );
+                _right = (_right - details.delta.dx).clamp(
+                  16.0,
+                  screenSize.width - 80.0,
+                );
+              });
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Bong bóng lời thoại ngữ cảnh (Proactive Speech Bubble)
+                AnimatedOpacity(
+                  opacity: showBubble ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: AnimatedScale(
+                    scale: showBubble ? 1.0 : 0.8,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutBack,
+                    child: showBubble
+                        ? Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            constraints: BoxConstraints(
+                              maxWidth: screenSize.width * 0.72,
                             ),
-                            const BoxShadow(
-                              color: Color(0x66000000),
-                              blurRadius: 14,
-                              offset: Offset(0, 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
                             ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () =>
-                                    _openSheet(initialQuery: bubbleText),
-                                child: Text(
-                                  bubbleText,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    color: LuxeColors.text,
-                                    height: 1.4,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            IconButton(
-                              tooltip: 'Đóng gợi ý Pinova Bot',
-                              constraints: const BoxConstraints(
-                                minWidth: 48,
-                                minHeight: 48,
-                              ),
-                              onPressed: () {
-                                ref
-                                    .read(assistantContextCoordinatorProvider)
-                                    .dismissBubble();
-                              },
-                              icon: const Icon(
-                                Icons.close_rounded,
-                                size: 14,
-                                color: LuxeColors.muted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-            ),
-
-            // Nút tròn Mascot nổi (Floating Action Icon)
-            AnimatedScale(
-              scale: effectiveScale,
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
-              child: AnimatedOpacity(
-                opacity: effectiveOpacity,
-                duration: const Duration(milliseconds: 250),
-                child: ScaleTransition(
-                  scale: isBubbleVisible && !isDocked
-                      ? _pulseAnimation
-                      : const AlwaysStoppedAnimation(1.0),
-                  child: Material(
-                    color: Colors.transparent,
-                    shape: const CircleBorder(),
-                    elevation: isDocked ? 2 : 6,
-                    shadowColor: context.planAccent.withValues(alpha: 0.4),
-                    child: Tooltip(
-                      message: 'Mở Pinova Bot',
-                      child: Semantics(
-                        label: 'Mở Pinova Bot',
-                        button: true,
-                        child: InkWell(
-                          customBorder: const CircleBorder(),
-                          onTap: () {
-                            if (isDocked) {
-                              ref
-                                  .read(assistantContextCoordinatorProvider)
-                                  .setDocked(false);
-                            }
-                            _openSheet();
-                          },
-                          child: Container(
-                            width: 56,
-                            height: 56,
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF2A2C30), LuxeColors.shell],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
+                              color: const Color(0xF2121315),
+                              borderRadius: BorderRadius.circular(
+                                20,
+                              ).copyWith(bottomRight: const Radius.circular(6)),
                               border: Border.all(
-                                color: isBubbleVisible
-                                    ? context.planAccent
-                                    : context.planAccent.withValues(
-                                        alpha: 0.45,
-                                      ),
-                                width: isBubbleVisible ? 2.0 : 1.3,
+                                color: context.planAccent.withValues(
+                                  alpha: 0.45,
+                                ),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: context.planAccentSoft,
+                                  color: context.planAccent.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   blurRadius: 18,
+                                ),
+                                const BoxShadow(
+                                  color: Color(0x66000000),
+                                  blurRadius: 14,
+                                  offset: Offset(0, 6),
                                 ),
                               ],
                             ),
-                            child: Center(
-                              child: BatteryBotMascot(
-                                size: BatteryBotSize.avatar,
-                                displayMode: BatteryBotDisplayMode.avatar,
-                                mood: mood,
-                                enableFloating: false,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: GestureDetector(
+                                    onTap: () =>
+                                        _openSheet(initialQuery: bubbleText),
+                                    child: Text(
+                                      bubbleText,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        color: LuxeColors.text,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                IconButton(
+                                  tooltip: 'Đóng gợi ý Pinova Bot',
+                                  constraints: const BoxConstraints(
+                                    minWidth: 48,
+                                    minHeight: 48,
+                                  ),
+                                  onPressed: () {
+                                    ref
+                                        .read(
+                                          assistantContextCoordinatorProvider,
+                                        )
+                                        .dismissBubble();
+                                  },
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                    color: LuxeColors.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+
+                // Nút tròn Mascot nổi (Floating Action Icon)
+                AnimatedScale(
+                  scale: effectiveScale,
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeOutCubic,
+                  child: AnimatedOpacity(
+                    opacity: effectiveOpacity,
+                    duration: const Duration(milliseconds: 250),
+                    child: ScaleTransition(
+                      scale: isBubbleVisible && !isDocked
+                          ? _pulseAnimation
+                          : const AlwaysStoppedAnimation(1.0),
+                      child: Material(
+                        color: Colors.transparent,
+                        shape: const CircleBorder(),
+                        elevation: isDocked ? 2 : 6,
+                        shadowColor: context.planAccent.withValues(alpha: 0.4),
+                        child: Tooltip(
+                          message: 'Mở Pinova Bot',
+                          child: Semantics(
+                            label: 'Mở Pinova Bot',
+                            button: true,
+                            child: InkWell(
+                              customBorder: const CircleBorder(),
+                              onTap: () {
+                                if (isDocked) {
+                                  ref
+                                      .read(assistantContextCoordinatorProvider)
+                                      .setDocked(false);
+                                }
+                                _openSheet();
+                              },
+                              child: Container(
+                                width: 56,
+                                height: 56,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF2A2C30),
+                                      LuxeColors.shell,
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  border: Border.all(
+                                    color: isBubbleVisible
+                                        ? context.planAccent
+                                        : context.planAccent.withValues(
+                                            alpha: 0.45,
+                                          ),
+                                    width: isBubbleVisible ? 2.0 : 1.3,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: context.planAccentSoft,
+                                      blurRadius: 18,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: BatteryBotMascot(
+                                    size: BatteryBotSize.avatar,
+                                    displayMode: BatteryBotDisplayMode.avatar,
+                                    mood: mood,
+                                    enableFloating: false,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
@@ -262,9 +288,9 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

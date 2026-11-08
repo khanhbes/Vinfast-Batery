@@ -259,12 +259,12 @@ class _LuxeChargingPillState extends State<_LuxeChargingPill>
   @override
   Widget build(BuildContext context) {
     final accent = widget.stale ? LuxeColors.champagne : LuxeColors.emerald;
-    // Bottom-left above the navigation bar, clear of the BatteryBot button:
-    // at the top it covered page headers and cards (Task 127).
+    // In its own strip above the navigation bar (QA 149): floating over the
+    // page it covered cards, at the top it covered headers (Task 127).
     return Align(
-      alignment: Alignment.bottomLeft,
+      alignment: Alignment.centerLeft,
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 14, left: 16, right: 104),
+        padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: 1),
           duration: luxeDuration(context, 520),

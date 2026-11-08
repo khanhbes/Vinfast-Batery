@@ -43,11 +43,18 @@
 - Pinova Bot vẫn ghi "Pin 9% · Dữ liệu hồ sơ" và hiện thẻ "Cảnh báo mức pin thấp" khi đang sạc: dòng ngữ cảnh ghi "Đang sạc · ước tính X%", không gợi ý pin yếu khi đang sạc, ngữ cảnh gửi máy chủ dùng % ước tính kèm `batteryCharging` (máy chủ thêm khóa này vào danh sách cho phép).
 - Hướng dẫn lần đầu của Pinova Bot ở lại trên app sau khi đóng bot ("Đang đợi mục này hiển thị") và chặn mọi thao tác tới khi bấm Bỏ qua: hướng dẫn giờ đóng cùng màn hình đã mở nó (`CoachMarkOverlay.show(route:)`), chưa tính là đã xem nên lần sau mở bot sẽ hiện lại. Trên máy đã bấm Bỏ qua để trả lại app.
 - Sức khỏe pin theo từng lần sạc vẽ tới 120%: trục dừng ở 100%, lần đo vượt 100% là chấm rỗng trên đường 100%, thêm một dòng giải thích đồng hồ xe lệch vài %.
-- Ghi nhận, chưa sửa: nút Pinova Bot thu vào mép phải vẫn đè một phần ô số liệu/thẻ lịch sử khi cuộn; viên "Đang sạc" nổi che một phần thẻ ở giữa Tổng quan. AI cá nhân ghi "Đã huấn luyện từ 77 chuyến" cạnh "Lần gần nhất: Chưa đủ dữ liệu để đánh giá". Phiên 02/11 vẫn "Gián đoạn" (chờ script).
+- Ghi nhận rồi sửa ở đợt 2 (09/11/2026, chủ app yêu cầu "fix nốt"):
+  - Nút Pinova Bot thu vào mép phải đè ô số liệu/thẻ lịch sử khi cuộn: khi cuộn xuống nút ra hẳn khỏi màn hình (không nhận chạm, TalkBack không đọc), cuộn dừng thì về lại mép như cũ (`AssistantContextCoordinator.setScrollingAway`, chỉ theo cuộn dọc).
+  - Viên "Đang sạc" nổi che thẻ giữa Tổng quan: viên nằm trong dải riêng ngay trên thanh tab (`bottomNavigationBar` là cột viên + thanh tab), không còn nổi trên trang; nút bot nằm trên dải này.
+  - AI cá nhân "Đã huấn luyện từ 77 chuyến" cạnh "Chưa đủ dữ liệu để đánh giá": lần huấn luyện không có dữ liệu kiểm tra mà xe đã có mô hình thì ghi "Chưa có dữ liệu mới để kiểm tra nên vẫn dùng bản đã học"; bản mới được dùng mà chưa có dữ liệu kiểm tra thì ghi rõ chưa đo được sai số (`TrainingResultSheet.verdict(trained:)`).
+  - Test: `test/widget/qa149_overlap_test.dart`. Phiên 02/11 vẫn "Gián đoạn" tới khi chạy script sửa (sau deploy).
+  - Phiên bản 1.3.24+227.
 
 **Kiểm thử:** `flutter test` 1399 đạt / 216 bỏ qua; `flutter analyze` sạch; `pytest tests` 944 đạt / 15 bỏ qua. Test mới: màn Bắt đầu phát lại cảnh khi vuốt lại, test 4 trang ở 320 dp chữ ×1,5 và 412 dp; test quét như trên. Khung hình để xem bằng mắt: `test/visual/qa149_motion_review_test.dart` (chỉ chạy khi đặt `QA149_OUT` và `QA139_FONTS`).
 
 **APK:** 1.3.23+226, `app/build/app/outputs/flutter-apk/app-profile.apk`, 166,1 MB, SHA-256 `1C29247F009B72E98DB1197314C735E80864D33FCC649BD4EDB39618E4489B4C`, chưa cài (điện thoại đã ngắt adb).
+
+**Deploy (09/11/2026, gộp QA 148 + 149, commit `24c2f04`):** gate trên worktree sạch đạt (build API/worker/QA, kiểm nguồn image 91 tệp khớp, backend Linux 937 đạt / 20 bỏ qua, boot cô lập, worker smoke). API `vinfast-api@sha256:d0fd2e04…e119d5` revision `vinfast-api--api106-1108173900`, worker `vinfast-worker@sha256:8fe1388b…583c7c` revision `--0000030`; `/api/health` 200, `/api/ready` 200; biên nhận `docs/qa_evidence/app-review-2026-10-05/qa149-rollout-20261109.json`. Lần push đầu của image API lỗi tạm, push lại được.
 
 **Hạn chế:** chưa cài APK có bản này lên máy, các hiệu ứng mới mới xem qua khung hình dựng trên máy tính. Sửa lịch sử là phía máy chủ: cần deploy (máy chủ vẫn bản QA 146, `deploy164.ps1` chưa chạy được). Hình viền Feliz dựng theo ảnh của chủ app, chưa đo trên xe. Quét chậm hơn khoảng một khung để đổi lấy việc không khóa sai. Bài thử dùng 6 ảnh của cùng một số (68%, 4818 km).
 

@@ -32,9 +32,20 @@ class TrainingResultSheet extends StatelessWidget {
 
   /// One-sentence verdict that matches the numbers; says when the test set
   /// is too small to conclude (QA 128: one charge read as a firm verdict).
-  static String verdict(TrainingReport report) {
+  ///
+  /// [trained] is how many cases the model in use learned from. QA 149: the
+  /// trip card read "đã huấn luyện từ 77 chuyến" next to "Chưa đủ dữ liệu để
+  /// đánh giá", which sounded like the model had no data.
+  static String verdict(TrainingReport report, {int trained = 0}) {
     final e = report.evaluation;
     if (report.decision == 'no_data' || e == null) {
+      if (report.promoted) {
+        return 'Đã dùng bản mới. Chưa có dữ liệu ngoài phần đã học để đo '
+            'sai số.';
+      }
+      if (trained > 0) {
+        return 'Chưa có dữ liệu mới để kiểm tra nên vẫn dùng bản đã học.';
+      }
       return 'Chưa đủ dữ liệu để đánh giá.';
     }
     final n = e.next.n;

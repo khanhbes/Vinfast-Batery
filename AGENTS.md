@@ -278,6 +278,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Chuyển trang `LuxePageTransitionsBuilder` 460/340 ms (tiến lại gần + trang dưới lùi). `LuxePressScale` cho nút Filled. Hiệu ứng mới dùng các bậc này, không thêm package.
   - Máy quét: viền là `DashboardTemplate.glass` (đường cong kính, `glassPath`); vệt sáng quét chỉ chạy khi đang quét. Bỏ phiếu 4/8 khung, hơn 2 phiếu, số dài phải tự có ≥ 2 phiếu mới nhận số ngắn; chữ số trong vùng cao 5–16% kính; ODO không vượt số cũ quá 3 000 km. Khóa sai tệ hơn chậm một khung.
   - Hướng dẫn màn hình (`CoachMarkOverlay`) đóng cùng route đã mở nó; màn nào hiện % pin (Tổng quan, Cài đặt, Pinova Bot) đọc ước tính khi đang sạc.
+  - Nút Pinova Bot ra khỏi màn hình khi đang cuộn xuống (`setScrollingAway`), về mép khi cuộn dừng; viên "Đang sạc" ở dải riêng trên thanh tab, không nổi trên trang.
   - `AppPopup`: mỗi thông báo tự gỡ chính nó (hẹn giờ, nút X); `dismiss` gỡ mọi thông báo đã chèn, kể cả chưa kịp vẽ. Màn hiện "pin bây giờ" đọc `chargingEstimateProvider` trước (ước tính của phiên đang sạc) và ghi "Đang sạc · ước tính"; Pinova Bot không gợi ý sạc khi xe đang sạc.
 
 ### 3.7. BatteryBot (trợ lý AI)

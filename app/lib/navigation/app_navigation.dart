@@ -326,35 +326,45 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
           children: [
             NotificationListener<ScrollNotification>(
               onNotification: (scrollInfo) {
+                final bot = ref.read(assistantContextCoordinatorProvider);
+                final vertical = scrollInfo.metrics.axis == Axis.vertical;
                 if (scrollInfo is UserScrollNotification) {
                   if (scrollInfo.direction == ScrollDirection.reverse) {
-                    ref
-                        .read(assistantContextCoordinatorProvider)
-                        .setDocked(true);
+                    bot.setDocked(true);
+                    if (vertical) bot.setScrollingAway(true);
                   } else if (scrollInfo.direction == ScrollDirection.forward ||
                       scrollInfo.metrics.pixels <= 20) {
-                    ref
-                        .read(assistantContextCoordinatorProvider)
-                        .setDocked(false);
+                    bot.setDocked(false);
+                    bot.setScrollingAway(false);
                   }
+                } else if (scrollInfo is ScrollEndNotification && vertical) {
+                  bot.setScrollingAway(false);
                 }
                 return false;
               },
               child: AppTabStack(index: currentIndex, children: _screens),
             ),
-            GlobalChargingPill(),
             const FloatingBatteryBot(),
           ],
         ),
-        bottomNavigationBar: AppNavigationBar(
-          selectedIndex: currentIndex,
-          onSelected: (index) {
-            if (currentIndex != index) {
-              HapticFeedback.selectionClick();
-            }
-            AppPopup.clearShownErrors();
-            ref.read(currentTabProvider.notifier).state = index;
-          },
+        // QA 149: the charging pill sits in its own strip above the tabs
+        // instead of floating over the page (it covered the Overview's
+        // middle card).
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const GlobalChargingPill(),
+            AppNavigationBar(
+              selectedIndex: currentIndex,
+              onSelected: (index) {
+                if (currentIndex != index) {
+                  HapticFeedback.selectionClick();
+                }
+                AppPopup.clearShownErrors();
+                ref.read(currentTabProvider.notifier).state = index;
+              },
+            ),
+          ],
         ),
       ),
     );

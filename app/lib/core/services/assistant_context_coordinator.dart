@@ -49,6 +49,18 @@ class AssistantContextCoordinator extends ChangeNotifier {
 
   bool get isBubbleVisible => _isBubbleVisible;
   bool get isDocked => _isDocked;
+
+  /// QA 149: while the user scrolls down the bot steps off the screen, so
+  /// tiles and history cards no longer slide under it; it comes back tucked
+  /// in once the scroll stops.
+  bool _isScrollingAway = false;
+  bool get isScrollingAway => _isScrollingAway;
+  void setScrollingAway(bool away) {
+    if (_isScrollingAway == away) return;
+    _isScrollingAway = away;
+    notifyListeners();
+  }
+
   String? get bubbleText => _bubbleText;
   BatteryBotMood get bubbleMood => _bubbleMood;
   List<String> get quickActionChips => _quickActionChips;
