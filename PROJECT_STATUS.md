@@ -12,6 +12,43 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 149. Task Completion Log — Màn Bắt đầu nhiều màu, hiệu ứng nâng gói như phim ngắn, chuyển cảnh toàn app, khung quét theo màn hình Feliz và quét chính xác hơn (08/11/2026, chủ app yêu cầu) — Code + test xong, chưa cài lên máy
+
+**Yêu cầu:** màn Bắt đầu nhiều màu và cuốn hút hơn, vuốt lại thì phát lại hiệu ứng; hiệu ứng nâng gói và Bắt đầu mượt như một phim ngắn; chuyển động chữ, ảnh, nút, chuyển cảnh liền mạch; viền khung quét mềm, đúng hình màn hình Feliz; quét chính xác hơn; kiểm tra giao diện trên máy khi xe đang sạc, không được ngắt sạc.
+
+**Màn Bắt đầu (`features/auth/getting_started_screen.dart`):**
+- 4 cảnh (thêm 03 · Quét đồng hồ; đổi BatteryBot thành Pinova Bot), mỗi cảnh một bảng màu trong theme (`core/theme/scene_palette.dart`: teal/cyan → xanh dương → tím → hồng/cam); màu nền, chữ nhấn, nút và chấm trang hòa dần theo ngón tay khi vuốt.
+- Mỗi trang là một cảnh 2,6 giây chạy một lượt khi trang vừa ló vào, tua về khi đã ra khỏi màn hình, nên vuốt lại thì phát lại. Không có vòng lặp; Giảm chuyển động thì đứng yên ở khung cuối.
+- Chữ: nhãn khép giãn chữ khi hiện, tiêu đề lau từ trên xuống ra khỏi lớp mờ, dòng nhấn có gradient của cảnh. Hình: xoay chiều sâu và trôi nhanh hơn chữ khi vuốt (thị sai). Nút: gradient của cảnh, một vệt sáng khi cảnh ổn định, lún nhẹ khi chạm. Nền: ba vùng sáng theo cảnh, bụi sáng có chiều sâu, một vệt sáng quét qua khi cảnh vào.
+- Cảnh quét đồng hồ dùng cùng đường viền màn hình Feliz với máy quét thật.
+
+**Hiệu ứng đổi gói (`features/premium/plan_transition_overlay.dart`):** màn tối dần, khi nâng gói thì hai vòng sáng màu gói và tia sáng bung ra, huy chương rơi xuống và xoay chậm dần đến khi dừng, tên gói lau vào rồi lóe sáng một lần, quyền lợi hiện lần lượt kèm dấu tích tự vẽ, cuối cùng cả thẻ phóng qua người xem để vào lại app. Vẫn khoảng 5 giây, chạm để bỏ qua, Giảm chuyển động là thẻ tĩnh 2 giây.
+
+**Chuyển cảnh chung (`core/theme/luxe_theme.dart`):** chuyển trang 460 ms vào / 340 ms ra, trang mới tiến lại gần từ hơi nhỏ, trang dưới tối và lùi lại. Nút Filled lún nhẹ khi bấm (`LuxePressScale`). `LuxeReveal` thêm chút chiều sâu. Màn Bắt đầu hòa sang Đăng nhập bằng phóng và mờ.
+
+**Khung quét (`features/ai/dashboard_scan_screen.dart`, `DashboardScanGuide`):** viền là đường cong của kính Feliz (`DashboardTemplate.glass`, `glassPath`) thay cho hình thang góc nhọn; mép tối mềm dần, có quầng sáng theo màu gói. Khi đang quét, một vệt sáng chạy quanh viền và một dải sáng đi lên xuống trong kính (vòng lặp gắn với việc đang quét, đã thêm vào danh sách cho phép). Vùng %, ODO, °C có nhãn dạng viên thuốc và chuyển emerald khi đã khóa số.
+
+**Quét chính xác hơn (`data/services/dashboard_layout_parser.dart`):**
+- Bỏ phiếu: 4 trên 8 khung, hơn phương án đứng thứ hai ít nhất 2 phiếu (trước là 3 trên 6). Số dài chỉ nhận phiếu của số ngắn nằm trong nó khi chính nó đã đọc được ít nhất 2 lần.
+- Lọc theo vùng: chữ số %, ODO, nhiệt độ phải cao 5–16% kính (đo trên 6 ảnh thật: 7–11%, số tốc độ 19–24%); ODO vượt số cũ quá 3 000 km bị bỏ.
+- Bài thử mới (`test/unit/qa149_scan_vote_test.dart`). Luật cũ khóa sai 4 tình huống: một lần đọc thừa "88" thắng 8% thật; chia đôi 68/63 khóa 63; ODO 9818 khi số cũ 4818; số tốc độ "00" vào vùng % thành 0%. Luật mới không khóa sai cả 4.
+- Ảnh thật bị làm nhiễu, lóa, lệch (18 lượt): 18/18 khóa đủ, 0 sai, trung bình 4,3 khung (trước 3,1 khung, chậm hơn khoảng một khung).
+
+**Trên máy (Xiaomi `cf4c58a7`, bản 1.3.21, đang sạc Theo giờ 11:50–14:20, không chạm nút sạc):** đã xem Sạc pin, Lịch sử, Tổng quan, Tiện ích, Cài đặt. Giữa chừng một bong bóng Messenger hiện đè lên app nên đã xóa ảnh chụp và dừng thao tác tới khi chủ app tắt bong bóng. Lỗi tìm thấy và đã sửa:
+- Thông báo "Đã bắt đầu sạc" kẹt đầu màn hình hơn 35 phút, bấm X không tắt. Nguyên nhân: thông báo bị thay trong đúng khung hình nó được chèn chưa "mounted", nên `dismiss` bỏ qua, mất bộ hẹn giờ và nút X trỏ sang thông báo khác. `AppPopup` giờ giữ mọi thông báo đã chèn, mỗi thông báo tự gỡ chính nó (hẹn giờ và nút X). Test tái hiện lỗi trên code cũ.
+- Tổng quan và Cài đặt vẫn hiện 9% (pin đỏ) và 5 km khi pin ước tính đã khoảng 28%: giờ đọc ước tính của phiên đang sạc (`chargingEstimateProvider`), nhãn "Đang sạc · ước tính", Cài đặt có biểu tượng sạc.
+- Pinova Bot gợi ý "Pin xe chỉ còn 9%, chuẩn bị lịch sạc" khi xe đang sạc: bỏ gợi ý pin yếu khi đang sạc, lời chào buổi sáng nói "Xe đang sạc".
+- Dòng ước tính tách "(431" và "W đo thực tế)" ra hai dòng: số và đơn vị dùng khoảng trắng không ngắt.
+- Thói quen sạc báo "Chưa đủ dữ liệu · 1 lần sạc trong 60 ngày" dù xe có 8 lần: `SmartChargeRepository.history` trả riêng bộ nhớ đệm của tiến trình hễ có một phiên trong đó (phiên đang sạc), bỏ qua ChargeLogs. Giờ luôn đọc ChargeLogs rồi gộp với bộ đệm (bản trong bộ nhớ thắng, không ghi đè phiên đang chạy). Ảnh hưởng cả km/% học từ ODO và việc nhận đoạn đường giữa hai lần đọc. Test tái hiện lỗi trên code cũ (`test_qa149_history.py`).
+- Pinova Bot vẫn ghi "Pin 9% · Dữ liệu hồ sơ" và hiện thẻ "Cảnh báo mức pin thấp" khi đang sạc: dòng ngữ cảnh ghi "Đang sạc · ước tính X%", không gợi ý pin yếu khi đang sạc, ngữ cảnh gửi máy chủ dùng % ước tính kèm `batteryCharging` (máy chủ thêm khóa này vào danh sách cho phép).
+- Hướng dẫn lần đầu của Pinova Bot ở lại trên app sau khi đóng bot ("Đang đợi mục này hiển thị") và chặn mọi thao tác tới khi bấm Bỏ qua: hướng dẫn giờ đóng cùng màn hình đã mở nó (`CoachMarkOverlay.show(route:)`), chưa tính là đã xem nên lần sau mở bot sẽ hiện lại. Trên máy đã bấm Bỏ qua để trả lại app.
+- Sức khỏe pin theo từng lần sạc vẽ tới 120%: trục dừng ở 100%, lần đo vượt 100% là chấm rỗng trên đường 100%, thêm một dòng giải thích đồng hồ xe lệch vài %.
+- Ghi nhận, chưa sửa: nút Pinova Bot thu vào mép phải vẫn đè một phần ô số liệu/thẻ lịch sử khi cuộn; viên "Đang sạc" nổi che một phần thẻ ở giữa Tổng quan. AI cá nhân ghi "Đã huấn luyện từ 77 chuyến" cạnh "Lần gần nhất: Chưa đủ dữ liệu để đánh giá". Phiên 02/11 vẫn "Gián đoạn" (chờ script).
+
+**Kiểm thử:** `flutter test` 1399 đạt / 216 bỏ qua; `flutter analyze` sạch; `pytest tests` 944 đạt / 15 bỏ qua. Test mới: màn Bắt đầu phát lại cảnh khi vuốt lại, test 4 trang ở 320 dp chữ ×1,5 và 412 dp; test quét như trên. Khung hình để xem bằng mắt: `test/visual/qa149_motion_review_test.dart` (chỉ chạy khi đặt `QA149_OUT` và `QA139_FONTS`).
+
+**Hạn chế:** chưa cài APK có bản này lên máy, các hiệu ứng mới mới xem qua khung hình dựng trên máy tính. Sửa lịch sử là phía máy chủ: cần deploy (máy chủ vẫn bản QA 146, `deploy164.ps1` chưa chạy được). Hình viền Feliz dựng theo ảnh của chủ app, chưa đo trên xe. Quét chậm hơn khoảng một khung để đổi lấy việc không khóa sai. Bài thử dùng 6 ảnh của cùng một số (68%, 4818 km).
+
 ## 148. Task Completion Log — Sạc đến % chính xác cho mọi người dùng: rà soát cả vòng dự đoán, ngắt, lịch sử, huấn luyện (06/11/2026, chủ app chọn) — Code + test xong, chưa deploy
 
 **Chủ app chọn:** Wh/1% tự học cho mọi gói (bù lệch, AI nhỏ, nút Huấn luyện, báo cáo vẫn Ultra); tự huấn luyện mặc định bật, có công tắc; bắt buộc xác nhận mức pin đầu khi số đã cũ; sửa trạng thái phiên 02/11.

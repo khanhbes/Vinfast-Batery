@@ -272,6 +272,14 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Pin đầu là đầu vào quan trọng nhất: số không phải vừa đọc trong 2 giờ, hoặc là số ước tính sau sạc, phải xác nhận trước khi dự đoán (`StartSocFreshness`). Ô nhập % sau sạc không điền sẵn và không bắt buộc; đọc quá 6 giờ thì hỏi xe đã chạy chưa, đã chạy thì không học.
   - Bù lệch dùng một lần (`carried_offset_pct` trên phiên). Finetune AI chỉ chấm trên lần sạc chưa thấy. Dung lượng lấy từ hồ sơ xe, không lấy số app gửi.
 
+- **QA 149 (08/11/2026) — chuyển động như phim ngắn, khung quét Feliz:**
+  - Màn Bắt đầu: 4 cảnh màu `SceneColors` (`core/theme/scene_palette.dart`, chỉ cho màn kể chuyện, không phải màu trạng thái); mỗi cảnh một lượt 2,6 s, tua về khi ra khỏi màn hình nên vuốt lại phát lại; không vòng lặp; Giảm chuyển động đứng yên.
+  - Đổi gói: vòng sáng + tia sáng (chỉ khi nâng), huy chương xoay chậm dần, tên gói lau vào và lóe một lần, dấu tích tự vẽ, thoát bằng phóng qua; vẫn 5 s, chạm bỏ qua.
+  - Chuyển trang `LuxePageTransitionsBuilder` 460/340 ms (tiến lại gần + trang dưới lùi). `LuxePressScale` cho nút Filled. Hiệu ứng mới dùng các bậc này, không thêm package.
+  - Máy quét: viền là `DashboardTemplate.glass` (đường cong kính, `glassPath`); vệt sáng quét chỉ chạy khi đang quét. Bỏ phiếu 4/8 khung, hơn 2 phiếu, số dài phải tự có ≥ 2 phiếu mới nhận số ngắn; chữ số trong vùng cao 5–16% kính; ODO không vượt số cũ quá 3 000 km. Khóa sai tệ hơn chậm một khung.
+  - Hướng dẫn màn hình (`CoachMarkOverlay`) đóng cùng route đã mở nó; màn nào hiện % pin (Tổng quan, Cài đặt, Pinova Bot) đọc ước tính khi đang sạc.
+  - `AppPopup`: mỗi thông báo tự gỡ chính nó (hẹn giờ, nút X); `dismiss` gỡ mọi thông báo đã chèn, kể cả chưa kịp vẽ. Màn hiện "pin bây giờ" đọc `chargingEstimateProvider` trước (ước tính của phiên đang sạc) và ghi "Đang sạc · ước tính"; Pinova Bot không gợi ý sạc khi xe đang sạc.
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.
