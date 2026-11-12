@@ -1028,92 +1028,141 @@ class _ScanTile extends StatelessWidget {
       container: true,
       label: '$label ${value == null ? 'chưa có' : '$value $unit'}, $status',
       excludeSemantics: true,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 260),
-        curve: LuxeMotion.enter,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          color: color.withValues(alpha: locked ? 0.10 : 0.05),
-          border: Border.all(
-            color: color.withValues(alpha: locked ? 0.55 : 0.25),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: LuxeText.eyebrow,
-                  ),
-                ),
-                const Spacer(),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: locked
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          key: ValueKey('locked'),
-                          size: 18,
-                          color: LuxeColors.emerald,
-                        )
-                      : const SizedBox(key: ValueKey('open'), height: 18),
-                ),
-              ],
+      child: _catch(
+        context,
+        color,
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 260),
+          curve: LuxeMotion.enter,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: color.withValues(alpha: locked ? 0.10 : 0.05),
+            border: Border.all(
+              color: color.withValues(alpha: locked ? 0.55 : 0.25),
             ),
-            const SizedBox(height: 6),
-            SizedBox(
-              height: 40,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 180),
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: value ?? '—'),
-                        if (value != null)
-                          TextSpan(
-                            text: ' $unit',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: LuxeColors.muted,
-                            ),
-                          ),
-                      ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: LuxeText.eyebrow,
                     ),
-                    key: ValueKey(value),
-                    maxLines: 1,
-                    textScaler: TextScaler.noScaling,
-                    style: TextStyle(
-                      color: value == null ? LuxeColors.dim : LuxeColors.text,
-                      fontSize: 30,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                  const Spacer(),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: locked
+                        ? const Icon(
+                            Icons.check_circle_rounded,
+                            key: ValueKey('locked'),
+                            size: 18,
+                            color: LuxeColors.emerald,
+                          )
+                        : const SizedBox(key: ValueKey('open'), height: 18),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 40,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(text: value ?? '—'),
+                          if (value != null)
+                            TextSpan(
+                              text: ' $unit',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                                color: LuxeColors.muted,
+                              ),
+                            ),
+                        ],
+                      ),
+                      key: ValueKey(value),
+                      maxLines: 1,
+                      textScaler: TextScaler.noScaling,
+                      style: TextStyle(
+                        color: value == null ? LuxeColors.dim : LuxeColors.text,
+                        fontSize: 30,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              status,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: LuxeText.caption.copyWith(color: color),
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: LuxeText.caption.copyWith(color: color),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
+
+  /// QA 151: the moment a number locks, a frame closes in on the tile and
+  /// the tile gives one small bounce, as if it caught the number. Once.
+  Widget _catch(BuildContext context, Color color, Widget child) {
+    if (!locked || MediaQuery.disableAnimationsOf(context)) return child;
+    return TweenAnimationBuilder<double>(
+      key: const ValueKey('scan-catch'),
+      tween: Tween(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 460),
+      curve: Curves.easeOutCubic,
+      child: child,
+      builder: (context, t, child) => Transform.scale(
+        scale: 1 + 0.05 * math.sin(math.pi * t),
+        child: CustomPaint(
+          foregroundPainter: _CatchPainter(t, color),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
+
+class _CatchPainter extends CustomPainter {
+  const _CatchPainter(this.t, this.color);
+  final double t;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t >= 1) return;
+    final gap = 14 * (1 - t);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        (Offset.zero & size).inflate(gap),
+        Radius.circular(18 + gap),
+      ),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.6
+        ..color = color.withValues(alpha: 0.85 * (1 - t)),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_CatchPainter old) => old.t != t || old.color != color;
 }
 
 /// The viewfinder (QA 149). With a template the window is the cluster's own

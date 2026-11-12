@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_settings.dart';
+import '../../../core/widgets/luxe_expand_route.dart';
 import '../../../data/models/entitlement.dart';
 import '../../../data/models/shelly_connection_state.dart';
 import '../../../data/services/shelly_connection_coordinator.dart';
@@ -152,6 +153,8 @@ class _TileCard extends StatelessWidget {
           : '${tile.title}. ${tile.value}',
       onTap: () {
         HapticFeedback.selectionClick();
+        // QA 151: the page this opens grows out of this tile.
+        LuxeExpandOrigin.mark(context);
         tile.onTap();
       },
       child: LuxeGlass(

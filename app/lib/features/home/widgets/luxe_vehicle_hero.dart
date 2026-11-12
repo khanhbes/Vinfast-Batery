@@ -21,8 +21,13 @@ class LuxeVehicleHero extends StatefulWidget {
     this.learned,
     this.rangePending = false,
     this.charging = false,
+    this.onOpenVehicle,
   });
   final VehicleModel? vehicle;
+
+  /// QA 151: tapping the photo opens Xe của tôi; the photo flies to the
+  /// vehicle's card there (same Hero tag as the garage card).
+  final VoidCallback? onOpenVehicle;
 
   /// QA 149: a charge is running; the % is the charge's estimate.
   final bool charging;
@@ -71,6 +76,23 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
     super.dispose();
   }
 
+  Widget _openable(Widget photo) {
+    final open = widget.onOpenVehicle;
+    final id = widget.vehicle?.vehicleId ?? '';
+    if (open == null || id.isEmpty) return photo;
+    return Semantics(
+      button: true,
+      label: 'Mở Xe của tôi',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: open,
+        // No shared-element flight (owner's choice, 13/11/2026): the garage
+        // opens with the normal page transition.
+        child: photo,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final v = widget.vehicle;
@@ -102,6 +124,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
               ? ', đang sạc, pin ước tính $percent phần trăm'
               : ', pin $percent phần trăm'}',
       child: LuxeGlass(
+        raised: true,
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -202,12 +225,14 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                             opacity: e,
                             child: Transform.translate(
                               offset: Offset(24 * (1 - e), bob),
-                              child: VehiclePhoto(
-                                url: photo,
-                                reflection: true,
-                                fallback: LuxeScooterArt(
-                                  level: (percent ?? 0) / 100,
-                                  spin: t,
+                              child: _openable(
+                                VehiclePhoto(
+                                  url: photo,
+                                  reflection: true,
+                                  fallback: LuxeScooterArt(
+                                    level: (percent ?? 0) / 100,
+                                    spin: t,
+                                  ),
                                 ),
                               ),
                             ),
@@ -283,13 +308,22 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(
-                          range == null ? '— km' : '$range km',
-                          style: const TextStyle(
-                            color: LuxeColors.text,
-                            fontSize: 19,
-                            fontWeight: FontWeight.w300,
-                            fontFeatures: [ui.FontFeature.tabularFigures()],
+                        // QA 151: rolls from the old figure to the new one,
+                        // like the % beside it.
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(end: (range ?? 0).toDouble()),
+                          duration: MediaQuery.disableAnimationsOf(context)
+                              ? Duration.zero
+                              : const Duration(milliseconds: 1200),
+                          curve: LuxeMotion.enter,
+                          builder: (context, val, _) => Text(
+                            range == null ? '— km' : '${val.round()} km',
+                            style: const TextStyle(
+                              color: LuxeColors.text,
+                              fontSize: 19,
+                              fontWeight: FontWeight.w300,
+                              fontFeatures: [ui.FontFeature.tabularFigures()],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -606,12 +640,27 @@ class _ChargeBar extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
                 gradient: LinearGradient(
-                  colors: v < 0.2
-                      ? const [Color(0xFFB45309), LuxeColors.champagne]
+                  colors: v <= 0.2
+                      ? [
+                          Color.lerp(
+                            LuxeColors.level(v * 100, context.planAccent),
+                            LuxeColors.background,
+                            0.45,
+                          )!,
+                          LuxeColors.level(v * 100, context.planAccent),
+                        ]
                       : [context.planAccentDeep, context.planAccent],
                 ),
                 boxShadow: [
-                  BoxShadow(color: context.planAccentGlow, blurRadius: 10),
+                  BoxShadow(
+                    color: v <= 0.2
+                        ? LuxeColors.level(
+                            v * 100,
+                            context.planAccent,
+                          ).withValues(alpha: 0.33)
+                        : context.planAccentGlow,
+                    blurRadius: 10,
+                  ),
                 ],
               ),
             ),

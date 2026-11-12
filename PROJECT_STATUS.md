@@ -12,6 +12,98 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 152. Task Completion Log — Màu sắc: Pinova Bot về bảng màu LUXE, một thang màu cho mức pin thấp (12/11/2026, chủ app: "tiếp tục thực hiện" sau 10 đề xuất về thiết kế và màu) — Code + test xong, APK 2.1.0+233 đã cài lên Xiaomi 13/11, chưa commit
+
+**Phạm vi đã làm:** mục 1, 2, 3, 4 và 7 trong 10 đề xuất. Mục 3, 4, 7 làm sau khi chủ app trả lời "1. ok 2. ok Làm theo đề xuất, tăng lên thành phiên bản 2.1.0". Mục 5, 6, 8, 9, 10 chưa làm, xem cuối mục.
+
+- **Mục 1, Pinova Bot:** thân, chân, ăng-ten, kính mặt và bong bóng thoại trước là xanh đá phiến (ánh xanh lam) viết bằng mã hex; nay dùng các bậc than chì và bạch kim của `LuxeColors` (`raisedHigh`, `surface`, `background`, `rule`, `ruleStrong`, `platinumLow`, `sheet`). Má hồng dùng rose của bảng màu. Mắt lúc sạc trước là xanh lam trời; nay theo màu gói, hình tia sét vẫn cho biết đang sạc (không dùng emerald vì biểu cảm sạc còn xuất hiện ở khảo sát và màn Bắt đầu, nơi không có phiên sạc thật). Hai file bot không còn mã hex nào. File: `core/widgets/battery_bot_mascot.dart`, `bot_face.dart`.
+- **Mục 2, mức pin thấp:** `LuxeColors.level(percent, normal)`: dưới 10% rose, 10–20% champagne, trên 20% màu gói. Dùng ở thanh pin của thẻ xe (trước là cam nâu ngoài bảng), bốn vạch pin kiểu đồng hồ và kiểu Tối giản ở Tổng quan (trước là đỏ và cam ngoài bảng; kiểu Tối giản trước đổi thẳng sang rose ở 20%). File: `luxe_theme.dart`, `luxe_vehicle_hero.dart`, `dashboard_style_heroes.dart`.
+- **Kiểm thử:** thêm 2 test vào `qa151_motion_test.dart` (thang màu mức pin; hai file bot không có mã hex), tổng 21. Toàn bộ Flutter: 1449 đạt, 216 bỏ qua, 0 trượt. `flutter analyze lib` sạch. Đã xem ảnh tổng hợp 10 biểu cảm dựng từ test sau khi đổi màu.
+- **Mục 2, mở rộng:** `LuxeColors.level` dùng thêm ở sheet sửa % pin, Giám sát pin và Lộ trình (trước mỗi màn một ngưỡng riêng: 20/40, 20/50).
+- **Mục 3, champagne chỉ còn cho cảnh báo (đảo quy tắc QA 139, chủ app đồng ý 12/11):** số và dòng ước tính chuyển sang bạch kim hoặc chữ mờ, chữ "ước tính" mang nghĩa. Đã đổi 20 chỗ ở các số ước tính nổi bật: thẻ đang sạc (4), ô chọn khoảng %, dòng ước tính của Sạc đêm và Sạc theo giờ, ba kiểu Tổng quan (3), vòng dung lượng pin, Sức khỏe pin (3), biểu đồ xu hướng (2), huy hiệu Giám sát pin. Các chỗ champagne khác trong app chưa rà từng chỗ; chỗ nào là ước tính chứ không phải cảnh báo thì đổi dần theo quy tắc mới.
+- **Mục 4, ba tầng bề mặt:** `LuxeGlass(raised: true)` (nền sáng hơn một bậc, bóng mềm) cho thẻ xe ở Tổng quan và thẻ đang sạc lúc chuyển trạng thái; thẻ thường giữ nguyên; thẻ phụ là `quiet` (QA 151.3). File: `luxe_theme.dart`, `luxe_vehicle_hero.dart`, `active_charging_card_v2.dart`.
+- **Mục 7, biểu đồ:** cột 7 ngày ở Lịch sử: khi chưa chọn ngày, cột hôm nay sáng đủ, các ngày khác 70%. Biểu đồ xu hướng: điểm mới nhất `platinumHi` có quầng, các điểm cũ `platinumMid`. File: `history_luxe_widgets.dart`, `health_trend_chart.dart`.
+- **Phiên bản:** `2.1.0+233` (chủ app chuyển dòng phiên bản từ 1.3.x sang 2.1.x).
+- **Kiểm thử sau mục 3, 4, 7:** `flutter analyze lib` sạch; toàn bộ Flutter 1449 đạt, 216 bỏ qua, 0 trượt.
+- **APK lần 1 (12/11, không cài):** 174 147 969 byte, SHA-256 `af83b5e0ccf9d9380992ddb155ec0b8f106a9d7bb9d42413e2d7f12237858ba7`.
+- **Bỏ hiệu ứng xe bay (13/11, chủ app: "bỏ hiệu ứng xe bay"):** ảnh xe ở Tổng quan không còn bay sang Xe của tôi (gỡ `Hero` trong `luxe_vehicle_hero.dart`, thêm ở mục 151.3). Chạm ảnh xe vẫn mở Xe của tôi bằng chuyển trang thường. Hiệu ứng thẻ xe bay từ Xe của tôi sang Thông số chi tiết (có từ trước QA 151) cũng đã gỡ theo lời chủ app ("bỏ luôn"), sau bản APK đã cài; toàn bộ Flutter sau khi gỡ: 1449 đạt, 216 bỏ qua, 0 trượt, `flutter analyze lib` sạch.
+- **APK đã cài (13/11):** vẫn `2.1.0+233` vì bản lần 1 chưa lên máy nào. `app/build/app/outputs/flutter-apk/app-profile.apk`, 219 194 852 byte, SHA-256 `4414be13278c2aecfc5967857dafae286e8909f2d499f0b51152c7cb7a91507c`. `adb install -r` trên Xiaomi báo Success, đọc lại `versionName=2.1.0`, `versionCode=233`. Trước khi build: `flutter analyze lib/features/home` sạch, 33 test liên quan đạt; không chạy lại toàn bộ. File lớn hơn lần 1 khoảng 45 MB dù chỉ đổi một dòng Dart; `libapp.so` mỗi kiến trúc 21 MB, nghi là lần này không được tách ký hiệu gỡ lỗi, chưa xác minh.
+- **Chưa kiểm:** chưa xem trên máy thật (cả QA 151 và 152). Màu ước tính mới, tầng thẻ và hai biểu đồ cần chủ app nhìn trên máy trước khi đổi màu tiếp.
+
+**Chưa làm:**
+- Mục 5 (nền theo ngữ cảnh), 6 (thang chữ), 8 (sắc gói Free), 9 (Ultra ở thẻ xe), 10 (icon vẽ riêng, làm thành việc riêng).
+- Vòng chọn % và Lịch sử chưa dùng `LuxeColors.level`.
+
+---
+
+## 151. Task Completion Log — Chuyển động, âm thanh và rung cho các khoảnh khắc sạc (12/11/2026, chủ app chọn mục 1–5, mục 11, rồi toàn bộ phần còn lại của 14 đề xuất) — Code + test xong, chưa build, chưa cài, chưa commit
+
+**Yêu cầu của chủ app:** làm mục 1–5 trước; chỗ cần sang thì sang, chỗ cần điện ảnh thì điện ảnh; có thêm âm thanh và rung; Pinova Bot được vẽ lại để thêm biểu cảm (làm sau mục 1–5); tối ưu cho máy cấu hình thấp: **tạm thời chưa làm**.
+
+| # | Hạng mục | Đã làm | File chính |
+|---|---|---|---|
+| 1 | Cảnh bắt đầu sạc | Khi ổ đã đọc lại là BẬT: 1,5 giây, dòng điện chạy lên, vòng khép lại và nháy một lần, tia sét emerald; không chặn chạm; gọi lần hai khi đang phát thì bỏ qua | `features/ai/widgets/charge_ceremony.dart` (`ChargeCeremony.started`) |
+| 2 | Cảnh sạc xong | Phiên `completed` và ≥ 30 Wh: 2,4 giây, vòng đầy tới % đạt được, dấu tích tự vẽ, kWh đếm lên, thời lượng, dòng "Mức pin là ước tính"; chạm để bỏ qua; phát trước sheet hỏi % thực tế | `ChargeCeremony.finished`, `smart_charging_control_screen.dart` (`_maybeAskActualSoc`) |
+| 3 | Dòng điện theo công suất thật | Chu kỳ = 2400 ms × 400 W / công suất, kẹp 1,2–4,8 giây, làm tròn 300 ms để số đọc nhấp nháy không đổi nhịp; dưới 15 W thì đứng yên | `active_charging_card_v2.dart` (`flowPeriod`) |
+| 4 | Khung chờ thay vòng xoay | `LuxeSkeleton` (`.cards`, `.list`, `blocks`) có nhãn cho TalkBack, đứng yên khi Giảm chuyển động; dùng ở AI cá nhân, Sức khỏe pin, Thói quen sạc, Lịch sử sạc (lần tải đầu) | `core/widgets/luxe_skeleton.dart` |
+| 5 | Số lăn | Quãng đường (km) trên thẻ xe ở Tổng quan lăn tới số mới như % pin | `home/widgets/luxe_vehicle_hero.dart` |
+| + | Rung và âm thanh | `LuxeFeedback`: `select`, `confirm`, `error`, `chargeStarted`, `chargeDone`. Hai tiếng chuông tự tổng hợp (không dùng âm thanh của bên thứ ba): bắt đầu 0,62 giây, xong 1,15 giây. Android phát bằng SoundPool kiểu âm hệ thống nên chế độ im lặng của máy tắt được. Công tắc: Cài đặt → Giao diện → Âm thanh (`appearance-sound`, lưu trên máy) | `core/services/luxe_feedback.dart`, `MainActivity.kt`, `res/raw/charge_start.wav`, `charge_done.wav` |
+
+**Quy tắc giữ nguyên:** không có vòng lặp trang trí (hai cảnh chạy một lượt rồi tự gỡ); Giảm chuyển động thì không vẽ cảnh, chỉ rung và âm thanh; emerald chỉ ở hai trạng thái thật (ổ đã BẬT có đọc lại, phiên đã xong); % sau sạc vẫn ghi là ước tính; không thêm package.
+
+**Kiểm thử:** `test/widget/qa151_motion_test.dart` 10 test (hai cảnh, bỏ qua bằng chạm, 320 dp chữ ×2, Giảm chuyển động, `flowPeriod`, khung chờ). `flutter analyze lib` sạch. Toàn bộ Flutter sau khi sửa test lịch sử sạc (còn chờ vòng xoay cũ) và thêm mục 11: 1442 đạt, 216 bỏ qua, 0 trượt.
+
+**Giới hạn, chưa kiểm:**
+- Chưa build, chưa cài: chưa nghe tiếng chuông và chưa thấy hai cảnh trên máy thật. Cảnh sạc chỉ kiểm được khi sạc thật có chủ app giám sát.
+- iOS chưa có trình phát âm thanh (lệnh gọi không làm gì); rung vẫn có.
+- `select`/`confirm`/`error` đã có nhưng mới dùng ở hai cảnh sạc; chưa gắn vào các nút, chip, bánh xe chọn giờ.
+- **Máy cấu hình thấp (quyết định của chủ app 12/11/2026): tạm thời chưa làm.** Chưa có chế độ giảm hiệu ứng theo máy, chưa đo khung hình trên máy yếu. Người dùng máy yếu hiện chỉ có công tắc Giảm chuyển động của hệ thống.
+
+**Việc kế:** biểu cảm Pinova Bot (mục 11) đã làm, xem 151.1; các đề xuất 6–10 và 12–14: xem 151.2.
+
+### 151.1. Biểu cảm Pinova Bot (mục 11, 12/11/2026, chủ app cho phép vẽ lại) — Code + test xong, chưa build
+
+- **Một khuôn mặt dùng chung** `BotFace` (`core/widgets/bot_face.dart`): mắt, mày, miệng và chi tiết phụ (má hồng, giọt mồ hôi, sao, chữ "z") tính theo bán kính mắt, nên bot toàn thân và avatar tròn vẽ cùng một mặt ở mọi cỡ (24–200 dp). Trước đây avatar chỉ có hai kiểu mắt và không biểu cảm nào có miệng. Avatar dưới 30 dp không vẽ miệng.
+- **10 biểu cảm** (`BatteryBotMood`): 6 cũ (bình thường, chào, vui, suy nghĩ, đang sạc, lắng nghe) nay đều có miệng; 4 mới: `worried` (lo lắng: mày chau, giọt mồ hôi), `sorry` (xin lỗi: mắt cụp, miệng trễ), `celebrating` (ăn mừng: cười lớn, sao), `sleepy` (ngủ: mắt nhắm, "z").
+- **Phản ứng một lượt khi đổi biểu cảm** (0,52 giây, không lặp): nảy nhẹ; lo lắng thì lắc, ăn mừng thì nhảy, xin lỗi và buồn ngủ thì chùng xuống, chào thì nghiêng qua lại. Giảm chuyển động: đổi mặt, không chuyển động. Khi suy nghĩ, ánh mắt đảo chậm qua lại (chỉ khi đang suy nghĩ thật).
+- **Gắn với việc thật:**
+  - Nút bot nổi khi không có bong bóng (`AssistantContextCoordinator.restingMood`): mắt tia sét khi có xe đang sạc thật; ngủ từ 23:00 đến 05:00; ăn mừng 6 giây khi một phiên sạc tự hoàn tất (`react`, gọi từ màn Sạc cùng lúc với cảnh sạc xong).
+  - Bong bóng pin dưới 20%: lo lắng (trước là suy nghĩ).
+  - Khung chat: avatar đầu sheet lắng nghe khi đang nghe giọng nói, suy nghĩ khi đang trả lời, xin lỗi khi câu trả lời gần nhất lỗi, còn lại vui. Avatar cạnh mỗi câu trả lời là chính Pinova Bot (trước là icon robot chung): suy nghĩ khi đang viết, xin lỗi khi lỗi.
+- **Kiểm thử:** `qa151_motion_test.dart` thêm 4 test (mọi biểu cảm ở 4 cỡ, phản ứng một lượt rồi đứng yên, Giảm chuyển động, thứ tự chọn mặt nghỉ). Đã xem ảnh tổng hợp 10 biểu cảm × 4 cỡ dựng từ test. Toàn bộ Flutter: 1442 đạt, 216 bỏ qua, 0 trượt; `flutter analyze lib` sạch.
+- **Chưa kiểm:** chưa xem trên máy thật. Mắt khi sạc vẫn màu xanh lam cũ, chưa đổi.
+
+### 151.2. Các đề xuất còn lại 6–10, 12–14 (12/11/2026, chủ app yêu cầu làm hết theo thứ tự ưu tiên) — Code + test xong, chưa build
+
+| # | Đề xuất | Kết quả | File chính |
+|---|---|---|---|
+| 6 | Chuyển cảnh có chung phần tử | **Làm một nửa.** Ô ở tab Tiện ích nở ra thành màn tính năng và gập lại về ô (`LuxeExpandRoute`, 440/320 ms). Ảnh xe bay từ Tổng quan sang Xe của tôi **không làm**: Tổng quan không có lối bấm sang màn đó; thẻ xe trong Xe của tôi sang Thông số chi tiết đã có Hero từ trước | `core/widgets/luxe_expand_route.dart`, `luxe_tile_grid.dart`, `utilities_screen.dart` |
+| 7 | Đổi mục Sạc AI / Theo giờ / Lịch sử | Lịch sử trượt vào từ phải, phần điều khiển sạc từ trái (320 ms). Sạc AI ↔ Theo giờ đã trượt theo hướng từ trước | `features/charge/charge_screen.dart` |
+| 8 | Biểu đồ tự vẽ | Đường Sức khỏe pin vẽ từ trái sang phải một lần (1,1 giây), điểm hiện khi đường chạy tới. Cột ở Lịch sử và ở Tổng quan mọc lần lượt từ ngày đầu | `health_trend_chart.dart`, `history_luxe_widgets.dart`, `recent_charging_chart.dart` |
+| 9 | Quét đồng hồ khóa số | **Bản rút gọn.** Khi một số khóa, một khung khép lại ôm lấy ô số và ô nảy nhẹ một lần. "Số bay vào ô nhập" **không làm**: máy quét trả kết quả cho 6 màn khác nhau | `features/ai/dashboard_scan_screen.dart` |
+| 10 | Rung phân tầng | Phần lớn đã phân tầng sẵn (chọn: nhẹ; bật sạc: mạnh; dừng: vừa). Thêm: lưu thành công là một nhịp vừa, lưu bị từ chối và lỗi do người dùng gây ra (`AppPopup.showError(userInitiated: true)`) là hai nhịp | `luxe_submit_button.dart`, `app_popup.dart` |
+| 12 | Trạng thái trống có hình chuyển động một lần | **Đã có từ trước, không đổi:** `LuxeEmptyArt` (vòng quỹ đạo vẽ một lượt) ở Thông báo và các màn dùng `EmptyState`; Lịch sử trống có hình phích cắm vẽ một lượt | — |
+| 13 | Mở khóa thành tựu | Huy hiệu lật 3D đã có từ trước. Sửa thời điểm: màn mở khóa chờ 1,8 giây để kết quả vừa hiện (ví dụ dự đoán đầu tiên) không bị che, và không phát đè lên cảnh bắt đầu sạc hoặc sạc xong. "Huy hiệu nằm vào bộ sưu tập" không làm | `smart_charging_control_screen.dart` (`celebrationDelay`) |
+| 14 | Mở app: logo biến thành vòng % | **Không làm.** Tổng quan kiểu mặc định không có vòng % để biến thành; màn chờ đã bàn giao bằng trôi tới và mờ dần 560 ms, đồng thời thẻ xe vào cảnh và thanh pin đầy dần từ 0. Đây là đường khởi động (`AuthGate`), không đổi khi chưa có đích rõ |
+
+**Ba đề xuất giao diện tĩnh** (giảm viền thẻ ở Tổng quan, tiêu đề thu gọn khi cuộn ở màn dài, nút bot tự né nội dung bấm được) **chưa làm**: đổi bố cục, cần chủ app xem hình trước.
+
+**Kiểm thử:** `qa151_motion_test.dart` thêm 3 test (ô nở thành trang và gập lại, đường xu hướng vẽ một lượt rồi đứng yên, rung khi lưu được và khi bị từ chối), tổng 17. Toàn bộ Flutter: 1445 đạt, 216 bỏ qua, 0 trượt; `flutter analyze lib` sạch.
+
+**Chưa kiểm:** chưa xem trên máy thật. Máy quét và màn mở khóa thành tựu chỉ kiểm bằng phân tích tĩnh và các test sẵn có, chưa có test riêng cho hiệu ứng khóa số và khoảng chờ 1,8 giây.
+
+### 151.3. Ảnh xe bay sang Xe của tôi và ba đề xuất giao diện tĩnh (12/11/2026, chủ app: "làm theo hướng hợp lí nhất", "có") — Code + test xong, chưa build
+
+- **Ảnh xe ở Tổng quan bấm được** (kiểu Tổng quan mặc định): mở Xe của tôi, ảnh bay tới thẻ của xe đó và bay về khi quay lại (cùng Hero tag `vehicle-hero-<id>` với thẻ trong gara). TalkBack đọc "Mở Xe của tôi". Đây là lối vào mới; trước đây Tổng quan không có lối sang màn này. File: `luxe_vehicle_hero.dart` (`onOpenVehicle`), `home_screen.dart`.
+- **Mục 14 (logo biến thành vòng %): quyết định không làm.** Lý do như 151.2: không có vòng % làm đích, bàn giao hiện tại đã liền mạch, và đây là đường khởi động.
+- **Viền thẻ ở Tổng quan:** `LuxeGlass(quiet: true)` (viền còn 45% độ đậm) cho các thẻ phụ: lối tắt, dải số liệu, dung lượng pin, ghi chú hiệu suất, biểu đồ 7 ngày, thẻ quãng đường. Dải số liệu bo 20 như các thẻ khác (trước là 18). Thẻ xe và hai thẻ mời hành động (nhập số pin đầu tiên, thiết lập ổ Shelly) giữ viền đủ.
+- **Tiêu đề hiện khi cuộn:** `LuxeScaffold(scrollTitle:)`: tên màn hiện trên thanh khi đã cuộn quá 72 dp và ẩn khi về đầu trang (TalkBack không đọc khi ẩn). Dùng ở AI cá nhân ("AI cá nhân"), Xe của tôi ("Xe của tôi"), bộ nhớ Pinova Bot ("Bộ nhớ Pinova Bot"). Sức khỏe pin đã có tiêu đề cố định từ trước.
+- **Nút bot nổi:** ở giữa trang, cuộn lên thì nút về nép vào mép (trước đây về cỡ đầy đủ, che thẻ); chỉ ở đầu trang, khi có bong bóng hoặc khi người dùng chạm hay kéo thì nút mới đầy đủ. Không làm bản dò nội dung bấm được bên dưới nút. File: `navigation/app_navigation.dart`.
+- **Kiểm thử:** `qa151_motion_test.dart` thêm 2 test (tiêu đề khi cuộn, viền thẻ phụ nhạt hơn), tổng 19. Lượt đủ: 1445 đạt, 216 bỏ qua, 2 trượt (test màn bộ nhớ tìm thấy hai chữ "Pinova Bot đang nhớ gì" vì tên trên thanh trùng tiêu đề trang); đã đổi tên trên thanh và chạy lại riêng 4 file liên quan: 114 đạt. Chưa chạy lại cả bộ sau lần sửa này. `flutter analyze lib` sạch.
+- **Chưa kiểm:** chưa xem trên máy thật. Độ nhạt của viền, ảnh xe bay và hành vi nút bot chưa có test riêng ngoài các test sẵn có; cần chủ app xem trên máy rồi chỉnh.
+
+---
+
 ## 150. Task Completion Log — Kiểm thử toàn diện trước phát hành trên Xiaomi 1.3.24+227 (QA Lead + UX Researcher + Content Auditor, 10–11/11/2026) — Báo cáo xong; Đợt 1 và 2 đã sửa (150.14, 150.15), APK 1.3.25+228 đã cài; Đợt 3–7 (150.16–150.20) xong: APK 1.3.29+232 đã cài, máy chủ đã deploy 12/11, đã commit
 
 **Phạm vi:** APK profile 1.3.24+227, API production, Xiaomi Android 16 (1200×2608, chữ ×1.0). Ba vai: người mới (tài khoản thử `pinova.qa.20261110@example.com`, Free → Pro → Ultra bằng mã `PINOVA2`/`PINOVA1`), người dùng cũ (tài khoản Feliz của chủ app, gói Ultra, **chỉ xem**), và người kiểm thử (nhập biên, CRUD, rà mã nguồn). Không sửa tệp nào trong repo, không deploy, không bật relay. Một phiếu hỗ trợ "QA kiem thu 11-11" đã gửi lên production (chủ app đã duyệt trước).

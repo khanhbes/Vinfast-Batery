@@ -15,6 +15,7 @@ import '../../core/utils/number_text.dart';
 import '../../core/widgets/adaptive_detail_rows.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_skeleton.dart';
 import '../../core/widgets/responsive_card_grid.dart';
 import '../../data/models/smart_charge_cost.dart';
 import '../../data/models/smart_charge_history.dart';
@@ -427,15 +428,11 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                         ),
                       ),
                     if (_loading && !_hasSuccessfulLoad && _items.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: SizedBox.square(
-                            dimension: 28,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: context.planAccent,
-                            ),
+                      const SliverPadding(
+                        padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        sliver: SliverToBoxAdapter(
+                          child: LuxeSkeleton.list(
+                            label: 'Đang tải lịch sử sạc',
                           ),
                         ),
                       )

@@ -2,6 +2,8 @@ package com.vinfast.vinfast_battery
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.media.AudioAttributes
+import android.media.SoundPool
 import android.os.Build
 import android.os.Bundle
 import com.bes.vinbatery.R
@@ -88,5 +90,47 @@ class MainActivity : FlutterActivity() {
                 splashScreen.setSplashScreenTheme(style)
                 result.success(null)
             }
+
+        // QA 151: two short chimes (charge started / finished). Sonification
+        // usage: the phone's silent and vibrate modes mute them.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.vinfast.battery/feedback")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "play") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val id = feedbackSounds()[call.arguments as? String]
+                if (id != null) feedbackPool?.play(id, 0.6f, 0.6f, 1, 0, 1f)
+                result.success(null)
+            }
+    }
+
+    private var feedbackPool: SoundPool? = null
+    private var feedbackIds: Map<String, Int> = emptyMap()
+
+    /** Loaded on first use and kept: SoundPool plays only decoded samples. */
+    private fun feedbackSounds(): Map<String, Int> {
+        if (feedbackPool != null) return feedbackIds
+        val pool = SoundPool.Builder()
+            .setMaxStreams(2)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build(),
+            )
+            .build()
+        feedbackPool = pool
+        feedbackIds = mapOf(
+            "charge_start" to pool.load(this, R.raw.charge_start, 1),
+            "charge_done" to pool.load(this, R.raw.charge_done, 1),
+        )
+        return feedbackIds
+    }
+
+    override fun onDestroy() {
+        feedbackPool?.release()
+        feedbackPool = null
+        super.onDestroy()
     }
 }

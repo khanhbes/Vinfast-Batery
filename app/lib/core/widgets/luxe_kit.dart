@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -80,7 +81,12 @@ class LuxeAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.bottom,
     this.onBack,
     this.showBack = true,
+    this.titleShown,
   });
+
+  /// When set, the title is only visible while this is true (QA 151: the
+  /// title of a long page appears once its heading has scrolled away).
+  final ValueListenable<bool>? titleShown;
 
   final String? title;
   final List<Widget>? actions;
@@ -119,15 +125,18 @@ class LuxeAppBar extends StatelessWidget implements PreferredSizeWidget {
           : null,
       title: title == null
           ? null
-          : Text(
-              title!,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: LuxeColors.text,
-                fontSize: 19,
-                fontWeight: FontWeight.w600,
-                letterSpacing: -0.2,
+          : _maybeHidden(
+              context,
+              Text(
+                title!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: LuxeColors.text,
+                  fontSize: 19,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
+                ),
               ),
             ),
       actions: [
@@ -136,6 +145,23 @@ class LuxeAppBar extends StatelessWidget implements PreferredSizeWidget {
         const SizedBox(width: 12),
       ],
       bottom: bottom,
+    );
+  }
+
+  Widget _maybeHidden(BuildContext context, Widget text) {
+    final shown = titleShown;
+    if (shown == null) return text;
+    return ValueListenableBuilder<bool>(
+      valueListenable: shown,
+      child: text,
+      builder: (context, visible, child) => ExcludeSemantics(
+        excluding: !visible,
+        child: AnimatedOpacity(
+          opacity: visible ? 1 : 0,
+          duration: luxeDuration(context, 220),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -153,7 +179,13 @@ class LuxeScaffold extends StatelessWidget {
     this.floatingActionButton,
     this.resizeToAvoidBottomInset,
     this.backdropAccent = 1,
+    this.scrollTitle,
   });
+
+  /// For a long page whose heading is in the scrolling body (QA 151): this
+  /// short name appears in the bar once the page has scrolled past the
+  /// heading, so it is always clear which screen this is.
+  final String? scrollTitle;
 
   final Widget body;
 
@@ -168,7 +200,21 @@ class LuxeScaffold extends StatelessWidget {
   final double backdropAccent;
 
   @override
-  Widget build(BuildContext context) => Stack(
+  Widget build(BuildContext context) {
+    final name = scrollTitle;
+    if (name == null) return _frame(appBar, body);
+    return _ScrollTitle(
+      builder: (shown, onScroll) => _frame(
+        LuxeAppBar(title: name, actions: actions, titleShown: shown),
+        NotificationListener<ScrollNotification>(
+          onNotification: onScroll,
+          child: body,
+        ),
+      ),
+    );
+  }
+
+  Widget _frame(PreferredSizeWidget? appBar, Widget body) => Stack(
     children: [
       Positioned.fill(child: LuxeBackdrop(accent: backdropAccent)),
       Scaffold(
@@ -185,6 +231,39 @@ class LuxeScaffold extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// Holds "has the page scrolled past its heading" for [LuxeScaffold].
+class _ScrollTitle extends StatefulWidget {
+  const _ScrollTitle({required this.builder});
+  final Widget Function(
+    ValueListenable<bool> shown,
+    bool Function(ScrollNotification) onScroll,
+  )
+  builder;
+
+  @override
+  State<_ScrollTitle> createState() => _ScrollTitleState();
+}
+
+class _ScrollTitleState extends State<_ScrollTitle> {
+  final _shown = ValueNotifier<bool>(false);
+
+  bool _onScroll(ScrollNotification n) {
+    if (n.depth == 0 && n.metrics.axis == Axis.vertical) {
+      _shown.value = n.metrics.pixels > 72;
+    }
+    return false;
+  }
+
+  @override
+  void dispose() {
+    _shown.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(_shown, _onScroll);
 }
 
 /// Page heading without navigation (pair with [LuxeAppBar]): eyebrow,

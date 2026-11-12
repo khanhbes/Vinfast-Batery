@@ -222,6 +222,13 @@ class HomeScreen extends ConsumerWidget {
                                         learned: learned,
                                         rangePending: pending,
                                         charging: charging,
+                                        onOpenVehicle: () => Navigator.push(
+                                          context,
+                                          MaterialPageRoute<void>(
+                                            builder: (_) =>
+                                                const VehicleGarageScreen(),
+                                          ),
+                                        ),
                                       ),
                                       DashboardStyle.lcd => LcdClusterHero(
                                         vehicle: vehicle,

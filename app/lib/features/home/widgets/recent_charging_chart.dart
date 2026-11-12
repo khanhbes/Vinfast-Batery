@@ -98,6 +98,7 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
     final selected = _selected == null ? null : week[_selected!];
 
     return LuxeGlass(
+      quiet: true,
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -339,7 +340,10 @@ class _BarsPainter extends CustomPainter {
       final cx = slot * (i + 0.5);
       final h = maxV <= 0
           ? 0.0
-          : (size.height - 18) * (values[i] / maxV) * grow;
+          : (size.height - 18) *
+                (values[i] / maxV) *
+                // QA 151: one after another, oldest day first.
+                ((grow * 1.6) - 0.6 * i / values.length).clamp(0.0, 1.0);
       final bottom = size.height - 4;
       final today = i == values.length - 1;
       final hot = i == selected || (selected == null && today);

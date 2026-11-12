@@ -159,7 +159,7 @@ class LcdClusterHero extends StatelessWidget {
                           SevenSegmentText(
                             f.rangeKm == null ? '--' : '${f.rangeKm}',
                             height: 44,
-                            color: LuxeColors.champagne,
+                            color: LuxeColors.text,
                           ),
                           const SizedBox(width: 6),
                           const _LcdLabel('KM'),
@@ -237,8 +237,8 @@ class _BatteryBars extends StatelessWidget {
     final p = percent;
     final lit = p == null ? 0 : (p / 25).ceil().clamp(0, 4);
     final colors = [
-      Color(0xFFF87171), // lowest bar: red
-      Color(0xFFF59E0B),
+      LuxeColors.danger, // lowest bar
+      LuxeColors.champagne,
       context.planAccent,
       context.planAccent,
     ];
@@ -390,7 +390,7 @@ class _MetricCell extends StatelessWidget {
           child: Text(
             value,
             style: TextStyle(
-              color: estimate ? LuxeColors.champagne : LuxeColors.text,
+              color: estimate ? LuxeColors.platinumHi : LuxeColors.text,
               fontSize: emphasis ? 26 : 19,
               fontWeight: FontWeight.w600,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -425,9 +425,7 @@ class MinimalHero extends StatelessWidget {
     final percent = f.percent;
     final color = percent == null
         ? LuxeColors.platinumMid
-        : percent <= 20
-        ? LuxeColors.danger
-        : context.planAccent;
+        : LuxeColors.level(percent, context.planAccent);
     return Column(
       key: const ValueKey('dashboard-hero-minimal'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -474,7 +472,7 @@ class MinimalHero extends StatelessWidget {
               : 'Còn đi được khoảng ${f.rangeKm} km',
           textAlign: TextAlign.center,
           style: TextStyle(
-            color: f.rangeKm == null ? LuxeColors.muted : LuxeColors.champagne,
+            color: f.rangeKm == null ? LuxeColors.muted : LuxeColors.platinum,
             fontSize: 15,
           ),
         ),

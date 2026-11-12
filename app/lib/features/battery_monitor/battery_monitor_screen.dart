@@ -205,11 +205,7 @@ class _CurrentBatteryCard extends StatelessWidget {
     final percent = has ? vehicle.currentBattery.clamp(0, 100).toDouble() : 0.0;
     final accent = !has
         ? LuxeColors.platinumMid
-        : percent < 20
-        ? LuxeColors.danger
-        : percent < 50
-        ? LuxeColors.champagne
-        : context.planAccent;
+        : LuxeColors.level(percent, context.planAccent);
     final status = !has
         ? 'Chưa có số pin'
         : percent < 20
@@ -385,7 +381,7 @@ class _EstimateCard extends StatelessWidget {
                 children: [
                   const LuxeMedallion(
                     icon: Icons.auto_graph_rounded,
-                    accent: LuxeColors.champagne,
+                    accent: LuxeColors.platinum,
                   ),
                   const SizedBox(width: 14),
                   Expanded(

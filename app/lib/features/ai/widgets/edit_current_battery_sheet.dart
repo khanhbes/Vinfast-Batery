@@ -79,11 +79,7 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
   @override
   Widget build(BuildContext context) {
     final rounded = _soc.round();
-    final accent = rounded < 20
-        ? LuxeColors.danger
-        : rounded < 40
-        ? LuxeColors.champagne
-        : context.planAccent;
+    final accent = LuxeColors.level(rounded, context.planAccent);
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(

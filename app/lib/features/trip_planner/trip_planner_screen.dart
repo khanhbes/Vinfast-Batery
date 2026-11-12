@@ -1894,11 +1894,7 @@ class _BatteryBadge extends StatelessWidget {
         stroke: 5,
         color: !known
             ? LuxeColors.platinumLow
-            : value < 20
-            ? LuxeColors.danger
-            : value < 40
-            ? LuxeColors.champagne
-            : LuxeColors.platinum,
+            : LuxeColors.level(value, LuxeColors.platinum),
         child: ExcludeSemantics(
           child: Text(
             known ? '$value%' : 'Nhập',

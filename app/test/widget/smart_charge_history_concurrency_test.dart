@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/widgets/luxe_skeleton.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/data/models/smart_charge_history.dart';
@@ -150,7 +151,7 @@ void main() {
     final controller = _DeferredController('vehicle-a');
     addTearDown(controller.dispose);
     await _mount(tester, controller);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(LuxeSkeleton), findsOneWidget);
     expect(find.text('Chưa có phiên sạc hoàn tất'), findsNothing);
     controller.requests.single.result.completeError(StateError('offline'));
     await tester.pump();

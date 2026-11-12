@@ -10,6 +10,8 @@ import 'package:intl/intl.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/battery_bot_mascot.dart';
+import '../../core/services/assistant_context_coordinator.dart';
 import '../../core/widgets/luxe_connection_notice.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/utils/start_soc_freshness.dart';
@@ -32,6 +34,8 @@ import 'controllers/smart_charging_controller.dart';
 import 'smart_charge_history_screen.dart';
 import 'widgets/active_charging_card_v2.dart';
 import 'widgets/ai_charge_button.dart';
+import 'widgets/charge_ceremony.dart';
+import 'widgets/history_luxe_widgets.dart';
 import 'widgets/charge_mode_switcher_v2.dart';
 import 'widgets/command_progress_strip.dart';
 import 'widgets/confirm_actual_soc_sheet.dart';
@@ -258,6 +262,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     _scroll.dispose();
     _connectionEvents?.cancel();
     _verifiedTimer?.cancel();
+    _celebrateTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -277,8 +282,25 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     context,
   ).push(MaterialPageRoute<void>(builder: (_) => const AchievementsScreen()));
 
+  bool get _inFront =>
+      mounted &&
+      TickerMode.valuesOf(context).enabled &&
+      (ModalRoute.of(context)?.isCurrent ?? true);
+
+  Timer? _celebrateTimer;
+
+  /// How long a result stays uncovered before a medal may play over it.
+  static const celebrationDelay = Duration(milliseconds: 1800);
+
   /// Plays waiting unlock ceremonies while this screen is the visible one.
   void _celebrate() {
+    // Never over the charge-start or charge-finished scene: try again
+    // once it has left.
+    if (mounted && ChargeCeremony.isPlaying) {
+      _celebrateTimer?.cancel();
+      _celebrateTimer = Timer(celebrationDelay, _celebrate);
+      return;
+    }
     if (!mounted ||
         !TickerMode.valuesOf(context).enabled ||
         !(ModalRoute.of(context)?.isCurrent ?? true)) {
@@ -336,7 +358,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     });
     ref.listen<AchievementsState>(achievementsControllerProvider, (p, n) {
       if (n.pendingCelebrations.isNotEmpty) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _celebrate());
+        // QA 151: an unlock earned by an action on this screen (the first
+        // prediction) waits until its result has been on screen for a
+        // moment; the medal used to cover the result it rewarded.
+        _celebrateTimer?.cancel();
+        _celebrateTimer = Timer(celebrationDelay, _celebrate);
       }
     });
     if (!_initialNoticesScheduled) {
@@ -1019,6 +1045,11 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       done = RelayCommandKind.off;
     }
     if (done == null || !mounted) return;
+    // QA 151: the relay was read back ON. One short scene, no touches
+    // taken (Stop stays reachable), only while this screen is in front.
+    if (done == RelayCommandKind.on && _inFront) {
+      ChargeCeremony.started(context);
+    }
     setState(() => _verified = done);
     _verifiedTimer?.cancel();
     _verifiedTimer = Timer(const Duration(milliseconds: 1800), () {
@@ -1263,11 +1294,35 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     }
     if (ended == null || !ended.state.isTerminal) return;
     final controller = ref.read(smartChargingControllerProvider(args).notifier);
-    if (!controller.shouldAskActualSoc(ended)) return;
-    controller.markActualSocAsked(ended.sessionId);
+    final ask = controller.shouldAskActualSoc(ended);
+    if (ask) controller.markActualSocAsked(ended.sessionId);
     final session = ended;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_askActualSoc(session));
+    // QA 151: a charge that finished by itself gets its closing scene; the
+    // "% trên xe" sheet waits for it. A manual stop or a failure does not.
+    final celebrate =
+        session.state == ChargingSessionState.completed &&
+        session.energyUsedWh >= 30;
+    if (!ask && !celebrate) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (celebrate && mounted) {
+        ref
+            .read(assistantContextCoordinatorProvider)
+            .react(BatteryBotMood.celebrating);
+      }
+      if (celebrate && _inFront) {
+        final started = session.startedAt;
+        final stopped = session.stoppedAt ?? DateTime.now();
+        await ChargeCeremony.finished(
+          context,
+          startPercent: session.startSoc,
+          endPercent: session.estimatedSoc ?? session.targetSoc,
+          energyKwh: session.energyUsedWh / 1000,
+          durationText: started == null
+              ? 'đã ngắt'
+              : historyDuration(stopped.difference(started)),
+        );
+      }
+      if (ask && mounted) unawaited(_askActualSoc(session));
     });
   }
 

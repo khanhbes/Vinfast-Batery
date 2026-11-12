@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/luxe_feedback.dart';
 import '../theme/luxe_theme.dart';
 import 'luxe_kit.dart';
 
@@ -59,12 +60,14 @@ class _LuxeSubmitButtonState extends State<LuxeSubmitButton> {
     if (!mounted) return;
     widget.onBusyChanged?.call(false);
     if (!ok) {
+      // QA 151: a refused save knocks twice.
+      LuxeFeedback.error();
       setState(() => _phase = _Phase.idle);
       return;
     }
     // The action closed this sheet/page itself: nothing left to show.
     if (ModalRoute.of(context)?.isCurrent == false) return;
-    HapticFeedback.lightImpact();
+    LuxeFeedback.confirm();
     setState(() => _phase = _Phase.done);
     await Future<void>.delayed(const Duration(milliseconds: 900));
     if (mounted) setState(() => _phase = _Phase.idle);

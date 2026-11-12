@@ -9,6 +9,7 @@ import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_skeleton.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/personal_charging_profile.dart';
 import '../../data/models/vehicle_learning_status.dart';
@@ -313,7 +314,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
       ),
     );
     return LuxeScaffold(
-      appBar: const LuxeAppBar(),
+      scrollTitle: 'AI cá nhân',
       body: RefreshIndicator(
         onRefresh: _load,
         child: ListView(
@@ -333,9 +334,9 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
             if (_busy && status == null)
               // QA 150: a small spinner let the consent switches sit at the top
               // and jump down a screen when the model cards arrived.
-              const SizedBox(
-                height: 640,
-                child: Center(child: CircularProgressIndicator()),
+              const LuxeSkeleton(
+                blocks: [330, 290],
+                label: 'Đang tải dữ liệu AI cá nhân',
               )
             // Same notice as the rest of the app, retrying by itself: a
             // read during a slow app start failed once and stayed (QA 130).

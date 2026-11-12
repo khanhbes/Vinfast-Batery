@@ -8,6 +8,7 @@ import '../models/chat_message.dart';
 import '../models/function_call_action.dart';
 import 'action_confirmation_card.dart';
 import 'breathing_bot_avatar.dart';
+import '../../../core/widgets/battery_bot_mascot.dart';
 import 'streaming_text_widget.dart';
 import 'trip_plan_chat_card.dart';
 import '../../../core/widgets/app_popup.dart';
@@ -186,7 +187,13 @@ class ChatMessageBubble extends StatelessWidget {
           children: [
             Row(
               children: [
-                BreathingBotAvatar(size: 24, isStreaming: message.isStreaming),
+                BreathingBotAvatar(
+                  size: 24,
+                  isStreaming: message.isStreaming,
+                  mood: message.hasError
+                      ? BatteryBotMood.sorry
+                      : BatteryBotMood.happy,
+                ),
                 const SizedBox(width: 10),
                 Text(timeStr, style: const TextStyle(fontSize: 11, color: dim)),
               ],

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 
+import '../services/luxe_feedback.dart';
 import '../theme/luxe_theme.dart';
 import '../utils/app_error_formatter.dart';
 import '../utils/error_mapper.dart';
@@ -50,6 +51,8 @@ class AppPopup {
         ? UserFriendlyErrorMapper.map(error)
         : null;
 
+    // QA 151: an error the user caused is felt as two short knocks.
+    if (userInitiated) LuxeFeedback.error();
     _show(
       AppNoticeKind.error,
       friendlyTitle,

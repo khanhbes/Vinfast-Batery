@@ -92,7 +92,7 @@ class _AssistantMemoryScreenState extends State<AssistantMemoryScreen> {
   Widget build(BuildContext context) {
     final snapshot = _snapshot;
     return LuxeScaffold(
-      appBar: const LuxeAppBar(),
+      scrollTitle: 'Bộ nhớ Pinova Bot',
       body: RefreshIndicator(
         color: context.planAccent,
         backgroundColor: LuxeColors.raised,

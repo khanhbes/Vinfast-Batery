@@ -41,6 +41,15 @@ abstract final class LuxeColors {
   /// Champagne gold: estimated values and cautions (never verified state).
   static const champagne = Color(0xFFE8C170);
 
+  /// The colour of a battery level, the same on every screen (QA 152):
+  /// rose under 10%, champagne up to 20%, otherwise [normal] (the
+  /// plan's accent).
+  static Color level(num percent, Color normal) => percent < 10
+      ? danger
+      : percent <= 20
+      ? champagne
+      : normal;
+
   /// Steel blue: neutral information.
   static const steel = Color(0xFF9DB8E8);
 
@@ -819,12 +828,24 @@ class LuxeGlass extends StatelessWidget {
     super.key,
     required this.child,
     this.selected = false,
+    this.quiet = false,
+    this.raised = false,
     this.padding = const EdgeInsets.all(16),
     this.radius = 20,
   });
 
   final Widget child;
   final bool selected;
+
+  /// A secondary card (QA 151): a fainter edge, so a screen keeps one
+  /// card that stands out (the vehicle on Tổng quan).
+  final bool quiet;
+
+  /// The one card a screen is about (QA 152): a slightly brighter
+  /// surface and a soft shadow lift it above the plain cards. Three
+  /// tiers: quiet, plain, raised; they differ in brightness, not in
+  /// border weight.
+  final bool raised;
   final EdgeInsetsGeometry padding;
   final double radius;
 
@@ -851,11 +872,18 @@ class LuxeGlass extends StatelessWidget {
                   context.planAccent.withValues(alpha: 0.13),
                   context.planAccent.withValues(alpha: 0.04),
                 ]
+              : raised
+              ? [
+                  for (final c in plan.glassColors)
+                    Color.alphaBlend(const Color(0x0DFFFFFF), c),
+                ]
               : plan.glassColors,
         ),
         border: Border.all(
           color: selected
               ? context.planAccent.withValues(alpha: 0.75)
+              : quiet
+              ? plan.glassBorder.withValues(alpha: plan.glassBorder.a * 0.45)
               : plan.glassBorder,
           width: selected ? 1.3 : 1,
         ),
@@ -865,6 +893,15 @@ class LuxeGlass extends StatelessWidget {
                   color: context.planAccent.withValues(alpha: 0.13),
                   blurRadius: 24,
                   spreadRadius: -4,
+                ),
+              ]
+            : raised
+            ? const [
+                BoxShadow(
+                  color: Color(0x59000000),
+                  blurRadius: 28,
+                  spreadRadius: -8,
+                  offset: Offset(0, 14),
                 ),
               ]
             : null,

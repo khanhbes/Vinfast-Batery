@@ -180,7 +180,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **Màu:**
   - Nền `#050506`, chữ `#F2F2F0`, muted `#9A9EA5`, dim `#858990` (≥4,5:1 trên mọi lớp nền).
   - Glass/hairline là trắng alpha; platinum là thang `platinumHi…platinumLow`.
-  - Accent duy nhất cho trạng thái đã xác minh là **emerald** `#34D399`. Champagne `#E8C170` cho ước tính/cảnh báo, rose `#F59E9E` cho lỗi/nguy hiểm, steel `#9DB8E8` cho thông tin.
+  - Accent duy nhất cho trạng thái đã xác minh là **emerald** `#34D399`. Champagne `#E8C170` cho cảnh báo/cần chú ý (QA 152: không còn dùng cho ước tính), rose `#F59E9E` cho lỗi/nguy hiểm, steel `#9DB8E8` cho thông tin.
   - `CockpitColors`, `AppColors` và `AppUiColors` chỉ còn là alias trỏ về LUXE. Code mới dùng `LuxeColors`.
 - **Kit:**
   - `core/widgets/luxe_kit.dart`: `LuxeScaffold`, `LuxeAppBar`, `LuxeCircleButton`, `showLuxeSheet`/`LuxeSheetHeader`, `LuxePageHeaderText`, `LuxeCountUp`, `LuxeStatTile`, `LuxeRing`, `LuxeSparkline`, `LuxeEmptyArt`, `LuxeShimmer`, `LuxeSegmented`, `LuxeNotice`.
@@ -200,7 +200,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Task 125: `LuxeText.eyebrow` là platinum (emerald chỉ cho trạng thái đã xác minh); mascot/avatar/nút bot nổi/chấm trạng thái chỉ chuyển động khi có hoạt động thật; thẻ xác nhận BatteryBot: champagne chờ, rose không thực hiện, emerald đã xác minh.
 - **QA 139 (27/10/2026, rà soát giao diện, chủ app duyệt):**
   - Màu nhấn gói Free là platinum (`PlanStyle.free.accent`); vòng chọn % lấy `PlanStyle.accentColors` (núm hiện tại than chì, núm mục tiêu màu nhấn). Emerald chỉ cho đã xác minh/đang sạc thật.
-  - Ước tính (dung lượng pin, mục tiêu) là champagne hoặc màu nhấn, không emerald.
+  - Ước tính (dung lượng pin, mục tiêu) không emerald. (QA 152 thay phần màu: bạch kim hoặc chữ mờ, không champagne.)
   - Toast: lỗi rose (chỉ viền và icon), cảnh báo champagne, không màu ngoài bảng.
   - `PremiumLocked`: lọc xám, sáng 80% (`lockedFilter`, chữ phụ khoảng 4.8:1) thay cho mờ 38%; `StackFit.passthrough` để ô bị khóa giãn như ô thường.
   - Thông báo ngắn chỉ qua `AppPopup` (`showMessage` cho câu do app viết, vẫn chặn ID/URL/email/IP), không `SnackBar`.
@@ -296,6 +296,22 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Chọn giờ chỉ qua `showLuxeTimePicker` (không dùng `showTimePicker` của Material). Hoàn thành mốc bảo dưỡng có chu kỳ thì đề xuất mốc kế (`VinFastServiceCatalog.nextAfter`), người dùng xác nhận. Trung tâm thông báo hiển thị nội dung qua `inboxBody` (bỏ tiêu đề lặp).
   - Đánh dấu hoàn thành mốc bảo dưỡng có "Hoàn tác" (nhãn nút của `AppPopup` phải có trong `AppNoticeCopy.actionLabel`).
   - Tên gọi trong câu chữ: "ổ Shelly" (giới thiệu lần đầu: "ổ cắm thông minh Shelly"), "phiên sạc", "Sức khỏe pin", "danh mục xe"; không viết Smart Charge, SoH, catalog, UID, rơ-le, cell pin ra giao diện. Đăng ký gửi email xác minh nhưng không chặn; Hồ sơ có hàng gửi lại. Pinova Bot giữ đoạn chat gần nhất 30 phút trong bộ nhớ.
+- **QA 151 (12/11/2026, chủ app chọn) — khoảnh khắc sạc:**
+  - Rung và âm thanh chỉ qua `LuxeFeedback` (`core/services/luxe_feedback.dart`): không bao giờ chờ, không bao giờ ném lỗi, không được làm chậm lệnh sạc. Âm thanh theo công tắc Cài đặt → Giao diện → Âm thanh (lưu trên máy); iOS chưa có trình phát. Test đọc `LuxeFeedback.probe`.
+  - `ChargeCeremony.started` chỉ gọi sau khi ổ đã đọc lại là BẬT; `ChargeCeremony.finished` chỉ cho phiên `completed` ≥ 30 Wh và phát trước sheet hỏi % thực tế. Mỗi cảnh một lượt, tự gỡ, Giảm chuyển động thì không vẽ.
+  - Dòng điện trên thẻ đang sạc lấy nhịp từ `ActiveChargingCardV2.flowPeriod(powerW)` (dưới 15 W đứng yên). Màn tải dữ liệu lần đầu dùng `LuxeSkeleton`, không dùng vòng xoay giữa màn.
+  - Pinova Bot: mặt chỉ vẽ qua `BotFace` (`core/widgets/bot_face.dart`), dùng chung cho bot toàn thân và avatar. Biểu cảm phải theo việc thật: `worried` cho cảnh báo, `sorry` khi bot không làm hoặc không trả lời được, `celebrating` khi có việc thật vừa xong (`AssistantContextCoordinator.react`), `sleepy`/`charging` do `restingMood` chọn. Đổi biểu cảm có một phản ứng một lượt, không thêm vòng lặp.
+  - Trang mở từ một ô (tab Tiện ích) dùng `LuxeExpandRoute` với `LuxeExpandOrigin.take()`; ô gọi `LuxeExpandOrigin.mark(context)` trước `onTap`. Màn mở khóa thành tựu ở tab Sạc chờ `celebrationDelay` và không phát đè lên `ChargeCeremony`. Lưu bị từ chối và lỗi `userInitiated` rung hai nhịp qua `LuxeFeedback.error()`.
+  - Màn dài có tiêu đề nằm trong phần cuộn dùng `LuxeScaffold(scrollTitle:)` (tên ngắn, khác chữ tiêu đề trang để test không tìm thấy hai lần). Thẻ phụ ở Tổng quan dùng `LuxeGlass(quiet: true)`; chỉ thẻ xe và thẻ mời hành động giữ viền đủ. Nút bot nổi chỉ đầy đủ ở đầu trang; giữa trang nó nép vào mép.
+  - Tối ưu cho máy cấu hình thấp: chủ app quyết định tạm thời chưa làm.
+- **QA 152 (12/11/2026) — màu:**
+  - Pinova Bot (`battery_bot_mascot.dart`, `bot_face.dart`) chỉ dùng `LuxeColors` và màu gói, không viết mã hex (có test). Mắt lúc sạc theo màu gói, không emerald.
+  - Màu của một mức pin lấy từ `LuxeColors.level(percent, normal)`: dưới 10% rose, tới 20% champagne, còn lại màu gói. Đừng tự chọn ngưỡng hay màu riêng cho từng màn.
+  - Champagne chỉ cho cảnh báo và việc cần chú ý (chủ app đồng ý 12/11, thay quy tắc QA 139). Số ước tính dùng bạch kim hoặc chữ mờ, kèm chữ "ước tính". Chỗ champagne cũ nào là ước tính thì đổi theo khi chạm tới.
+  - `LuxeGlass` có ba tầng: `quiet` (thẻ phụ), thường, `raised` (một thẻ chính của màn: thẻ xe, thẻ đang sạc lúc chuyển trạng thái). Mỗi màn tối đa một thẻ `raised`.
+  - Biểu đồ: giá trị mới nhất (hôm nay, lần sạc gần nhất) sáng nhất, phần còn lại lùi một bậc.
+  - Dòng phiên bản là 2.1.x từ 12/11/2026.
+  - Ảnh xe ở Tổng quan không bay sang Xe của tôi (chủ app bỏ 13/11); chạm vẫn mở Xe của tôi. Đừng thêm lại `Hero` ở đó.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

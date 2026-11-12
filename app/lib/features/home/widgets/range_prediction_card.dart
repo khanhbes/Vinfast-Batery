@@ -19,6 +19,7 @@ class RangePredictionCard extends StatelessWidget {
     final learnedSource = estimate?.source == RangeSource.learned;
     return LuxeReveal(
       child: LuxeGlass(
+        quiet: true,
         padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/plan_style.dart';
+import '../../../core/widgets/battery_bot_mascot.dart';
 
 /// Breathing Bot Avatar with pulsating soft halo animation
 class BreathingBotAvatar extends StatefulWidget {
@@ -8,12 +9,15 @@ class BreathingBotAvatar extends StatefulWidget {
     super.key,
     this.size = 32.0,
     this.isStreaming = false,
-    this.mood = 'happy',
+    this.mood = BatteryBotMood.happy,
   });
 
   final double size;
   final bool isStreaming;
-  final String mood;
+
+  /// The face shown (QA 151: Pinova Bot itself, not a generic robot
+  /// icon). While the reply is being written it is always `thinking`.
+  final BatteryBotMood mood;
 
   @override
   State<BreathingBotAvatar> createState() => _BreathingBotAvatarState();
@@ -93,34 +97,12 @@ class _BreathingBotAvatarState extends State<BreathingBotAvatar>
               ),
             ),
 
-            // Inner avatar circle with gradient
-            Container(
-              width: widget.size,
-              height: widget.size,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [last, first],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.85),
-                  width: 1.2,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.smart_toy_rounded,
-                color: PlanColors.ink,
-                size: widget.size * 0.56,
-              ),
+            BatteryBotMascot(
+              displayMode: BatteryBotDisplayMode.avatar,
+              size: BatteryBotSize.avatar,
+              customWidth: widget.size,
+              mood: widget.isStreaming ? BatteryBotMood.thinking : widget.mood,
+              enableFloating: false,
             ),
           ],
         );

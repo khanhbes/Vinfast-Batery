@@ -1,8 +1,10 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/ai/assistant_sheet.dart';
+import '../providers/app_state_providers.dart';
 import '../services/assistant_context_coordinator.dart';
 import '../theme/luxe_theme.dart';
 import 'battery_bot_mascot.dart';
@@ -65,7 +67,14 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
     final coordinator = ref.watch(assistantContextCoordinatorProvider);
     final isBubbleVisible = coordinator.isBubbleVisible;
     final bubbleText = coordinator.bubbleText;
-    final mood = isBubbleVisible ? coordinator.bubbleMood : BatteryBotMood.idle;
+    // QA 151: with nothing to say the face still tells the truth: bolt
+    // eyes while a vehicle really charges, asleep late at night.
+    final charging =
+        Firebase.apps.isNotEmpty &&
+        ref.watch(activeChargingSessionProvider).sessions.isNotEmpty;
+    final mood = isBubbleVisible
+        ? coordinator.bubbleMood
+        : coordinator.restingMood(charging: charging);
 
     // Tự ẩn khi bàn phím ảo mở
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;

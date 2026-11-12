@@ -511,7 +511,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
             key: const ValueKey('timed-charge-estimate'),
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: LuxeColors.champagne,
+              color: LuxeColors.muted,
               fontSize: 13,
               height: 1.4,
             ),

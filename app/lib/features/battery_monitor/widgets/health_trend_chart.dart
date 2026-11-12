@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/widgets/luxe_kit.dart';
 
 /// Capacity left after each charge (QA 141): one dot per charge, straight
 /// lines, a % scale and the first/last date. The smooth sparkline it
@@ -40,12 +41,20 @@ class HealthTrendChart extends StatelessWidget {
         children: [
           SizedBox(
             height: 120,
-            child: CustomPaint(
-              painter: _TrendPainter(
-                values: values,
-                low: low,
-                high: high,
-                textScale: scaler.scale(10) / 10,
+            // QA 151: the line draws itself once, left to right, each dot
+            // landing as the line reaches it.
+            child: TweenAnimationBuilder<double>(
+              tween: Tween(begin: 0, end: 1),
+              duration: luxeDuration(context, 1100),
+              curve: Curves.easeInOutCubic,
+              builder: (context, t, _) => CustomPaint(
+                painter: _TrendPainter(
+                  values: values,
+                  low: low,
+                  high: high,
+                  textScale: scaler.scale(10) / 10,
+                  reveal: t,
+                ),
               ),
             ),
           ),
@@ -92,8 +101,11 @@ class _TrendPainter extends CustomPainter {
     required this.low,
     required this.high,
     required this.textScale,
+    this.reveal = 1,
   });
 
+  /// 0–1: how much of the line is drawn.
+  final double reveal;
   final List<double> values;
   final double low;
   final double high;
@@ -130,22 +142,39 @@ class _TrendPainter extends CustomPainter {
         Offset(chart.left + step * i, y(math.min(values[i], high))),
     ];
     final line = Paint()
-      ..color = LuxeColors.champagne.withValues(alpha: 0.7)
+      ..color = LuxeColors.platinum.withValues(alpha: 0.7)
       ..strokeWidth = 1.6
       ..style = PaintingStyle.stroke;
-    canvas.drawPath(Path()..addPolygon(dots, false), line);
+    final whole = Path()..addPolygon(dots, false);
+    if (reveal >= 1) {
+      canvas.drawPath(whole, line);
+    } else {
+      for (final metric in whole.computeMetrics()) {
+        canvas.drawPath(metric.extractPath(0, metric.length * reveal), line);
+      }
+    }
+    final reached = chart.left + chart.width * reveal;
     for (var i = 0; i < dots.length; i++) {
+      if (dots[i].dx > reached + 0.5) break;
       final last = i == dots.length - 1;
       final clipped = values[i] > high;
       if (clipped) {
         // Above what a battery can hold: the gauge's error, drawn hollow.
         canvas.drawCircle(dots[i], 3.4, Paint()..color = LuxeColors.background);
       }
+      if (last) {
+        // QA 152: the latest charge is the one the eye should land on.
+        canvas.drawCircle(
+          dots[i],
+          9,
+          Paint()..color = LuxeColors.platinumHi.withValues(alpha: 0.16),
+        );
+      }
       canvas.drawCircle(
         dots[i],
         last ? 4.5 : 3.4,
         Paint()
-          ..color = LuxeColors.champagne
+          ..color = last ? LuxeColors.platinumHi : LuxeColors.platinumMid
           ..style = clipped ? PaintingStyle.stroke : PaintingStyle.fill
           ..strokeWidth = 1.6,
       );
@@ -154,5 +183,8 @@ class _TrendPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TrendPainter old) =>
-      old.values != values || old.low != low || old.high != high;
+      old.values != values ||
+      old.low != low ||
+      old.high != high ||
+      old.reveal != reveal;
 }

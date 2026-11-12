@@ -58,7 +58,7 @@ void main() {
       expect(triggered, isTrue);
       expect(coordinator.isBubbleVisible, isTrue);
       expect(coordinator.bubbleText, contains('15%'));
-      expect(coordinator.bubbleMood, equals(BatteryBotMood.thinking));
+      expect(coordinator.bubbleMood, equals(BatteryBotMood.worried));
 
       // Không trigger lại ngay lập tức vì cooldown
       final retriggered = coordinator.evaluateContext(

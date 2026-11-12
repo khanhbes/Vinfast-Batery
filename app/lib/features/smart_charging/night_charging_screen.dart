@@ -474,7 +474,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                     key: const ValueKey('night-estimate'),
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      color: LuxeColors.champagne,
+                      color: LuxeColors.muted,
                       fontSize: 13,
                       height: 1.4,
                     ),

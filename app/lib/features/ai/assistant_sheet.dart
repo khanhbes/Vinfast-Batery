@@ -133,6 +133,16 @@ class _InteractiveAssistantSheetState
   VoiceInputService? _voiceService;
   bool _isListeningVoice = false;
 
+  /// QA 151: the face in the header follows the conversation.
+  BatteryBotMood get _headerMood {
+    if (_isListeningVoice) return BatteryBotMood.listening;
+    if (_isTyping) return BatteryBotMood.thinking;
+    if (_messages.isNotEmpty && _messages.last.hasError) {
+      return BatteryBotMood.sorry;
+    }
+    return BatteryBotMood.happy;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1242,10 +1252,10 @@ class _InteractiveAssistantSheetState
                                       ),
                                     ],
                                   ),
-                                  child: const BatteryBotMascot(
+                                  child: BatteryBotMascot(
                                     size: BatteryBotSize.avatar,
                                     displayMode: BatteryBotDisplayMode.avatar,
-                                    mood: BatteryBotMood.happy,
+                                    mood: _headerMood,
                                     enableFloating: false,
                                   ),
                                 ),

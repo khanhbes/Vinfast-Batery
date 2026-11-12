@@ -6,6 +6,7 @@ import '../../core/providers/appearance_provider.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/charge_confirm_control.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/services/luxe_feedback.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/widgets/seven_segment_text.dart';
 import '../../core/providers/entitlement_provider.dart';
@@ -91,6 +92,31 @@ class AppearanceScreen extends ConsumerWidget {
                   onTap: () => notifier.setUltraEffects(!effects),
                 ),
               ],
+            ),
+          ),
+          // QA 151: chimes for charge started / finished.
+          const LuxeSectionLabel('Âm thanh'),
+          FutureBuilder<void>(
+            future: LuxeFeedback.ensureLoaded(),
+            builder: (context, _) => ValueListenableBuilder<bool>(
+              valueListenable: LuxeFeedback.sound,
+              builder: (context, on, _) => LuxeSettingsGroup(
+                children: [
+                  LuxeSettingsRow(
+                    key: const ValueKey('appearance-sound'),
+                    icon: Icons.music_note_rounded,
+                    title: 'Âm thanh khi sạc',
+                    subtitle:
+                        'Tiếng chuông ngắn khi ổ Shelly bật và khi sạc xong. '
+                        'Tự im khi điện thoại ở chế độ im lặng.',
+                    trailing: Switch(
+                      value: on,
+                      onChanged: LuxeFeedback.setSound,
+                    ),
+                    onTap: () => LuxeFeedback.setSound(!on),
+                  ),
+                ],
+              ),
             ),
           ),
           const LuxeSectionLabel('Tổng quan'),

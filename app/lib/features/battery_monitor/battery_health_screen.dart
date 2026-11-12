@@ -6,6 +6,7 @@ import '../../core/services/pinova_api.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/number_text.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_skeleton.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../premium/premium_gate.dart';
@@ -135,12 +136,8 @@ class BatteryHealthScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
           children: [
             async.when(
-              loading: () => Padding(
-                padding: EdgeInsets.all(40),
-                child: Center(
-                  child: CircularProgressIndicator(color: context.planAccent),
-                ),
-              ),
+              loading: () =>
+                  const LuxeSkeleton.cards(label: 'Đang tải sức khỏe pin'),
               error: (error, _) => LuxeNotice(
                 icon: Icons.cloud_off_rounded,
                 color: LuxeColors.champagne,
@@ -254,7 +251,7 @@ class _Hero extends StatelessWidget {
           LuxeRing(
             value: (v.sohPct / 100).clamp(0.0, 1.0),
             size: 104,
-            color: LuxeColors.champagne,
+            color: LuxeColors.platinum,
             child: Text(
               '${v.sohPct.round()}%',
               key: const ValueKey('health-soh'),
@@ -287,7 +284,7 @@ class _Hero extends StatelessWidget {
                   health.test != null
                       ? 'Từ bài kiểm tra'
                       : '${v.confidenceLabel} · ${v.samples ?? 0} lần sạc',
-                  color: LuxeColors.champagne,
+                  color: LuxeColors.platinumMid,
                 ),
               ],
             ),
@@ -344,7 +341,7 @@ class _TestCard extends ConsumerWidget {
           LuxeSettingsRow(
             key: const ValueKey('health-test-result'),
             icon: Icons.verified_rounded,
-            accent: LuxeColors.champagne,
+            accent: LuxeColors.platinum,
             title: 'Lần kiểm tra gần nhất: ${test.sohPct.round()}%',
             subtitle:
                 'Từ ${test.startPct?.round() ?? '?'}% lên đầy'

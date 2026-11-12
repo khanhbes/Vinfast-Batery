@@ -76,6 +76,16 @@ class ActiveChargingCardV2 extends StatefulWidget {
   /// the session (QA 140: it said "Đang sạc" at 0:00, then "đã sạc xong").
   final bool endsOnTimer;
 
+  /// QA 151: one lap of the current on the dial for the power the plug
+  /// measures, in steps so a flickering reading does not restart it:
+  /// about 2.4 s at 400 W, faster above, slower below; null (still) under
+  /// 15 W, the same "idle" line the server uses.
+  static Duration? flowPeriod(double powerW) {
+    if (!powerW.isFinite || powerW < 15) return null;
+    final ms = (2400 * 400 / powerW).clamp(1200.0, 4800.0);
+    return Duration(milliseconds: (ms / 300).round() * 300);
+  }
+
   @override
   State<ActiveChargingCardV2> createState() => _ActiveChargingCardV2State();
 }
@@ -84,8 +94,24 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
     with TickerProviderStateMixin {
   late final AnimationController _flow = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 2400),
+    duration:
+        ActiveChargingCardV2.flowPeriod(widget.powerW) ??
+        const Duration(milliseconds: 2400),
   );
+
+  void _syncFlow() {
+    final period = ActiveChargingCardV2.flowPeriod(widget.powerW);
+    if (_reduced || period == null) {
+      // No current, no motion: the loop only ever shows a real charge.
+      if (_flow.isAnimating) _flow.stop();
+      return;
+    }
+    if (_flow.duration != period || !_flow.isAnimating) {
+      _flow.duration = period;
+      _flow.repeat();
+    }
+  }
+
   late final AnimationController _enter = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1000),
@@ -120,7 +146,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
       _flow.stop();
       _enter.value = 1;
     } else {
-      _flow.repeat();
+      _syncFlow();
       if (_enter.isDismissed) _enter.forward();
     }
   }
@@ -129,6 +155,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
   void didUpdateWidget(ActiveChargingCardV2 old) {
     super.didUpdateWidget(old);
     if (old.remaining != widget.remaining) _anchor = DateTime.now();
+    if (old.powerW != widget.powerW) _syncFlow();
     _armEndTimer();
   }
 
@@ -187,6 +214,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
 
     return LuxeGlass(
       selected: !transitional,
+      raised: transitional,
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -257,7 +285,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
               // Estimates are champagne; emerald only marks what was
               // verified (the relay status above) — LUXE rule, QA 129.
               style: const TextStyle(
-                color: LuxeColors.champagne,
+                color: LuxeColors.muted,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -524,7 +552,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                       SevenSegmentText(
                         '${widget.powerW.round()}',
                         height: 22,
-                        color: LuxeColors.champagne,
+                        color: LuxeColors.text,
                         semanticsLabel: '${widget.powerW.round()} oát',
                       ),
                       const Padding(
@@ -532,7 +560,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                         child: Text(
                           'W',
                           style: TextStyle(
-                            color: LuxeColors.champagne,
+                            color: LuxeColors.muted,
                             fontSize: 12.5,
                           ),
                         ),
@@ -622,7 +650,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
             const Text(
               '%',
               style: TextStyle(
-                color: LuxeColors.champagne,
+                color: LuxeColors.platinumMid,
                 fontSize: 19,
                 fontWeight: FontWeight.w300,
               ),

@@ -63,6 +63,34 @@ class AssistantContextCoordinator extends ChangeNotifier {
 
   String? get bubbleText => _bubbleText;
   BatteryBotMood get bubbleMood => _bubbleMood;
+
+  /// QA 151: a short expression for something that just happened (a
+  /// finished charge), shown by the floating bot without a bubble.
+  BatteryBotMood? _reaction;
+  Timer? _reactionTimer;
+  static const reactionHold = Duration(seconds: 6);
+
+  void react(BatteryBotMood mood) {
+    _reactionTimer?.cancel();
+    _reaction = mood;
+    notifyListeners();
+    _reactionTimer = Timer(reactionHold, () {
+      _reaction = null;
+      notifyListeners();
+    });
+  }
+
+  /// The face of the bot when it has nothing to say: the reaction in
+  /// progress, else what is really going on (charging), else the hour
+  /// (asleep from 23:00 to 05:00).
+  BatteryBotMood restingMood({required bool charging, DateTime? now}) {
+    final reaction = _reaction;
+    if (reaction != null) return reaction;
+    if (charging) return BatteryBotMood.charging;
+    final hour = (now ?? DateTime.now()).hour;
+    return hour >= 23 || hour < 5 ? BatteryBotMood.sleepy : BatteryBotMood.idle;
+  }
+
   List<String> get quickActionChips => _quickActionChips;
 
   /// Cập nhật trạng thái neo thu nhỏ (Auto-docking) khi người dùng cuộn trang
@@ -127,7 +155,7 @@ class AssistantContextCoordinator extends ChangeNotifier {
         _recordTrigger('low_battery_${vehicle.vehicleId}', currentTime);
         showBubble(
           'Pin xe chỉ còn ${vehicle.currentBattery}%. Bạn có muốn mình chuẩn bị lịch sạc thông minh không?',
-          mood: BatteryBotMood.thinking,
+          mood: BatteryBotMood.worried,
           chips: const [
             'Làm sao dừng sạc?',
             'Kết nối Shelly',
@@ -182,6 +210,7 @@ class AssistantContextCoordinator extends ChangeNotifier {
   void dispose() {
     _bubbleTimer?.cancel();
     _idleDockTimer?.cancel();
+    _reactionTimer?.cancel();
     super.dispose();
   }
 }

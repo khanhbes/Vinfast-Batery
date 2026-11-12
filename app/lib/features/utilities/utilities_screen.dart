@@ -6,6 +6,7 @@ import '../../core/providers/app_providers.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
+import '../../core/widgets/luxe_expand_route.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../achievements/achievements_screen.dart';
@@ -36,8 +37,13 @@ class UtilitiesScreen extends ConsumerWidget {
         : ref.watch(batteryHealthProvider(selectedId)).valueOrNull;
     final healthPct = (health?.test ?? health?.estimate)?.sohPct;
 
-    void push(Widget page) =>
-        Navigator.push(context, MaterialPageRoute<void>(builder: (_) => page));
+    void push(Widget page) => Navigator.push(
+      context,
+      LuxeExpandRoute<void>(
+        builder: (_) => page,
+        origin: LuxeExpandOrigin.take(),
+      ),
+    );
 
     /// The vehicle the feature works on, or a hint to pick one.
     String? vehicleId() {

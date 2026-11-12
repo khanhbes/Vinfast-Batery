@@ -216,10 +216,7 @@ class _Readout extends StatelessWidget {
             if (eta != null)
               Text(
                 'Dự kiến $eta',
-                style: const TextStyle(
-                  color: LuxeColors.champagne,
-                  fontSize: 13,
-                ),
+                style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
               ),
             if (style == ChargeStyle.detail)
               Text(

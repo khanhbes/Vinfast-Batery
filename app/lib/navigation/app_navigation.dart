@@ -332,9 +332,14 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
                   if (scrollInfo.direction == ScrollDirection.reverse) {
                     bot.setDocked(true);
                     if (vertical) bot.setScrollingAway(true);
-                  } else if (scrollInfo.direction == ScrollDirection.forward ||
-                      scrollInfo.metrics.pixels <= 20) {
+                  } else if (scrollInfo.metrics.pixels <= 20) {
                     bot.setDocked(false);
+                    bot.setScrollingAway(false);
+                  } else if (scrollInfo.direction == ScrollDirection.forward) {
+                    // QA 151: mid-page it comes back tucked into the edge
+                    // (it used to return full size over the cards); only
+                    // the top of the page gives it its full button.
+                    bot.setDocked(true);
                     bot.setScrollingAway(false);
                   }
                 } else if (scrollInfo is ScrollEndNotification && vertical) {

@@ -230,12 +230,9 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Hero(
-              tag: 'vehicle-hero-${widget.vehicleId}',
-              child: Material(
-                type: MaterialType.transparency,
-                child: _buildHeaderCard(modelName, soh),
-              ),
+            Material(
+              type: MaterialType.transparency,
+              child: _buildHeaderCard(modelName, soh),
             ),
             if (_photo != null) ...[
               const SizedBox(height: 14),

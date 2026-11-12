@@ -331,7 +331,9 @@ class _BarsPainter extends CustomPainter {
           Paint()..color = const Color(0x33FFFFFF),
         );
       } else {
-        final h = math.max(3.0, value * scale * reveal);
+        // QA 151: the bars rise one after another from the first day.
+        final own = ((reveal * 1.6) - 0.6 * i / n).clamp(0.0, 1.0);
+        final h = math.max(3.0, value * scale * own);
         final rect = RRect.fromRectAndCorners(
           Rect.fromLTWH(cx - barW / 2, chartH - h, barW, h),
           topLeft: Radius.circular(barW / 2.4),
@@ -355,7 +357,15 @@ class _BarsPainter extends CustomPainter {
           Paint()
             ..shader = shader
             ..color = Colors.white.withValues(
-              alpha: selected == null || isSelected ? 1 : 0.45,
+              // QA 152: with nothing picked, today's bar is the bright
+              // one and the other days sit a step back.
+              alpha: isSelected
+                  ? 1
+                  : selected != null
+                  ? 0.45
+                  : today == null || i == today
+                  ? 1
+                  : 0.7,
             ),
         );
         if (selected != null && !isSelected) {

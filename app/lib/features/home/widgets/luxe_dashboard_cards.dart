@@ -155,6 +155,7 @@ class LuxeQuickActions extends StatelessWidget {
                 onTap: it.$4,
                 semanticsLabel: it.$2,
                 child: LuxeGlass(
+                  quiet: true,
                   radius: 20,
                   padding: stacked
                       ? const EdgeInsets.symmetric(horizontal: 14, vertical: 12)
@@ -210,6 +211,7 @@ class LuxeQuickActions extends StatelessWidget {
                 onTap: read,
                 semanticsLabel: 'Cập nhật phần trăm pin và ODO',
                 child: LuxeGlass(
+                  quiet: true,
                   radius: 20,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -351,7 +353,8 @@ class LuxeStatsStrip extends ConsumerWidget {
             if (i > 0) const SizedBox(width: 8),
             Expanded(
               child: LuxeGlass(
-                radius: 18,
+                quiet: true,
+                radius: 20,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 14,
@@ -500,6 +503,7 @@ class _CapacityShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = value;
     return LuxeGlass(
+      quiet: true,
       padding: const EdgeInsets.all(16),
       child: ExcludeSemantics(
         child: Row(
@@ -610,7 +614,7 @@ class _RingPainter extends CustomPainter {
     if (t <= 0) return;
     final sweep = 2 * math.pi * t;
     // An estimate is never emerald (QA 139); rose only when it is low.
-    final color = t >= 0.7 ? LuxeColors.champagne : LuxeColors.danger;
+    final color = t >= 0.7 ? LuxeColors.platinum : LuxeColors.danger;
     canvas.drawArc(
       rect,
       -math.pi / 2,
@@ -674,6 +678,7 @@ class LuxeEfficiencyNote extends StatelessWidget {
     final perPct = v == null ? null : kmPerPctFor(v, learned);
     final fromRides = learned != null && learned!.source == TripKmSource.model;
     return LuxeGlass(
+      quiet: true,
       padding: const EdgeInsets.all(16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -168,7 +168,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-      appBar: const LuxeAppBar(),
+      scrollTitle: 'Xe của tôi',
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
@@ -361,140 +361,131 @@ class _VehicleCard extends StatelessWidget {
       button: !isArchived,
       selected: isSelected,
       label: '$model${isSelected ? ', đang dùng' : ''}',
-      child: Hero(
-        tag: heroTag,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(26),
-            child: Opacity(
-              opacity: isArchived ? 0.72 : 1,
-              child: LuxeGlass(
-                selected: isSelected,
-                radius: 26,
-                padding: const EdgeInsets.fromLTRB(18, 16, 14, 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                model,
-                                style: LuxeText.item.copyWith(fontSize: 17),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(meta, style: LuxeText.caption),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        if (isArchived)
-                          const LuxeTag(
-                            'Đã lưu trữ',
-                            color: LuxeColors.champagne,
-                          )
-                        else
-                          AnimatedSwitcher(
-                            duration: luxeDuration(context, 260),
-                            child: isSelected
-                                ? LuxeTag(
-                                    'Đang dùng',
-                                    color: context.planAccent,
-                                  )
-                                : const SizedBox.shrink(),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    SizedBox(
-                      height: 112,
-                      child: VehiclePhoto(
-                        url: photoUrl,
-                        fallback: LuxeScooterArt(
-                          level: (level ?? 0).clamp(0.0, 100.0) / 100,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(26),
+          child: Opacity(
+            opacity: isArchived ? 0.72 : 1,
+            child: LuxeGlass(
+              selected: isSelected,
+              radius: 26,
+              padding: const EdgeInsets.fromLTRB(18, 16, 14, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              model,
+                              style: LuxeText.item.copyWith(fontSize: 17),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(meta, style: LuxeText.caption),
+                          ],
                         ),
                       ),
+                      const SizedBox(width: 8),
+                      if (isArchived)
+                        const LuxeTag('Đã lưu trữ', color: LuxeColors.champagne)
+                      else
+                        AnimatedSwitcher(
+                          duration: luxeDuration(context, 260),
+                          child: isSelected
+                              ? LuxeTag('Đang dùng', color: context.planAccent)
+                              : const SizedBox.shrink(),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  SizedBox(
+                    height: 112,
+                    child: VehiclePhoto(
+                      url: photoUrl,
+                      fallback: LuxeScooterArt(
+                        level: (level ?? 0).clamp(0.0, 100.0) / 100,
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        LuxeRing(
-                          value: (soh ?? 0) / 100,
-                          size: 46,
-                          stroke: 4,
-                          color: sohColor,
-                          semanticLabel: soh == null
-                              ? 'Chưa có sức khỏe pin'
-                              : 'Sức khỏe pin ${soh!.toInt()} phần trăm',
-                          child: ExcludeSemantics(
-                            child: Text(
-                              soh == null ? '—' : '${soh!.toInt()}',
-                              style: const TextStyle(
-                                color: LuxeColors.text,
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                              ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      LuxeRing(
+                        value: (soh ?? 0) / 100,
+                        size: 46,
+                        stroke: 4,
+                        color: sohColor,
+                        semanticLabel: soh == null
+                            ? 'Chưa có sức khỏe pin'
+                            : 'Sức khỏe pin ${soh!.toInt()} phần trăm',
+                        child: ExcludeSemantics(
+                          child: Text(
+                            soh == null ? '—' : '${soh!.toInt()}',
+                            style: const TextStyle(
+                              color: LuxeColors.text,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Sức khỏe pin · ODO',
-                                style: LuxeText.label.copyWith(fontSize: 11.5),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Sức khỏe pin · ODO',
+                              style: LuxeText.label.copyWith(fontSize: 11.5),
+                            ),
+                            Text(
+                              odo == null
+                                  ? '— km'
+                                  : '${groupThousands(odo!.round())} km',
+                              style: const TextStyle(
+                                color: LuxeColors.text,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
-                              Text(
-                                odo == null
-                                    ? '— km'
-                                    : '${groupThousands(odo!.round())} km',
-                                style: const TextStyle(
-                                  color: LuxeColors.text,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  fontFeatures: [FontFeature.tabularFigures()],
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
+                      ),
+                      LuxeCircleButton(
+                        icon: Icons.info_outline_rounded,
+                        tooltip: 'Thông số chi tiết',
+                        onPressed: onViewSpec,
+                      ),
+                      const SizedBox(width: 6),
+                      if (onRelink != null) ...[
                         LuxeCircleButton(
-                          icon: Icons.info_outline_rounded,
-                          tooltip: 'Thông số chi tiết',
-                          onPressed: onViewSpec,
+                          key: ValueKey('garage-relink-$heroTag'),
+                          icon: Icons.swap_horiz_rounded,
+                          tooltip: 'Đổi dòng xe',
+                          onPressed: onRelink,
                         ),
                         const SizedBox(width: 6),
-                        if (onRelink != null) ...[
-                          LuxeCircleButton(
-                            key: ValueKey('garage-relink-$heroTag'),
-                            icon: Icons.swap_horiz_rounded,
-                            tooltip: 'Đổi dòng xe',
-                            onPressed: onRelink,
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        LuxeCircleButton(
-                          icon: isArchived
-                              ? Icons.unarchive_rounded
-                              : Icons.archive_rounded,
-                          tooltip: isArchived ? 'Khôi phục xe' : 'Lưu trữ xe',
-                          color: isArchived
-                              ? context.planAccent
-                              : LuxeColors.danger,
-                          onPressed: onDelete,
-                        ),
                       ],
-                    ),
-                  ],
-                ),
+                      LuxeCircleButton(
+                        icon: isArchived
+                            ? Icons.unarchive_rounded
+                            : Icons.archive_rounded,
+                        tooltip: isArchived ? 'Khôi phục xe' : 'Lưu trữ xe',
+                        color: isArchived
+                            ? context.planAccent
+                            : LuxeColors.danger,
+                        onPressed: onDelete,
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),

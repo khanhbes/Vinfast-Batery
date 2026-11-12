@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import '../theme/cockpit_design_system.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../theme/plan_style.dart';
+import 'bot_face.dart';
 
-/// Các trạng thái biểu cảm (mood) của mascot BatteryBot
-enum BatteryBotMood { idle, greeting, happy, thinking, charging, listening }
+export 'bot_face.dart' show BatteryBotMood;
 
 /// Kích thước chuẩn cho mascot BatteryBot
 enum BatteryBotSize {
@@ -65,6 +65,10 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
   late final AnimationController _blinkCtrl;
   late final AnimationController _tapCtrl;
 
+  /// One short reaction when the mood changes (QA 151): a pop, plus a
+  /// shake, hop, droop or wave depending on the new mood. Not a loop.
+  late final AnimationController _reactCtrl;
+
   final List<_SparkleParticle> _particles = [];
   final math.Random _random = math.Random();
 
@@ -94,6 +98,45 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
     _tapCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 550),
+    );
+
+    _reactCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 520),
+    );
+  }
+
+  /// The child moved by the reaction in progress, if any.
+  Widget _reacting(Widget child, double size) {
+    if (!_reactCtrl.isAnimating) return child;
+    final k = _reactCtrl.value;
+    final wave = math.sin(k * math.pi);
+    var dx = 0.0;
+    var dy = 0.0;
+    var turn = 0.0;
+    switch (widget.mood) {
+      case BatteryBotMood.worried:
+        dx = math.sin(k * 6 * math.pi) * (1 - k) * size * 0.05;
+      case BatteryBotMood.celebrating:
+        dy = -wave * size * 0.12;
+      case BatteryBotMood.sorry:
+      case BatteryBotMood.sleepy:
+        dy = wave * size * 0.04;
+      case BatteryBotMood.greeting:
+        turn = math.sin(k * 4 * math.pi) * (1 - k) * 0.14;
+      case BatteryBotMood.idle:
+      case BatteryBotMood.happy:
+      case BatteryBotMood.thinking:
+      case BatteryBotMood.charging:
+      case BatteryBotMood.listening:
+        break;
+    }
+    return Transform.translate(
+      offset: Offset(dx, dy),
+      child: Transform.rotate(
+        angle: turn,
+        child: Transform.scale(scale: 1 + wave * 0.07, child: child),
+      ),
     );
   }
 
@@ -132,7 +175,14 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
   @override
   void didUpdateWidget(covariant BatteryBotMascot oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.mood != widget.mood) _syncLoops();
+    if (oldWidget.mood != widget.mood) {
+      _syncLoops();
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _reactCtrl.value = 0;
+      } else {
+        _reactCtrl.forward(from: 0);
+      }
+    }
   }
 
   @override
@@ -141,6 +191,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
     _pulseCtrl.dispose();
     _blinkCtrl.dispose();
     _tapCtrl.dispose();
+    _reactCtrl.dispose();
     super.dispose();
   }
 
@@ -180,6 +231,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
           _pulseCtrl,
           _blinkCtrl,
           _tapCtrl,
+          _reactCtrl,
         ]),
         builder: (context, _) {
           final floatVal = (motionEnabled && widget.enableFloating)
@@ -207,15 +259,21 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
             offset: Offset(0, -floatVal),
             child: Transform.scale(
               scale: tapScale * breathingScale,
-              child: CustomPaint(
-                size: Size(avatarSize, avatarSize),
-                foregroundPainter: _PlanAccessoryPainter(PlanStyle.of(context)),
-                painter: _BatteryBotAvatarPainter(
-                  mood: widget.mood,
-                  pulse: pulseVal,
-                  eyeOpen: eyeOpenRatio,
-                  accent: context.planAccent,
+              child: _reacting(
+                CustomPaint(
+                  size: Size(avatarSize, avatarSize),
+                  foregroundPainter: _PlanAccessoryPainter(
+                    PlanStyle.of(context),
+                  ),
+                  painter: _BatteryBotAvatarPainter(
+                    mood: widget.mood,
+                    pulse: pulseVal,
+                    eyeOpen: eyeOpenRatio,
+                    phase: _floatCtrl.value,
+                    accent: context.planAccent,
+                  ),
                 ),
+                avatarSize,
               ),
             ),
           );
@@ -241,6 +299,7 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
         _pulseCtrl,
         _blinkCtrl,
         _tapCtrl,
+        _reactCtrl,
       ]),
       builder: (context, _) {
         final floatVal = (motionEnabled && widget.enableFloating)
@@ -303,19 +362,23 @@ class _BatteryBotMascotState extends State<BatteryBotMascot>
               offset: Offset(0, -floatVal),
               child: Transform.scale(
                 scale: tapScale * breathingScale,
-                child: CustomPaint(
-                  size: Size(width, height),
-                  foregroundPainter: _PlanAccessoryPainter(
-                    PlanStyle.of(context),
+                child: _reacting(
+                  CustomPaint(
+                    size: Size(width, height),
+                    foregroundPainter: _PlanAccessoryPainter(
+                      PlanStyle.of(context),
+                    ),
+                    painter: _BatteryBotPainter(
+                      mood: widget.mood,
+                      pulse: pulseVal,
+                      eyeOpen: eyeOpenRatio,
+                      phase: _floatCtrl.value,
+                      particles: _tapCtrl.isAnimating ? _particles : const [],
+                      particleProgress: _tapCtrl.value,
+                      accent: context.planAccent,
+                    ),
                   ),
-                  painter: _BatteryBotPainter(
-                    mood: widget.mood,
-                    pulse: pulseVal,
-                    eyeOpen: eyeOpenRatio,
-                    particles: _tapCtrl.isAnimating ? _particles : const [],
-                    particleProgress: _tapCtrl.value,
-                    accent: context.planAccent,
-                  ),
+                  width,
                 ),
               ),
             ),
@@ -396,6 +459,7 @@ class _BatteryBotPainter extends CustomPainter {
   final BatteryBotMood mood;
   final double pulse;
   final double eyeOpen;
+  final double phase;
   final List<_SparkleParticle> particles;
   final double particleProgress;
 
@@ -403,6 +467,7 @@ class _BatteryBotPainter extends CustomPainter {
     required this.mood,
     required this.pulse,
     required this.eyeOpen,
+    required this.phase,
     required this.particles,
     required this.particleProgress,
     required this.accent,
@@ -449,7 +514,7 @@ class _BatteryBotPainter extends CustomPainter {
     final rodTop = bodyTop - (size.height * 0.12);
 
     final rodPaint = Paint()
-      ..color = const Color(0xFF334155)
+      ..color = LuxeColors.ruleStrong
       ..strokeWidth = (bodyW * 0.06).clamp(2.0, 4.5)
       ..strokeCap = StrokeCap.round;
 
@@ -473,7 +538,7 @@ class _BatteryBotPainter extends CustomPainter {
     );
     final capPaint = Paint()
       ..shader = const LinearGradient(
-        colors: [Color(0xFF64748B), Color(0xFF1E293B)],
+        colors: [LuxeColors.platinumLow, LuxeColors.raised],
       ).createShader(capRect);
     canvas.drawRRect(
       RRect.fromRectAndRadius(capRect, Radius.circular(capRect.height / 2)),
@@ -528,7 +593,7 @@ class _BatteryBotPainter extends CustomPainter {
         width: padW,
         height: padH,
       );
-      final padPaint = Paint()..color = const Color(0xFF1E293B);
+      final padPaint = Paint()..color = LuxeColors.raisedHigh;
       canvas.drawRRect(
         RRect.fromRectAndRadius(padRect, Radius.circular(padH / 2)),
         padPaint,
@@ -559,10 +624,10 @@ class _BatteryBotPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          const Color(0xFF1E293B), // Titanium slate
-          const Color(0xFF0F172A), // Dark slate
+          LuxeColors.raisedHigh, // graphite, lit side
+          LuxeColors.surface,
           // The plan's colour deep in shadow (QA 140; was emerald).
-          Color.lerp(accent, const Color(0xFF0F172A), 0.72)!,
+          Color.lerp(accent, LuxeColors.surface, 0.72)!,
         ],
         stops: [0.0, 0.55, 1.0],
       ).createShader(bodyRect);
@@ -578,7 +643,7 @@ class _BatteryBotPainter extends CustomPainter {
         colors: [
           accent, // Emerald sáng trên đỉnh
           Color.lerp(accent, Colors.black, 0.25)!,
-          Color(0xFF0F172A), // Tối dần xuống dưới
+          LuxeColors.surface, // Tối dần xuống dưới
         ],
       ).createShader(bodyRect);
     canvas.drawRRect(
@@ -608,7 +673,7 @@ class _BatteryBotPainter extends CustomPainter {
     final visorRadius = Radius.circular(bodyW * 0.18);
 
     // Nền visor siêu đen sâu
-    final visorPaint = Paint()..color = const Color(0xFF020617);
+    final visorPaint = Paint()..color = LuxeColors.background;
     canvas.drawRRect(
       RRect.fromRectAndRadius(visorRect, visorRadius),
       visorPaint,
@@ -625,277 +690,21 @@ class _BatteryBotPainter extends CustomPainter {
     );
   }
 
-  /// 5. Vẽ đôi mắt biểu cảm Anime Tech-Cute
+  /// 5. The face (QA 151: one shared drawing, see [BotFace]).
   void _drawEyes(Canvas canvas, Rect bodyRect, double bodyW) {
     final visorCenterY = bodyRect.top + bodyRect.height * 0.36;
     final eyeSpacing = bodyW * 0.22;
     final centerX = bodyRect.center.dx;
-
-    final leftEyeCenter = Offset(centerX - eyeSpacing, visorCenterY);
-    final rightEyeCenter = Offset(centerX + eyeSpacing, visorCenterY);
-
-    final eyeColor = (mood == BatteryBotMood.charging)
-        ? const Color(0xFF38BDF8) // Sky cyan khi sạc
-        : accent; // Emerald rực rỡ thường
-
-    switch (mood) {
-      case BatteryBotMood.happy:
-        _drawHappyEyes(canvas, leftEyeCenter, rightEyeCenter, bodyW, eyeColor);
-        _drawBlush(canvas, leftEyeCenter, rightEyeCenter, bodyW);
-        break;
-
-      case BatteryBotMood.greeting:
-        _drawSparkleEyes(
-          canvas,
-          leftEyeCenter,
-          rightEyeCenter,
-          bodyW,
-          eyeColor,
-        );
-        _drawBlush(canvas, leftEyeCenter, rightEyeCenter, bodyW);
-        break;
-
-      case BatteryBotMood.thinking:
-        _drawThinkingEyes(
-          canvas,
-          leftEyeCenter,
-          rightEyeCenter,
-          bodyW,
-          eyeColor,
-        );
-        break;
-
-      case BatteryBotMood.charging:
-        _drawChargingEyes(
-          canvas,
-          leftEyeCenter,
-          rightEyeCenter,
-          bodyW,
-          eyeColor,
-        );
-        break;
-
-      case BatteryBotMood.listening:
-        _drawListeningEyes(
-          canvas,
-          leftEyeCenter,
-          rightEyeCenter,
-          bodyW,
-          eyeColor,
-        );
-        break;
-
-      case BatteryBotMood.idle:
-        _drawNormalEyes(canvas, leftEyeCenter, rightEyeCenter, bodyW, eyeColor);
-        break;
-    }
-  }
-
-  /// Mắt bình thường với chớp mắt tự nhiên
-  void _drawNormalEyes(
-    Canvas canvas,
-    Offset left,
-    Offset right,
-    double bodyW,
-    Color color,
-  ) {
-    final eyeRadiusX = bodyW * 0.10;
-    final eyeRadiusY = (bodyW * 0.12) * eyeOpen.clamp(0.08, 1.0);
-
-    for (final center in [left, right]) {
-      final rect = Rect.fromCenter(
-        center: center,
-        width: eyeRadiusX * 2,
-        height: eyeRadiusY * 2,
-      );
-
-      // Quầng sáng mắt
-      final glowPaint = Paint()
-        ..color = color.withValues(alpha: 0.4)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-      canvas.drawOval(rect, glowPaint);
-
-      // Đồng tử chính
-      final eyePaint = Paint()..color = color;
-      canvas.drawOval(rect, eyePaint);
-
-      // Đốm sáng phản chiếu anime (Sparkle glint) khi mắt mở
-      if (eyeOpen > 0.4) {
-        final glintPaint = Paint()..color = Colors.white;
-        canvas.drawCircle(
-          Offset(center.dx - eyeRadiusX * 0.3, center.dy - eyeRadiusY * 0.3),
-          eyeRadiusX * 0.35,
-          glintPaint,
-        );
-        canvas.drawCircle(
-          Offset(center.dx + eyeRadiusX * 0.3, center.dy + eyeRadiusY * 0.2),
-          eyeRadiusX * 0.18,
-          glintPaint,
-        );
-      }
-    }
-  }
-
-  /// Mắt cười hình cung vui sướng (^_^)
-  void _drawHappyEyes(
-    Canvas canvas,
-    Offset left,
-    Offset right,
-    double bodyW,
-    Color color,
-  ) {
-    final arcPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = (bodyW * 0.05).clamp(2.5, 4.5)
-      ..strokeCap = StrokeCap.round;
-
-    final arcRadius = bodyW * 0.09;
-
-    for (final center in [left, right]) {
-      final rect = Rect.fromCircle(center: center, radius: arcRadius);
-      canvas.drawArc(rect, math.pi * 1.15, math.pi * 0.7, false, arcPaint);
-    }
-  }
-
-  /// Mắt long lanh hình ngôi sao (✦_✦) chào mừng
-  void _drawSparkleEyes(
-    Canvas canvas,
-    Offset left,
-    Offset right,
-    double bodyW,
-    Color color,
-  ) {
-    for (final center in [left, right]) {
-      // Vòng sáng tròn phía sau
-      final haloPaint = Paint()
-        ..color = color.withValues(alpha: 0.35)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-      canvas.drawCircle(center, bodyW * 0.11, haloPaint);
-
-      // Vẽ hình sao 4 cánh lấp lánh
-      final starPath = Path();
-      final r = bodyW * 0.11;
-      final inner = r * 0.3;
-
-      for (int i = 0; i < 4; i++) {
-        final a1 = (i * math.pi / 2);
-        final a2 = a1 + (math.pi / 4);
-        if (i == 0) {
-          starPath.moveTo(
-            center.dx + math.cos(a1) * r,
-            center.dy + math.sin(a1) * r,
-          );
-        } else {
-          starPath.lineTo(
-            center.dx + math.cos(a1) * r,
-            center.dy + math.sin(a1) * r,
-          );
-        }
-        starPath.lineTo(
-          center.dx + math.cos(a2) * inner,
-          center.dy + math.sin(a2) * inner,
-        );
-      }
-      starPath.close();
-
-      canvas.drawPath(starPath, Paint()..color = color);
-      canvas.drawCircle(center, inner * 0.6, Paint()..color = Colors.white);
-    }
-  }
-
-  /// Mắt liếc đang suy nghĩ (◑_◑)
-  void _drawThinkingEyes(
-    Canvas canvas,
-    Offset left,
-    Offset right,
-    double bodyW,
-    Color color,
-  ) {
-    final r = bodyW * 0.10;
-    for (final center in [left, right]) {
-      canvas.drawCircle(
-        center,
-        r,
-        Paint()..color = color.withValues(alpha: 0.25),
-      );
-
-      // Tròng mắt nhìn lên góc trên bên phải
-      final pupilCenter = Offset(center.dx + r * 0.35, center.dy - r * 0.35);
-      canvas.drawCircle(pupilCenter, r * 0.65, Paint()..color = color);
-      canvas.drawCircle(
-        Offset(pupilCenter.dx - 1, pupilCenter.dy - 1),
-        r * 0.25,
-        Paint()..color = Colors.white,
-      );
-    }
-  }
-
-  /// Mắt năng lượng sạc (>_<) hoặc tia chớp
-  void _drawChargingEyes(
-    Canvas canvas,
-    Offset left,
-    Offset right,
-    double bodyW,
-    Color color,
-  ) {
-    final boltPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-
-    for (final center in [left, right]) {
-      final bW = bodyW * 0.12;
-      final bH = bodyW * 0.16;
-      final path = Path()
-        ..moveTo(center.dx + bW * 0.2, center.dy - bH * 0.5)
-        ..lineTo(center.dx - bW * 0.4, center.dy)
-        ..lineTo(center.dx, center.dy)
-        ..lineTo(center.dx - bW * 0.2, center.dy + bH * 0.5)
-        ..lineTo(center.dx + bW * 0.4, center.dy)
-        ..lineTo(center.dx, center.dy)
-        ..close();
-      canvas.drawPath(path, boltPaint);
-    }
-  }
-
-  /// Mắt lắng nghe chăm chú
-  void _drawListeningEyes(
-    Canvas canvas,
-    Offset left,
-    Offset right,
-    double bodyW,
-    Color color,
-  ) {
-    _drawNormalEyes(canvas, left, right, bodyW, color);
-    // Vẽ thêm gợn sóng radar nhỏ phía trên tai
-    final ringPaint = Paint()
-      ..color = color.withValues(alpha: (0.6 - pulse * 0.4).clamp(0.1, 0.6))
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    canvas.drawArc(
-      Rect.fromCircle(center: left, radius: bodyW * 0.16 + pulse * 4),
-      -math.pi * 0.7,
-      math.pi * 0.4,
-      false,
-      ringPaint,
-    );
-  }
-
-  /// Má hồng dễ thương anime
-  void _drawBlush(Canvas canvas, Offset left, Offset right, double bodyW) {
-    final blushPaint = Paint()
-      ..color = const Color(0xFFFB7185).withValues(alpha: 0.45)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    final r = bodyW * 0.055;
-    canvas.drawCircle(
-      Offset(left.dx - bodyW * 0.04, left.dy + bodyW * 0.09),
-      r,
-      blushPaint,
-    );
-    canvas.drawCircle(
-      Offset(right.dx + bodyW * 0.04, right.dy + bodyW * 0.09),
-      r,
-      blushPaint,
+    BotFace.paint(
+      canvas,
+      left: Offset(centerX - eyeSpacing, visorCenterY),
+      right: Offset(centerX + eyeSpacing, visorCenterY),
+      r: bodyW * 0.10,
+      mood: mood,
+      color: accent,
+      eyeOpen: eyeOpen,
+      pulse: pulse,
+      phase: phase,
     );
   }
 
@@ -921,8 +730,8 @@ class _BatteryBotPainter extends CustomPainter {
       final isActive = i < activeCount;
 
       final barColor = isActive
-          ? (i == 0 && activeCount == 1 ? const Color(0xFFF59E0B) : accent)
-          : const Color(0xFF1E293B);
+          ? (i == 0 && activeCount == 1 ? LuxeColors.champagne : accent)
+          : LuxeColors.rule;
 
       final barPaint = Paint()..color = barColor;
       canvas.drawRRect(
@@ -983,6 +792,8 @@ class _BatteryBotPainter extends CustomPainter {
     return oldDelegate.mood != mood ||
         oldDelegate.pulse != pulse ||
         oldDelegate.eyeOpen != eyeOpen ||
+        oldDelegate.phase != phase ||
+        oldDelegate.accent != accent ||
         oldDelegate.particleProgress != particleProgress;
   }
 }
@@ -1005,7 +816,7 @@ class _SpeechBubbleWidget extends StatelessWidget {
       constraints: BoxConstraints(maxWidth: maxWidth.clamp(140.0, 320.0)),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+        color: LuxeColors.sheet.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: context.planAccent.withValues(alpha: 0.45),
@@ -1047,11 +858,13 @@ class _BatteryBotAvatarPainter extends CustomPainter {
   final BatteryBotMood mood;
   final double pulse;
   final double eyeOpen;
+  final double phase;
 
   _BatteryBotAvatarPainter({
     required this.mood,
     required this.pulse,
     required this.eyeOpen,
+    required this.phase,
     required this.accent,
   });
 
@@ -1074,9 +887,9 @@ class _BatteryBotAvatarPainter extends CustomPainter {
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          const Color(0xFF1E293B),
-          const Color(0xFF0F172A),
-          Color.lerp(accent, const Color(0xFF0F172A), 0.72)!,
+          LuxeColors.raisedHigh,
+          LuxeColors.surface,
+          Color.lerp(accent, LuxeColors.surface, 0.72)!,
         ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius - 1.5, bgPaint);
@@ -1103,7 +916,7 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       height: h * 0.52,
     );
     final visorRadius = Radius.circular(visorRect.height * 0.45);
-    final visorPaint = Paint()..color = const Color(0xFF020617);
+    final visorPaint = Paint()..color = LuxeColors.background;
     canvas.drawRRect(
       RRect.fromRectAndRadius(visorRect, visorRadius),
       visorPaint,
@@ -1118,80 +931,30 @@ class _BatteryBotAvatarPainter extends CustomPainter {
       visorBorder,
     );
 
-    // 5. Đôi mắt anime dễ thương
+    // 5. The face (QA 151: shared with the full-body mascot). Under 30 dp
+    // there is no room for a mouth.
     final eyeSpacing = w * 0.18;
     final eyeCenterY = visorRect.center.dy;
-    final leftEye = Offset(center.dx - eyeSpacing, eyeCenterY);
-    final rightEye = Offset(center.dx + eyeSpacing, eyeCenterY);
-
-    final eyeColor = (mood == BatteryBotMood.charging)
-        ? const Color(0xFF38BDF8)
-        : accent;
-
-    final eyeRadiusX = w * 0.085;
-    final eyeRadiusY = (h * 0.10) * eyeOpen.clamp(0.12, 1.0);
-
-    if (mood == BatteryBotMood.happy) {
-      final archPaint = Paint()
-        ..color = eyeColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0
-        ..strokeCap = StrokeCap.round;
-      for (final pt in [leftEye, rightEye]) {
-        final path = Path()
-          ..moveTo(pt.dx - eyeRadiusX, pt.dy + 1)
-          ..quadraticBezierTo(
-            pt.dx,
-            pt.dy - eyeRadiusY * 1.5,
-            pt.dx + eyeRadiusX,
-            pt.dy + 1,
-          );
-        canvas.drawPath(path, archPaint);
-      }
-    } else {
-      final eyePaint = Paint()..color = eyeColor;
-      for (final pt in [leftEye, rightEye]) {
-        canvas.drawOval(
-          Rect.fromCenter(
-            center: pt,
-            width: eyeRadiusX * 2,
-            height: eyeRadiusY * 2,
-          ),
-          eyePaint,
-        );
-        if (eyeOpen > 0.6) {
-          final glintPaint = Paint()..color = Colors.white;
-          canvas.drawCircle(
-            Offset(pt.dx - eyeRadiusX * 0.3, pt.dy - eyeRadiusY * 0.3),
-            eyeRadiusX * 0.35,
-            glintPaint,
-          );
-        }
-      }
-    }
-
-    // Má hồng biểu cảm khi vui vẻ hoặc chào
-    if (mood == BatteryBotMood.happy || mood == BatteryBotMood.greeting) {
-      final blushPaint = Paint()
-        ..color = const Color(0xFFF43F5E).withValues(alpha: 0.6)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5);
-      canvas.drawCircle(
-        Offset(leftEye.dx - 2, eyeCenterY + 5),
-        2.5,
-        blushPaint,
-      );
-      canvas.drawCircle(
-        Offset(rightEye.dx + 2, eyeCenterY + 5),
-        2.5,
-        blushPaint,
-      );
-    }
+    BotFace.paint(
+      canvas,
+      left: Offset(center.dx - eyeSpacing, eyeCenterY),
+      right: Offset(center.dx + eyeSpacing, eyeCenterY),
+      r: w * 0.085,
+      mood: mood,
+      color: accent,
+      eyeOpen: eyeOpen,
+      pulse: pulse,
+      phase: phase,
+      mouth: w >= 30,
+    );
   }
 
   @override
   bool shouldRepaint(covariant _BatteryBotAvatarPainter oldDelegate) {
     return oldDelegate.mood != mood ||
         oldDelegate.pulse != pulse ||
+        oldDelegate.phase != phase ||
+        oldDelegate.accent != accent ||
         oldDelegate.eyeOpen != eyeOpen;
   }
 }

@@ -7,6 +7,7 @@ import '../../core/utils/number_text.dart';
 import '../../core/theme/plan_style.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
+import '../../core/widgets/luxe_skeleton.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/entitlement.dart';
 import '../../data/services/charge_estimator.dart';
@@ -165,12 +166,8 @@ class ChargeHabitsScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
           children: [
             async.when(
-              loading: () => Padding(
-                padding: const EdgeInsets.all(40),
-                child: Center(
-                  child: CircularProgressIndicator(color: context.planAccent),
-                ),
-              ),
+              loading: () =>
+                  const LuxeSkeleton.list(label: 'Đang tải thói quen sạc'),
               error: (error, _) => LuxeNotice(
                 icon: Icons.cloud_off_rounded,
                 color: LuxeColors.champagne,

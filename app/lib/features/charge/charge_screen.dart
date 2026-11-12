@@ -34,9 +34,35 @@ class ChargeScreen extends ConsumerWidget {
           ),
         ),
         Expanded(
-          child: section == ChargeSection.history
-              ? const ChargeHistoryView()
-              : const _ChargeControl(),
+          // QA 151: Lịch sử comes in from its side of the switcher (the
+          // right), the charge controls from theirs; it used to cut.
+          child: AnimatedSwitcher(
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 320),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (current, previous) =>
+                Stack(fit: StackFit.expand, children: [...previous, ?current]),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: Offset(
+                    child.key == const ValueKey('charge-history')
+                        ? 0.06
+                        : -0.06,
+                    0,
+                  ),
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+            child: section == ChargeSection.history
+                ? const ChargeHistoryView(key: ValueKey('charge-history'))
+                : const _ChargeControl(key: ValueKey('charge-control')),
+          ),
         ),
       ],
     );
@@ -44,7 +70,7 @@ class ChargeScreen extends ConsumerWidget {
 }
 
 class _ChargeControl extends ConsumerWidget {
-  const _ChargeControl();
+  const _ChargeControl({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
