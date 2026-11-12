@@ -749,7 +749,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
         ? 'điện nạp · ${(counted / 7).ceil()} tuần'
         // QA 150: "11 ngày" under a month title read as a mistake.
         : elapsed > 0 && elapsed < days.length
-        ? 'điện nạp · $counted ngày tính đến hôm nay'
+        ? 'điện nạp · $counted ngày qua'
         : 'điện nạp · $counted ngày';
     return (
       buckets: buckets,
@@ -1203,17 +1203,8 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 38,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    color: LuxeColors.hairlineStrong,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
+              // QA 150: the sheet already draws a drag handle.
+              const SizedBox(height: 6),
               const Text('BÁO CÁO', style: LuxeText.eyebrow),
               const SizedBox(height: 6),
               const Text('Xuất báo cáo', style: LuxeText.title),

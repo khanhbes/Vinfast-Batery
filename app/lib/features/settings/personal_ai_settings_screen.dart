@@ -331,7 +331,12 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
             ),
             const SizedBox(height: 22),
             if (_busy && status == null)
-              const Center(child: CircularProgressIndicator())
+              // QA 150: a small spinner let the consent switches sit at the top
+              // and jump down a screen when the model cards arrived.
+              const SizedBox(
+                height: 640,
+                child: Center(child: CircularProgressIndicator()),
+              )
             // Same notice as the rest of the app, retrying by itself: a
             // read during a slow app start failed once and stayed (QA 130).
             else if (_error != null && status == null)

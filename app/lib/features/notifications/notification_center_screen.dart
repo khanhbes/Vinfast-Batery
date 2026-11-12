@@ -518,7 +518,7 @@ class _NotificationCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          notification.message,
+                          inboxBody(notification.title, notification.message),
                           style: LuxeText.caption.copyWith(fontSize: 13),
                           softWrap: true,
                         ),
@@ -638,7 +638,7 @@ class _NotificationDetailSheet extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              notification.message,
+              inboxBody(notification.title, notification.message),
               style: const TextStyle(
                 color: LuxeColors.text,
                 fontSize: 14,
@@ -873,3 +873,19 @@ class _NotificationDetailSheet extends StatelessWidget {
         'Hệ thống',
       ),
     };
+
+/// QA 150: the server writes a push-style body that starts by repeating the
+/// title ("Đã dừng sạc" / "Đã dừng sạc. Shelly đã xác nhận tắt.") and says
+/// "Mở app để kiểm tra" to someone already in the app. Shown without the
+/// repeat; the stored notification is unchanged.
+String inboxBody(String title, String message) {
+  var body = message.trim();
+  final head = title.trim();
+  // Only when the title is a sentence of its own ("Đã dừng sạc. Shelly…"),
+  // not the start of a longer one ("Phiên sạc bị ngắt trước giờ dự kiến").
+  if (head.isNotEmpty && body.startsWith('$head. ')) {
+    final rest = body.substring(head.length + 2).trim();
+    if (rest.isNotEmpty) body = rest;
+  }
+  return body.replaceAll('Mở app để kiểm tra.', 'Mở Sạc pin để xem chi tiết.');
+}

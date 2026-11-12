@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 150. Task Completion Log — Kiểm thử toàn diện trước phát hành trên Xiaomi 1.3.24+227 (QA Lead + UX Researcher + Content Auditor, 10–11/11/2026) — Báo cáo xong; Đợt 1 và 2 đã sửa (150.14, 150.15), APK 1.3.25+228 đã cài; Đợt 3–6 (150.16–150.19) code + test xong, APK 1.3.27+230 đã build, chưa cài; chưa deploy
+## 150. Task Completion Log — Kiểm thử toàn diện trước phát hành trên Xiaomi 1.3.24+227 (QA Lead + UX Researcher + Content Auditor, 10–11/11/2026) — Báo cáo xong; Đợt 1 và 2 đã sửa (150.14, 150.15), APK 1.3.25+228 đã cài; Đợt 3–7 (150.16–150.20) xong: APK 1.3.29+232 đã cài, máy chủ đã deploy 12/11, đã commit
 
 **Phạm vi:** APK profile 1.3.24+227, API production, Xiaomi Android 16 (1200×2608, chữ ×1.0). Ba vai: người mới (tài khoản thử `pinova.qa.20261110@example.com`, Free → Pro → Ultra bằng mã `PINOVA2`/`PINOVA1`), người dùng cũ (tài khoản Feliz của chủ app, gói Ultra, **chỉ xem**), và người kiểm thử (nhập biên, CRUD, rà mã nguồn). Không sửa tệp nào trong repo, không deploy, không bật relay. Một phiếu hỗ trợ "QA kiem thu 11-11" đã gửi lên production (chủ app đã duyệt trước).
 
@@ -371,6 +371,25 @@ Test mới: `app/test/unit/qa150_round4_test.dart` (8 ca), `test_qa140_privacy.p
 **Còn lại, cần nhìn trên máy hoặc cần chủ app quyết định:** popup thành tựu che kết quả dự đoán; mốc định kỳ không tự sinh mốc kế; nút Lưu bị bàn phím che; lỗi biểu mẫu còn hiện sau khi điền; UX-14 (màn AI cá nhân nhảy bố cục, tên xe nhỏ, hai thanh kéo ở sheet xuất, hộp chọn giờ kiểu Material, nút bot che ô, thẻ Aurora hẹp); định dạng ngày thống nhất; thân thông báo lặp tiêu đề, nhãn "MỌI GÓI" (chưa tìm thấy trong mã); trợ năng cần TalkBack thật; mọi mục "chưa kiểm" ở 150.12.
 
 **Kiểm chứng (12/11, trên máy tính):** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1419 đạt / 216 bỏ qua; `pytest tests` toàn bộ 949 đạt / 15 bỏ qua. Nút Hoàn tác chưa có test tự động (ghi Firestore). Chưa kiểm trên điện thoại, chưa deploy, chưa commit.
+
+### 150.20. QA150-FIX Đợt 7: cài máy, deploy, commit (12/11/2026, chủ app duyệt cả ba) — APK 1.3.29+232 đã cài lên Xiaomi, máy chủ đã deploy, đã commit
+
+**Chủ app quyết định:** mốc bảo dưỡng: app đề xuất mốc kế, người dùng tự quyết; hộp chọn giờ làm theo LUXE; Tempest là ắc quy chì (danh mục đã đúng, không đổi).
+
+| Việc | Đã làm | Tệp |
+|---|---|---|
+| Hộp chọn giờ LUXE | `showLuxeTimePicker` (sheet hai bánh xe giờ/phút, 24 giờ, nút Hủy/Chọn) thay hộp Material ở Sạc theo giờ, Đổi giờ ngắt và Sạc đêm | `core/widgets/luxe_time_picker.dart` (mới), `timed_charging_section_v2.dart`, `edit_stop_at_sheet.dart`, `night_charging_screen.dart` |
+| Mốc bảo dưỡng kế tiếp | Đánh dấu hoàn thành một hạng mục có chu kỳ của VinFast và không còn mốc mở cùng loại thì app hỏi "Tạo mốc kế tiếp?" (ODO lớn hơn giữa ODO hiện tại và mốc cũ, cộng chu kỳ); đồng ý thì mở sheet đã điền sẵn, sửa được trước khi lưu | `vinfast_service_catalog.dart` (`nextAfter`), `maintenance_screen.dart` |
+| Rà trên máy (1.3.28+231, tài khoản chủ app, chỉ xem) | Thấy và sửa: màn AI cá nhân nhảy bố cục khi tải (giữ chỗ 640 dp); thông báo lặp tiêu đề và "Mở app để kiểm tra" (`inboxBody`, chỉ đổi cách hiển thị); sheet xuất báo cáo hai thanh kéo; chú thích Lịch sử dài hai dòng ("12 ngày qua"). Xác nhận trên máy: mục tiêu mặc định 90% khi pin 88%, hộp chọn giờ LUXE, hàng "Email chưa xác minh", mục Điều khoản sử dụng, không còn hướng dẫn tự mở cho tài khoản cũ | `personal_ai_settings_screen.dart`, `notification_center_screen.dart`, `smart_charge_history_screen.dart` |
+| Công cụ kiểm thử | `ui.py` (ngoài repo): bỏ qua dòng `mCurrentFocus=null` của màn hình ảo không có cửa sổ (Xiaomi, display 2); vẫn từ chối khi có cửa sổ của app khác | — |
+
+**Deploy (12/11, commit `871d09d`):** gate task166 trên worktree sạch đạt (build API/worker/QA, 92 tệp nguồn khớp, backend Linux 942 đạt / 20 bỏ qua, boot cô lập 17,93 s, worker smoke). API `vinfast-api@sha256:fabc6f84…81f4e4d7` (rollout verified, Unlocked), worker `vinfast-worker@sha256:7f4de0cf…a5c255e3` → `vinfast-worker-control--0000031`; `/api/health` 200, `/api/ready` 200, `/dieu-khoan-su-dung` 200 (phiên bản 2026-11-12). Biên nhận `docs/qa_evidence/app-review-2026-10-05/qa150-rollout-20261112.json`.
+
+**APK:** 1.3.29+232 profile, 173 712 786 byte, SHA-256 `0A26A2C4D4DB3F714B3F6F4F6DE44F69396737D61BCD05995DA42C5EC8B697E4`, cài bằng `adb install -r` (versionCode 232). Các bản 229, 230 chưa từng cài; 231 đã cài để rà rồi thay bằng 232.
+
+**Kiểm chứng:** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1428 đạt / 216 bỏ qua (thêm `qa150_round7_test.dart`, `qa150_inbox_body_test.dart`); `pytest tests` 949 đạt / 15 bỏ qua trên Windows.
+
+**Chưa kiểm / chưa làm:** tài khoản trên máy là của chủ app nên không bấm thao tác ghi: chưa thử Hoàn tác và đề xuất mốc kế trên máy, chưa gửi email xác minh, chưa hỏi Pinova Bot sau deploy, chưa thử đăng ký mới. Không tái hiện được nên chưa sửa: popup thành tựu che kết quả dự đoán, nút Lưu bị bàn phím che, lỗi biểu mẫu còn hiện sau khi điền, tên xe nhỏ trên tiêu đề, thẻ Aurora hẹp ở Free, nhãn "MỌI GÓI". Nút bot nổi vẫn che huy hiệu số ở hàng Trung tâm thông báo khi cuộn dừng đúng chỗ đó. Trợ năng với TalkBack thật và các mục ở 150.12 vẫn chưa kiểm. Điều khoản sử dụng là bản nháp chờ chủ app duyệt.
 
 ---
 

@@ -293,6 +293,72 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Lời khuyên sạc theo loại pin: dùng `isLeadAcidChemistry`/`batteryChemistryLabel` (app) và `habits.is_lead_acid` (máy chủ); ắc quy chì khuyên sạc đầy, không áp quy tắc 20–80% của pin lithium. Trang Premium: gói đang dùng gắn "ĐANG DÙNG"; chưa thu tiền thì nút chính là "Nhập mã để kích hoạt".
   - Trang công khai: `/dieu-khoan-su-dung` (`web/support/terms.py`, bản nháp chờ chủ app duyệt), `/chinh-sach-bao-mat`, `/dieu-khoan-premium`, `/xoa-tai-khoan`; đổi nội dung thì tăng `VERSION`. Số điện thoại lúc đăng ký không bắt buộc.
   - Nhắc bảo dưỡng: một thông báo mỗi lượt cho mỗi trạng thái (`MaintenanceReminderSummary`), ghi cả vào Trung tâm thông báo. Hướng dẫn màn hình cách nhau ít nhất 10 phút (`ScreenTour.spacing`). Loại dịch vụ bảo dưỡng không có màu riêng. Sạc đêm giữ giới hạn 80–90% cho mọi loại pin; xe ắc quy chì chỉ được nhắc dùng Sạc AI 100%.
+import sys
+
+sys.stdout.reconfigure(encoding="utf-8")
+ROOT = r"c:\Users\khanh\OneDrive\Desktop\Vinfast Batery"
+
+SECTION = """### 150.20. QA150-FIX Đợt 7: cài máy, deploy, commit (12/11/2026, chủ app duyệt cả ba) — APK 1.3.29+232 đã cài lên Xiaomi, máy chủ đã deploy, đã commit
+
+**Chủ app quyết định:** mốc bảo dưỡng: app đề xuất mốc kế, người dùng tự quyết; hộp chọn giờ làm theo LUXE; Tempest là ắc quy chì (danh mục đã đúng, không đổi).
+
+| Việc | Đã làm | Tệp |
+|---|---|---|
+| Hộp chọn giờ LUXE | `showLuxeTimePicker` (sheet hai bánh xe giờ/phút, 24 giờ, nút Hủy/Chọn) thay hộp Material ở Sạc theo giờ, Đổi giờ ngắt và Sạc đêm | `core/widgets/luxe_time_picker.dart` (mới), `timed_charging_section_v2.dart`, `edit_stop_at_sheet.dart`, `night_charging_screen.dart` |
+| Mốc bảo dưỡng kế tiếp | Đánh dấu hoàn thành một hạng mục có chu kỳ của VinFast và không còn mốc mở cùng loại thì app hỏi "Tạo mốc kế tiếp?" (ODO lớn hơn giữa ODO hiện tại và mốc cũ, cộng chu kỳ); đồng ý thì mở sheet đã điền sẵn, sửa được trước khi lưu | `vinfast_service_catalog.dart` (`nextAfter`), `maintenance_screen.dart` |
+| Rà trên máy (1.3.28+231, tài khoản chủ app, chỉ xem) | Thấy và sửa: màn AI cá nhân nhảy bố cục khi tải (giữ chỗ 640 dp); thông báo lặp tiêu đề và "Mở app để kiểm tra" (`inboxBody`, chỉ đổi cách hiển thị); sheet xuất báo cáo hai thanh kéo; chú thích Lịch sử dài hai dòng ("12 ngày qua"). Xác nhận trên máy: mục tiêu mặc định 90% khi pin 88%, hộp chọn giờ LUXE, hàng "Email chưa xác minh", mục Điều khoản sử dụng, không còn hướng dẫn tự mở cho tài khoản cũ | `personal_ai_settings_screen.dart`, `notification_center_screen.dart`, `smart_charge_history_screen.dart` |
+| Công cụ kiểm thử | `ui.py` (ngoài repo): bỏ qua dòng `mCurrentFocus=null` của màn hình ảo không có cửa sổ (Xiaomi, display 2); vẫn từ chối khi có cửa sổ của app khác | — |
+
+**Deploy (12/11, commit `871d09d`):** gate task166 trên worktree sạch đạt (build API/worker/QA, 92 tệp nguồn khớp, backend Linux 942 đạt / 20 bỏ qua, boot cô lập 17,93 s, worker smoke). API `vinfast-api@sha256:fabc6f84…81f4e4d7` (rollout verified, Unlocked), worker `vinfast-worker@sha256:7f4de0cf…a5c255e3` → `vinfast-worker-control--0000031`; `/api/health` 200, `/api/ready` 200, `/dieu-khoan-su-dung` 200 (phiên bản 2026-11-12). Biên nhận `docs/qa_evidence/app-review-2026-10-05/qa150-rollout-20261112.json`.
+
+**APK:** 1.3.29+232 profile, 173 712 786 byte, SHA-256 `0A26A2C4D4DB3F714B3F6F4F6DE44F69396737D61BCD05995DA42C5EC8B697E4`, cài bằng `adb install -r` (versionCode 232). Các bản 229, 230 chưa từng cài; 231 đã cài để rà rồi thay bằng 232.
+
+**Kiểm chứng:** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1428 đạt / 216 bỏ qua (thêm `qa150_round7_test.dart`, `qa150_inbox_body_test.dart`); `pytest tests` 949 đạt / 15 bỏ qua trên Windows.
+
+**Chưa kiểm / chưa làm:** tài khoản trên máy là của chủ app nên không bấm thao tác ghi: chưa thử Hoàn tác và đề xuất mốc kế trên máy, chưa gửi email xác minh, chưa hỏi Pinova Bot sau deploy, chưa thử đăng ký mới. Không tái hiện được nên chưa sửa: popup thành tựu che kết quả dự đoán, nút Lưu bị bàn phím che, lỗi biểu mẫu còn hiện sau khi điền, tên xe nhỏ trên tiêu đề, thẻ Aurora hẹp ở Free, nhãn "MỌI GÓI". Nút bot nổi vẫn che huy hiệu số ở hàng Trung tâm thông báo khi cuộn dừng đúng chỗ đó. Trợ năng với TalkBack thật và các mục ở 150.12 vẫn chưa kiểm. Điều khoản sử dụng là bản nháp chờ chủ app duyệt.
+
+"""
+
+AGENTS_LINE = open(__file__.replace('log6.py','agents7.txt'),encoding='utf-8').read()
+
+
+def insert(path, anchor, text, before=True, edits=()):
+    raw = open(path, encoding="utf-8", newline="").read()
+    crlf = "\r\n" in raw
+    s = raw.replace("\r\n", "\n")
+    n0 = s.count("\n")
+    tail = s[-400:]
+    for old, new in edits:
+        assert s.count(old) == 1, old
+        s = s.replace(old, new)
+    assert s.count(anchor) == 1, anchor
+    i = s.index(anchor)
+    if not before:
+        i += len(anchor)
+    s = s[:i] + text + s[i:]
+    assert s.count("\n") == n0 + text.count("\n"), "line count"
+    assert s[-400:] == tail, "tail"
+    if crlf:
+        s = s.replace("\n", "\r\n")
+    open(path, "w", encoding="utf-8", newline="").write(s)
+    print(path, n0, "->", s.count("\n"))
+
+
+insert(
+    ROOT + r"\PROJECT_STATUS.md",
+    "\n---\n\n## 149. Task Completion Log",
+    "\n" + SECTION.rstrip("\n") + "\n",
+    edits=[(
+        "Đợt 3–6 (150.16–150.19) code + test xong, APK 1.3.27+230 đã build, chưa cài; chưa deploy",
+        "Đợt 3–7 (150.16–150.20) xong: APK 1.3.29+232 đã cài, máy chủ đã deploy 12/11, đã commit",
+    )],
+)
+insert(
+    ROOT + r"\AGENTS.md",
+    "xe ắc quy chì chỉ được nhắc dùng Sạc AI 100%.\n",
+    AGENTS_LINE,
+    before=False,
+)
   - Đánh dấu hoàn thành mốc bảo dưỡng có "Hoàn tác" (nhãn nút của `AppPopup` phải có trong `AppNoticeCopy.actionLabel`).
   - Tên gọi trong câu chữ: "ổ Shelly" (giới thiệu lần đầu: "ổ cắm thông minh Shelly"), "phiên sạc", "Sức khỏe pin", "danh mục xe"; không viết Smart Charge, SoH, catalog, UID, rơ-le, cell pin ra giao diện. Đăng ký gửi email xác minh nhưng không chặn; Hồ sơ có hàng gửi lại. Pinova Bot giữ đoạn chat gần nhất 30 phút trong bộ nhớ.
 
