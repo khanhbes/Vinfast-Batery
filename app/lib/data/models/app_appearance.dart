@@ -1,7 +1,7 @@
 /// Overview hero (QA 131): the owner picks how the Tổng quan tab looks.
 enum DashboardStyle {
   luxe('luxe', 'Luxe', 'Ảnh xe trên sân khấu, % pin lớn'),
-  lcd('lcd', 'Đồng hồ xe', 'Số 7 đoạn như màn hình Feliz'),
+  lcd('lcd', 'Đồng hồ xe', 'Số 7 đoạn như đồng hồ xe'),
   compact('compact', 'Gọn', 'Lưới số liệu, không ảnh lớn'),
   minimal('minimal', 'Tối giản', 'Chỉ vòng % pin và nút Sạc');
 

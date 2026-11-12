@@ -20,15 +20,20 @@ void main() {
     test('Invalid format returns error message', () {
       expect(
         OnboardingService.validateDateOfBirth('20-05-1995'),
-        contains('dd/mm/yyyy'),
+        contains('ngày/tháng/năm'),
       );
       expect(
         OnboardingService.validateDateOfBirth('1995/05/20'),
-        contains('dd/mm/yyyy'),
+        contains('ngày/tháng/năm'),
       );
       expect(
         OnboardingService.validateDateOfBirth('not-a-date'),
-        contains('dd/mm/yyyy'),
+        contains('ngày/tháng/năm'),
+      );
+      // QA 150: a date that does not exist is not a format problem.
+      expect(
+        OnboardingService.validateDateOfBirth('31/02/2000'),
+        contains('không có trong lịch'),
       );
     });
 

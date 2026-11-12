@@ -142,7 +142,7 @@ class _NotificationCenterScreenState
                   if (!compactHeader) ...[
                     const SizedBox(height: 4),
                     const Text(
-                      'Cập nhật về pin, sạc và bảo dưỡng',
+                      'Kết quả phiên sạc, cảnh báo và nhắc bảo dưỡng',
                       style: LuxeText.caption,
                     ),
                   ],
@@ -221,7 +221,8 @@ class _NotificationCenterScreenState
       const EmptyState(
         icon: Icons.notifications_off_rounded,
         title: 'Chưa có thông báo',
-        message: 'Thông báo về pin, phiên sạc và bảo dưỡng sẽ xuất hiện ở đây.',
+        message:
+            'Kết quả phiên sạc, cảnh báo và nhắc bảo dưỡng sẽ xuất hiện ở đây.',
       ),
     );
   }

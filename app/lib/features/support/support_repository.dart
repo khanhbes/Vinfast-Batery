@@ -5,7 +5,7 @@ import '../../core/services/pinova_api.dart';
 /// What the owner asks about (server ids, `web/support/tickets.py`).
 enum SupportCategory {
   charging('charging', 'Sạc pin'),
-  shelly('shelly', 'Ổ sạc Shelly'),
+  shelly('shelly', 'Ổ Shelly'),
   scan('scan', 'Quét đồng hồ'),
   battery('battery', 'Pin & quãng đường'),
   billing('billing', 'Gói Premium'),

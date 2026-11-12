@@ -179,9 +179,7 @@ class _VehicleCard extends StatelessWidget {
         : null;
     final range = spec?.rangeKm ?? configuredRange;
     final batteryType = vehicle.batteryType?.trim();
-    final batteryTypeLabel = batteryType?.isNotEmpty == true
-        ? batteryType!
-        : 'Chưa có dữ liệu';
+    final batteryTypeLabel = batteryChemistryLabel(batteryType);
     final licensePlate = vehicle.licensePlate?.trim();
 
     return Semantics(

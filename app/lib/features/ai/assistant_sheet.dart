@@ -72,6 +72,47 @@ class _InteractiveAssistantSheetState
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
+
+  /// QA 150: closing the sheet and opening it again started a new chat and
+  /// lost the thread. The last conversation of this account stays for 30
+  /// minutes (in memory only; the saved history is unchanged).
+  static ({
+    String uid,
+    String sessionId,
+    List<ChatMessage> messages,
+    DateTime at,
+  })?
+  _recent;
+  static const _recentFor = Duration(minutes: 30);
+
+  bool _restoreRecent() {
+    final recent = _recent;
+    final uid = _ownerUid;
+    final query = widget.initialQuery;
+    if (recent == null || uid == null || recent.uid != uid) return false;
+    if (query != null && query.trim().isNotEmpty) return false;
+    if (DateTime.now().difference(recent.at) > _recentFor) return false;
+    _generation++;
+    _sessionId = recent.sessionId;
+    _messages
+      ..clear()
+      ..addAll(recent.messages);
+    return true;
+  }
+
+  void _keepRecent() {
+    final uid = _ownerUid;
+    final session = _sessionId;
+    if (uid == null || session == null || _isTyping) return;
+    if (!_messages.any((m) => m.role == ChatRole.user)) return;
+    _recent = (
+      uid: uid,
+      sessionId: session,
+      messages: List.of(_messages),
+      at: DateTime.now(),
+    );
+  }
+
   bool _isTyping = false;
   int _generation = 0;
   String? _ownerUid;
@@ -96,7 +137,11 @@ class _InteractiveAssistantSheetState
   void initState() {
     super.initState();
     _ownerUid = _currentUid();
-    _startNewChat(preserveGreeting: true);
+    if (_restoreRecent()) {
+      _scrollToBottom();
+    } else {
+      _startNewChat(preserveGreeting: true);
+    }
     if (Firebase.apps.isNotEmpty) {
       _authSubscription = FirebaseAuth.instance.authStateChanges().listen((
         user,
@@ -418,6 +463,7 @@ class _InteractiveAssistantSheetState
   }
 
   void _startNewChat({bool preserveGreeting = false}) {
+    _recent = null;
     _generation++;
     _replyTimer?.cancel();
     _streamSub?.cancel();
@@ -678,6 +724,7 @@ class _InteractiveAssistantSheetState
 
   @override
   void dispose() {
+    _keepRecent();
     _generation++;
     _replyTimer?.cancel();
     _authSubscription?.cancel();
@@ -1506,6 +1553,11 @@ class _InteractiveAssistantSheetState
                                   : TextField(
                                       key: const Key('assistant_input_field'),
                                       controller: _inputController,
+                                      // QA 150: the keyboard offered saved
+                                      // passwords above the chat field.
+                                      autofillHints: const <String>[],
+                                      enableSuggestions: true,
+                                      keyboardType: TextInputType.multiline,
                                       textInputAction: TextInputAction.send,
                                       minLines: 1,
                                       maxLines: 4,

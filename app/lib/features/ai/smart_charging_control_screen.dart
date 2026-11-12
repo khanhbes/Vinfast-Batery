@@ -17,6 +17,7 @@ import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/debug_error_sheet.dart';
 import '../../data/models/shelly_connection_state.dart';
 import '../../data/models/smart_charging_session.dart';
+import '../../data/models/vehicle_model.dart';
 import '../../data/services/charge_estimator.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import '../auth/auth_providers.dart';
@@ -645,6 +646,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     final powerW = controller.lastEstimatePowerW;
     final String label;
     final String? note;
+    // QA 150: the charger still has to be set up; the note is then a button.
+    var needsSetup = false;
     if (preview == null) {
       label = 'DỰ ĐOÁN THỜI GIAN SẠC';
       note = null;
@@ -670,10 +673,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 'Shelly tự ngắt theo hẹn giờ';
     } else {
       label = 'DỰ ĐOÁN LẠI';
-      note = preview.isDisplayOnly
-          ? 'Dự đoán tham khảo · Kết nối Shelly để sạc hẹn giờ theo dự đoán'
-          : (preview.aiChargeEligible || preview.isPhysicsFallback)
-          ? 'Hoàn tất cài đặt ổ sạc'
+      needsSetup =
+          preview.isDisplayOnly ||
+          preview.aiChargeEligible ||
+          preview.isPhysicsFallback;
+      note = needsSetup
+          ? 'Đây là dự đoán tham khảo. Để app bật và tự ngắt sạc, cần ổ '
+                'cắm thông minh Shelly (mua riêng).'
           : 'Chưa khả dụng';
     }
 
@@ -768,6 +774,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                 const SizedBox(height: 6),
                 _TargetPresets(
                   target: currentTarget,
+                  leadAcid: isLeadAcidChemistry(
+                    ref
+                        .watch(vehicleProvider(widget.vehicleId))
+                        .valueOrNull
+                        ?.batteryType,
+                  ),
                   enabled: !busy && !full,
                   minimum: draft.currentSoc,
                   onSelected: (value) =>
@@ -878,6 +890,15 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
             ),
           ),
         ],
+        if (needsSetup && !full)
+          Center(
+            child: TextButton.icon(
+              key: const ValueKey('charge-setup-button'),
+              onPressed: () => _openSetup(controller),
+              icon: const Icon(Icons.power_rounded, size: 18),
+              label: const Text('Thiết lập ổ Shelly'),
+            ),
+          ),
       ],
     );
   }
@@ -899,7 +920,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
       disabledReason:
           // QA 143: say what is missing, not "chưa đọc được trạng thái".
           (!connection.isLinked && connection.serverBinding == null
-              ? 'Chưa kết nối ổ sạc Shelly. Bấm Thiết lập để kết nối.'
+              ? 'Chưa kết nối ổ Shelly. Bấm Thiết lập để kết nối.'
               : null) ??
           connection.controlBlockedMessage ??
           state.capabilities.controlBlockedMessage ??
@@ -1732,6 +1753,7 @@ class _TargetPresets extends StatelessWidget {
     required this.minimum,
     required this.enabled,
     required this.onSelected,
+    this.leadAcid = false,
   });
 
   final double target;
@@ -1739,11 +1761,21 @@ class _TargetPresets extends StatelessWidget {
   final bool enabled;
   final ValueChanged<double> onSelected;
 
-  static const _presets = [
+  /// QA 150: a lead-acid battery wants the full charge; 80% is the lithium tip.
+  final bool leadAcid;
+
+  static const _lithium = [
     (value: 80.0, title: 'Bảo vệ pin', recommended: true),
     (value: 90.0, title: 'Cân bằng', recommended: false),
     (value: 100.0, title: 'Đầy pin', recommended: false),
   ];
+  static const _leadAcid = [
+    (value: 80.0, title: 'Sạc tạm', recommended: false),
+    (value: 90.0, title: 'Gần đầy', recommended: false),
+    (value: 100.0, title: 'Sạc đầy', recommended: true),
+  ];
+  List<({double value, String title, bool recommended})> get _presets =>
+      leadAcid ? _leadAcid : _lithium;
 
   @override
   Widget build(BuildContext context) => Row(

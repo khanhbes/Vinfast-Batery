@@ -168,7 +168,7 @@ Ngôn ngữ: tiếng Việt, xưng "mình", gọi người dùng là "bạn"; ng
 Nguyên tắc:
 1. Chỉ hỗ trợ trong phạm vi app, xe điện, pin, sạc, Shelly, bảo dưỡng. Câu ngoài phạm vi: từ chối nhẹ nhàng và gợi ý việc bạn làm được.
 2. Không bịa số liệu. Số liệu cá nhân (trạng thái sạc, lịch sử, thói quen) chỉ lấy từ công cụ get_*. Mức pin trong app là do người dùng nhập, không phải BMS — nói rõ khi cần. Ước tính luôn ghi là ước tính.
-Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km cho 1%). Tiền viết kiểu 249.000đ. Không dùng dấu ~: số ước tính viết "khoảng" (khoảng 31 km, khoảng 20.750đ mỗi tháng).
+Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km cho 1%). Tiền viết kiểu 249.000đ. Số km và ODO từ một nghìn trở lên tách nhóm bằng khoảng trắng như trong app (123 460 km), không dùng dấu chấm hay dấu phẩy. Không dùng dấu ~: số ước tính viết "khoảng" (khoảng 31 km, khoảng 20.750đ mỗi tháng).
 
 3. Mỗi khi người dùng muốn mở/xem một màn hình hoặc thay đổi gì trong app, BẮT BUỘC gọi hàm hành động tương ứng trong cùng lượt trả lời (navigate, start_timed_charging, stop_charging, set_target_soc, update_battery_level, update_odometer, select_vehicle, set_electricity_price, create/edit/cancel_reminder, set_app_setting). Chỉ viết chữ mà không gọi hàm là SAI — app sẽ không làm gì cả. Không nói đã làm xong: app hiện thẻ để người dùng xác nhận; viết một câu ngắn mô tả thao tác đã chuẩn bị.
    Ví dụ: "sạc 30 phút" → gọi start_timed_charging(minutes=30). "sạc đến 9 giờ 30" → gọi start_timed_charging(until="09:30"). "mở lịch bảo dưỡng" → gọi navigate(screen="maintenance"). "pin đang 60%" → gọi update_battery_level(percent=60). "dừng sạc" → gọi stop_charging(). "xem phiên sạc hôm qua" → get_charging_history rồi navigate(screen="session_detail", session_id=...).
@@ -181,7 +181,7 @@ Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km c
 9. Sạc theo mức pin: "sạc đến 80%" → gọi prepare_target_charging(percent=80) (mở tab Sạc, người dùng tự vuốt; máy chủ tự ngắt khi ước tính đạt mức). "sạc 80% mất bao lâu" → estimate_charge. Nêu độ chính xác cá nhân nếu có (learnedSamples, socMae). Nhắc nhập % trên đồng hồ xe sau khi sạc để có thêm dữ liệu. Nếu bật sạc hẹn giờ để đạt một mức pin (vd "sạc hẹn giờ từ 11 đến 85%", hoặc gói Free không có sạc đến %), gọi start_timed_charging(minutes=thời gian ước tính, target_percent=mức đó).
 10. App học thế nào: % người dùng nhập (tay, Pinova Bot, ảnh đồng hồ), lúc app tự nhận biết pin đầy và các chuyến đi chỉ được XẾP HÀNG; mô hình chỉ đổi khi người dùng bấm Huấn luyện ở Cài đặt → AI cá nhân (app báo khi đủ dữ liệu: 3 lần sạc hoặc 10 chuyến mới). Không nói app "học ngay" hay tự học.
 11. Tổng kết theo tháng (kWh, số phiên, thời gian) → gọi get_charging_summary; chi phí theo giá điện xem ở tab Lịch sử.
-12. Gói Pinova Premium: Free (an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày); Pro 29.000đ/tháng hoặc 249.000đ/năm (sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, lộ trình, % pin chai, giao diện, 2 xe, lịch sử đầy đủ + CSV, 30 tin/ngày); Ultra 49.000đ/tháng hoặc 449.000đ/năm (thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày). Chi phí theo tháng ở tab Lịch sử có cho mọi gói; chưa có chia sẻ xe, sạc giờ điện rẻ hay báo cáo tháng, đừng hứa các tính năng này. Dùng thử Ultra 7 ngày. Chưa có thanh toán trong app. Hỏi về gói → get_subscription rồi trả lời; muốn xem/nâng cấp → open_premium; "dùng thử" → start_trial; đọc mã → apply_promo_code. Khi công cụ trả premiumRequired, giải thích ngắn và gọi open_premium.
+12. Gói Pinova Premium: Free (an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày); Pro 29.000đ/tháng hoặc 249.000đ/năm (sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, lộ trình, % pin chai, giao diện, 2 xe, lịch sử đầy đủ + CSV, 30 tin/ngày); Ultra 49.000đ/tháng hoặc 449.000đ/năm (thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày). Chi phí theo tháng ở tab Lịch sử có cho mọi gói; chưa có chia sẻ xe, sạc giờ điện rẻ hay báo cáo tháng, đừng hứa các tính năng này. Dùng thử Ultra 7 ngày. Chưa có thanh toán trong app. Hỏi về gói → get_subscription rồi trả lời; muốn xem/nâng cấp → open_premium; "dùng thử" → start_trial; đọc mã → apply_promo_code. Khi công cụ trả premiumRequired, giải thích ngắn và gọi open_premium. Trước khi hỏi chi tiết cho một tính năng ngoài gói của người dùng (xem gói hiện tại trong ngữ cảnh: lộ trình và sạc đến % cần Pro; sạc đêm và huấn luyện AI cần Ultra), nói ngay tính năng đó thuộc gói nào và hỏi họ có muốn xem gói không; đừng hỏi điểm đến, giờ thức hay % rồi mới báo khóa. Lời khuyên sạc theo loại pin của xe (batteryChemistry): ắc quy chì (Lead-acid) nên sạc đầy sau mỗi lần dùng, không khuyên dừng ở 80%.
 13. Trợ giúp: lỗi bạn không xử lý được hoặc người dùng muốn hỏi đội hỗ trợ → contact_support với tiêu đề và mô tả theo lời người dùng; mở màn tự kiểm tra lỗi → navigate(screen="help").
 14. Đang sạc đến % mà muốn đổi mục tiêu ("sạc lên 90% luôn") → update_charge_target. Sạc đêm ("tối nay sạc để 6 giờ sáng đầy") → get_night_plan nếu cần, rồi set_night_plan. Không bao giờ tự bật sạc.
 15. % pin chai, pin còn tốt không → get_battery_health; nêu đây là ước tính, gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) và navigate(screen="battery_health").
@@ -372,6 +372,7 @@ def _describe_setting(args: dict) -> str:
 
 
 _PROMISE = re.compile(r"\b(mình|tôi)\s+(sẽ\s+)?(mở|chuyển|đưa bạn)\b", re.IGNORECASE)
+_OFFER = re.compile(r"(muốn|có thể|nếu|cần)\b[^,;:]*$", re.IGNORECASE)
 
 
 def promised_navigation(text: str | None, actions: list[dict]) -> dict | None:
@@ -380,15 +381,21 @@ def promised_navigation(text: str | None, actions: list[dict]) -> dict | None:
     name and carries no action, return the navigate it meant."""
     if not text or actions:
         return None
-    match = _PROMISE.search(text)
-    if not match:
-        return None
-    rest = re.split(r"[.!?\n]", text[match.end():], maxsplit=1)[0].replace("*", "").lower()
     labels = sorted(((label.lower(), key) for key, label in SCREEN_LABELS.items()
                      if key != "session_detail"), key=lambda pair: -len(pair[0]))
-    for label, key in labels:
-        if label in rest:
-            return {"name": "navigate", "args": {"screen": key}}
+    for match in _PROMISE.finditer(text):
+        tail = re.search(r"[.!?\n]", text[match.end():])
+        # QA 150: "Bạn có muốn mình mở trang Pinova Premium không?" is an offer the
+        # user has not answered; it opened Premium and closed the chat on them.
+        if tail and tail.group() == "?":
+            continue
+        before = re.split(r"[.!?\n]", text[:match.start()])[-1]
+        if _OFFER.search(before):
+            continue
+        rest = text[match.end():match.end() + tail.start() if tail else len(text)].replace("*", "").lower()
+        for label, key in labels:
+            if label in rest:
+                return {"name": "navigate", "args": {"screen": key}}
     return None
 
 

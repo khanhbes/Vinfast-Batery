@@ -421,7 +421,10 @@ def create_user_vehicle(
                     v_data = v_snap.to_dict() or {}
                     if not v_data.get("isDeleted") and not v_data.get("isArchived"):
                         if v_data.get("catalogId") == catalog_id:
-                            return {"success": True, "data": _jsonable(v_data)}, 200
+                            # QA 150: the app said "Đã thêm" for a vehicle that was
+                            # already there; the flag lets it say so instead.
+                            return {"success": True, "data": _jsonable(v_data),
+                                    "alreadyExists": True}, 200
                         active_vehicles.append(existing_vid)
             except Exception:
                 pass

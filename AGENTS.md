@@ -281,6 +281,21 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Nút Pinova Bot ra khỏi màn hình khi đang cuộn xuống (`setScrollingAway`), về mép khi cuộn dừng; viên "Đang sạc" ở dải riêng trên thanh tab, không nổi trên trang.
   - `AppPopup`: mỗi thông báo tự gỡ chính nó (hẹn giờ, nút X); `dismiss` gỡ mọi thông báo đã chèn, kể cả chưa kịp vẽ. Màn hiện "pin bây giờ" đọc `chargingEstimateProvider` trước (ước tính của phiên đang sạc) và ghi "Đang sạc · ước tính"; Pinova Bot không gợi ý sạc khi xe đang sạc.
 
+- **QA 150 (11/11/2026, kiểm thử trước phát hành, báo cáo ở `PROJECT_STATUS.md` mục 150):**
+  - `AppPopup`: câu tiếng Việt do app viết hiện đúng như đã viết ở `showSuccess/showInfo/showWarning` (`_authored`); văn bản không có chữ tiếng Việt, hoặc có URL, email, IP, chuỗi dài, tên kiểu máy vẫn bị thay. Không cần thêm từng câu vào `_approved` nữa; đừng nối ID thiết bị hay lỗi thô vào câu thông báo.
+  - Pinova Bot: `promised_navigation` bỏ qua câu hỏi mời ("Bạn có muốn mình mở … không?"); chỉ lời hứa mới mở màn.
+  - Màn chúc mừng đổi gói nêu đích danh quyền lợi có thật; `costAdvanced`, `offpeakSchedule`, `shareVehicle`, `monthlyReport` chưa có tính năng, không hiển thị ở đâu. Không viết "giá điện đêm/giờ điện rẻ" (app không tính theo giá điện).
+  - Ổ Shelly là thiết bị mua riêng: chỗ nào mời thiết lập phải nói rõ điều này và rằng chưa có vẫn dùng được app; trạng thái cần thiết lập phải có nút mở thiết lập, không chỉ là dòng chữ.
+  - Ô bị khóa (`PremiumLocked`): chạm vào thân ô mở sheet giải thích gói (đổi quyết định QA 136); tính năng vẫn không mở, viên gói vẫn mở trang Premium.
+  - Hướng dẫn màn hình (`ScreenTour`) không tự mở cho tài khoản tạo quá 3 ngày, trừ khi người dùng bấm Xem lại hướng dẫn. Test đặt `ScreenTour.accountCreatedAt`/`now`.
+  - Lịch sạc gợi ý (`habits.suggest_schedule`) theo khung giờ ±2 giờ chứa ≥ 3 lần và ≥ 40% số lần sạc; không đủ thì không gợi ý. Gara một xe mỗi mẫu: thêm trùng trả `alreadyExists`, app phải nói rõ là chưa thêm gì.
+  - Hồ sơ dùng `profileInputProblem`/`passwordChangeProblem`; khảo sát về lại bước đang dở (`_resumeFromDraft`). Xe chưa có số pin thì Tổng quan hiện `LuxeFirstReadingPrompt` trước thẻ Shelly.
+  - Lời khuyên sạc theo loại pin: dùng `isLeadAcidChemistry`/`batteryChemistryLabel` (app) và `habits.is_lead_acid` (máy chủ); ắc quy chì khuyên sạc đầy, không áp quy tắc 20–80% của pin lithium. Trang Premium: gói đang dùng gắn "ĐANG DÙNG"; chưa thu tiền thì nút chính là "Nhập mã để kích hoạt".
+  - Trang công khai: `/dieu-khoan-su-dung` (`web/support/terms.py`, bản nháp chờ chủ app duyệt), `/chinh-sach-bao-mat`, `/dieu-khoan-premium`, `/xoa-tai-khoan`; đổi nội dung thì tăng `VERSION`. Số điện thoại lúc đăng ký không bắt buộc.
+  - Nhắc bảo dưỡng: một thông báo mỗi lượt cho mỗi trạng thái (`MaintenanceReminderSummary`), ghi cả vào Trung tâm thông báo. Hướng dẫn màn hình cách nhau ít nhất 10 phút (`ScreenTour.spacing`). Loại dịch vụ bảo dưỡng không có màu riêng. Sạc đêm giữ giới hạn 80–90% cho mọi loại pin; xe ắc quy chì chỉ được nhắc dùng Sạc AI 100%.
+  - Đánh dấu hoàn thành mốc bảo dưỡng có "Hoàn tác" (nhãn nút của `AppPopup` phải có trong `AppNoticeCopy.actionLabel`).
+  - Tên gọi trong câu chữ: "ổ Shelly" (giới thiệu lần đầu: "ổ cắm thông minh Shelly"), "phiên sạc", "Sức khỏe pin", "danh mục xe"; không viết Smart Charge, SoH, catalog, UID, rơ-le, cell pin ra giao diện. Đăng ký gửi email xác minh nhưng không chặn; Hồ sơ có hàng gửi lại. Pinova Bot giữ đoạn chat gần nhất 30 phút trong bộ nhớ.
+
 ### 3.7. BatteryBot (trợ lý AI)
 
 - **Hiện hành (Task 124, 15/10/2026):** app `HybridAssistantEngine` → `POST /api/assistant/chat` (Flask, `web/assistant/`, Gemini `GEMINI_CHAT_MODEL` qua REST). **Gemini chặn Azure East Asia (Hồng Kông)** → API gọi qua relay APIM Consumption ở Japan East (`GEMINI_RELAY_URL`, secret `gemini-relay-token`, header `X-Relay-Token`; `deploy/azure/gemini-relay-apim.bicep`); khóa Gemini chỉ nằm trong named value của APIM. Subscription Student: chỉ 1 Container Apps environment, không tạo được App Service plan, vùng cho phép eastasia/japaneast/koreacentral/indonesiacentral/indiasouthcentral.

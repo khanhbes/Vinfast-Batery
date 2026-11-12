@@ -323,7 +323,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
               AppUiColors.of(context),
             ),
             _safetyBullet(
-              'Tắt chế độ Auto-ON trên ổ cắm Shelly',
+              'Tắt chế độ Auto-ON trên ổ Shelly',
               AppUiColors.of(context),
             ),
             _safetyBullet(
@@ -1047,7 +1047,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Kết nối ổ cắm Shelly để xem công suất, điện áp và dòng điện khi sạc.',
+              'Kết nối ổ Shelly để xem công suất, điện áp và dòng điện khi sạc.',
               style: TextStyle(
                 color: LuxeColors.muted,
                 fontSize: 12.5,
@@ -1209,7 +1209,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       FilledButton.icon(
         onPressed: () => Navigator.of(context).maybePop(true),
         icon: const Icon(Icons.bolt_rounded),
-        label: const Text('Đến trang điều khiển Smart Charger'),
+        label: const Text('Đến trang điều khiển sạc'),
       ),
       const SizedBox(height: 10),
       OutlinedButton.icon(
@@ -1754,7 +1754,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
       if (_activeFlow == 3) {
         return 'Nhập mã kết nối do Quản trị viên cấp hoặc kiểm tra lại thiết bị.';
       }
-      return 'Kết nối ổ cắm Shelly để tự động ghi nhận điện năng sạc và bảo vệ pin.';
+      return 'Kết nối ổ Shelly để tự động ghi nhận điện năng sạc và bảo vệ pin.';
     }
     return switch (state) {
       ShellyConnectionFlowState.connected =>
@@ -1779,8 +1779,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
         'Thiết bị cần có tính năng đo điện năng (apower/voltage/current).',
       ShellyConnectionFlowState.passwordRequired =>
         'Vui lòng nhập mật khẩu Web UI để hoàn tất kết nối.',
-      _ =>
-        'Kết nối ổ cắm Shelly để tự động ghi nhận điện năng sạc và bảo vệ pin.',
+      _ => 'Kết nối ổ Shelly để tự động ghi nhận điện năng sạc và bảo vệ pin.',
     };
   }
 

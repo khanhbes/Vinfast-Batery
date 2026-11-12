@@ -1298,7 +1298,8 @@ class _TripResultCard extends StatelessWidget {
               'Dựa trên $personalPairs lần sạc có ODO của xe bạn '
                   '(khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%).',
             TripKmSource.catalog =>
-              'Theo định mức dòng xe (khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%). '
+              'Hãng công bố khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1% ở 30 km/h. '
+                  'Mức hao ở trên đã tính theo tốc độ, tải và thời tiết bạn chọn nên có thể khác số này. '
                   'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
           }, style: LuxeText.caption.copyWith(fontSize: 12.5)),
           if (plan.suggestions.isNotEmpty) ...[

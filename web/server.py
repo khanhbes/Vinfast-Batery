@@ -1475,7 +1475,7 @@ def user_add_vehicle():
         request.get_json(silent=True) or {},
         max_vehicles=max_vehicles,
     )
-    if status < 300:
+    if status < 300 and not result.get('alreadyExists'):
         vehicle = result.get('data') or {}
         _audit(
             'create',

@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 COLLECTION = "supportTickets"
 CATEGORIES = ("charging", "shelly", "scan", "battery", "billing", "account", "app", "other")
 CATEGORY_LABELS = {
-    "charging": "Sạc pin", "shelly": "Ổ sạc Shelly", "scan": "Quét đồng hồ", "battery": "Pin & quãng đường",
+    "charging": "Sạc pin", "shelly": "Ổ Shelly", "scan": "Quét đồng hồ", "battery": "Pin & quãng đường",
     "billing": "Gói Premium", "account": "Tài khoản", "app": "Lỗi ứng dụng", "other": "Khác",
 }
 STATUSES = ("open", "answered", "closed")

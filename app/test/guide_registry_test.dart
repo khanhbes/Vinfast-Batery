@@ -82,9 +82,10 @@ void main() {
     );
 
     test('search and category filtering return expected guides', () {
+      // QA 150: the charging guide now says it needs the Shelly plug.
       expect(
-        GuideRegistry.search('Shelly', 'vi').single.id,
-        'guide_shelly_setup',
+        GuideRegistry.search('Shelly', 'vi').map((guide) => guide.id),
+        containsAll(['guide_shelly_setup', 'guide_charging']),
       );
       expect(GuideRegistry.search('History', 'en').single.id, 'guide_history');
       expect(GuideRegistry.search('not-a-guide', 'en'), isEmpty);

@@ -747,7 +747,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
         : ref.read(vehicleProvider(vehicleId)).value;
     if (vehicle == null || vehicleId.isEmpty) {
       AppPopup.showMessage(
-        'Hãy chọn một xe trước khi mở Smart Charge.',
+        'Hãy chọn một xe trước khi mở Sạc pin.',
         kind: AppNoticeKind.warning,
       );
       return;

@@ -14,6 +14,37 @@ import '../../core/theme/plan_style.dart';
 /// Personal Information Screen — PLAN #3
 /// Shows user profile from Firestore registration data
 /// Allows editing name, phone, and changing password
+/// QA 150: what stops a password change, or null.
+String? passwordChangeProblem(String current, String next, String repeat) {
+  if (current.isEmpty) return 'Nhập mật khẩu hiện tại.';
+  if (next.length < 6) return 'Mật khẩu mới tối thiểu 6 ký tự.';
+  if (next != repeat) return 'Hai lần nhập mật khẩu mới không khớp.';
+  if (next == current) return 'Mật khẩu mới phải khác mật khẩu hiện tại.';
+  return null;
+}
+
+/// QA 150: what is wrong with an edited name / phone, or null. Same rules as
+/// registration; an empty phone stays allowed for accounts created without one.
+/// QA 150: the stored birth date as dd/mm/yyyy (the survey saves either
+/// that or yyyy-mm-dd); empty when there is none.
+String birthDateText(Object? stored) {
+  final value = stored is String ? stored.trim() : '';
+  final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(value);
+  if (iso != null) return '${iso[3]}/${iso[2]}/${iso[1]}';
+  return value;
+}
+
+String? profileInputProblem(String name, String phone) {
+  if (name.trim().length < 2) return 'Vui lòng nhập họ tên (ít nhất 2 ký tự).';
+  final value = phone.trim();
+  if (value.isEmpty) return null;
+  final digits = value.replaceAll(RegExp(r'[\s+().-]'), '');
+  if (!RegExp(r'^\d{9,11}$').hasMatch(digits)) {
+    return 'Số điện thoại cần 9 đến 11 chữ số.';
+  }
+  return null;
+}
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -32,6 +63,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _name = '';
   String _email = '';
   String _phone = '';
+  String _birthDate = '';
+  bool _emailUnverified = false;
+  bool _sendingVerification = false;
   String _createdAt = '';
   String _source = '';
 
@@ -57,7 +91,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     try {
       final data = await _authService.getCurrentUserData();
-      final user = FirebaseAuth.instance.currentUser;
+      var user = FirebaseAuth.instance.currentUser;
+      // QA 150: the owner may have tapped the link since the last visit.
+      try {
+        await user?.reload().timeout(const Duration(seconds: 5));
+        user = FirebaseAuth.instance.currentUser;
+      } on Object {
+        // Offline: keep what the phone already knows.
+      }
 
       if (!mounted) return;
 
@@ -65,6 +106,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _name = data?['name'] ?? user?.displayName ?? 'Chưa cập nhật';
         _email = data?['email'] ?? user?.email ?? '';
         _phone = data?['phone'] ?? '';
+        _emailUnverified = user != null && !user.emailVerified;
+        _birthDate = birthDateText(data?['dateOfBirth']);
         _source = data?['source'] ?? 'flutter_app';
 
         // Format createdAt
@@ -95,6 +138,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<bool> _saveProfile() async {
     if (_isSaving) return false;
+    // QA 150: the same rules as registration; an empty name and "12" as a
+    // phone number were saved with "Đã cập nhật thông tin".
+    final problem = profileInputProblem(_nameCtrl.text, _phoneCtrl.text);
+    if (problem != null) {
+      AppPopup.showMessage(problem, kind: AppNoticeKind.warning);
+      return false;
+    }
     setState(() => _isSaving = true);
 
     try {
@@ -137,7 +187,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showChangePasswordDialog() {
     final currentCtrl = TextEditingController();
     final newCtrl = TextEditingController();
+    // QA 150: one typo in a single hidden field locked the owner out.
+    final repeatCtrl = TextEditingController();
     bool loading = false;
+    bool hidden = true;
 
     showDialog(
       context: context,
@@ -152,7 +205,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   borderRadius: BorderRadius.circular(28),
                   side: const BorderSide(color: LuxeColors.hairline),
                 ),
-                child: Padding(
+                child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -173,19 +226,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       const SizedBox(height: 18),
                       TextField(
+                        key: const ValueKey('password-current'),
                         controller: currentCtrl,
-                        obscureText: true,
-                        decoration: const InputDecoration(
+                        obscureText: hidden,
+                        decoration: InputDecoration(
                           labelText: 'Mật khẩu hiện tại',
-                          prefixIcon: Icon(Icons.lock_outline_rounded),
+                          prefixIcon: const Icon(Icons.lock_outline_rounded),
+                          suffixIcon: IconButton(
+                            key: const ValueKey('password-show'),
+                            tooltip: hidden ? 'Hiện mật khẩu' : 'Ẩn mật khẩu',
+                            onPressed: () =>
+                                setDialogState(() => hidden = !hidden),
+                            icon: Icon(
+                              hidden
+                                  ? Icons.visibility_rounded
+                                  : Icons.visibility_off_rounded,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextField(
+                        key: const ValueKey('password-new'),
                         controller: newCtrl,
-                        obscureText: true,
+                        obscureText: hidden,
                         decoration: const InputDecoration(
-                          labelText: 'Mật khẩu mới (tối thiểu 6 ký tự)',
+                          labelText: 'Mật khẩu mới',
+                          helperText: 'Tối thiểu 6 ký tự',
+                          prefixIcon: Icon(Icons.key_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        key: const ValueKey('password-repeat'),
+                        controller: repeatCtrl,
+                        obscureText: hidden,
+                        decoration: const InputDecoration(
+                          labelText: 'Nhập lại mật khẩu mới',
                           prefixIcon: Icon(Icons.key_rounded),
                         ),
                       ),
@@ -203,10 +280,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       else ...[
                         FilledButton(
                           onPressed: () async {
-                            if (currentCtrl.text.isEmpty ||
-                                newCtrl.text.length < 6) {
-                              AppPopup.showError(
-                                'Mật khẩu mới tối thiểu 6 ký tự',
+                            final problem = passwordChangeProblem(
+                              currentCtrl.text,
+                              newCtrl.text,
+                              repeatCtrl.text,
+                            );
+                            if (problem != null) {
+                              AppPopup.showMessage(
+                                problem,
+                                kind: AppNoticeKind.warning,
                               );
                               return;
                             }
@@ -281,8 +363,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             onPressed: _isSaving
                                 ? null
                                 : () {
+                                    // QA 150: two Save buttons; the header
+                                    // one now leaves edit mode.
                                     if (_isEditing) {
-                                      _saveProfile();
+                                      _cancelEdit();
                                     } else {
                                       setState(() => _isEditing = true);
                                     }
@@ -292,11 +376,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                             icon: Icon(
                               _isEditing
-                                  ? Icons.check_rounded
+                                  ? Icons.close_rounded
                                   : Icons.edit_rounded,
                               size: 18,
                             ),
-                            label: Text(_isEditing ? 'Lưu' : 'Sửa'),
+                            label: Text(_isEditing ? 'Hủy' : 'Sửa'),
                           ),
                         ),
                         const SizedBox(height: 22),
@@ -437,6 +521,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
         controller: _phoneCtrl,
         keyboardType: TextInputType.phone,
       ),
+      // QA 150: the survey asks for it (minimum age); show what is stored.
+      if (_birthDate.isNotEmpty)
+        _buildInfoRow(
+          icon: Icons.cake_rounded,
+          label: 'Ngày sinh',
+          value: _birthDate,
+        ),
     ],
   );
 
@@ -514,8 +605,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _sendVerificationEmail() async {
+    if (_sendingVerification) return;
+    setState(() => _sendingVerification = true);
+    try {
+      final auth = FirebaseAuth.instance;
+      await auth.setLanguageCode('vi');
+      await auth.currentUser?.sendEmailVerification();
+      AppPopup.showSuccess(
+        'Đã gửi email xác minh',
+        detail: 'Mở email và bấm vào liên kết. Kiểm tra cả hộp thư rác.',
+      );
+    } on Object {
+      AppPopup.showMessage(
+        'Chưa gửi được email xác minh. Thử lại sau ít phút.',
+      );
+    } finally {
+      if (mounted) setState(() => _sendingVerification = false);
+    }
+  }
+
   Widget _buildSecuritySection() => LuxeSettingsGroup(
     children: [
+      if (_emailUnverified)
+        LuxeSettingsRow(
+          key: const ValueKey('profile-verify-email'),
+          icon: Icons.mark_email_unread_rounded,
+          accent: LuxeColors.champagne,
+          title: 'Email chưa xác minh',
+          subtitle: _sendingVerification
+              ? 'Đang gửi email xác minh'
+              : 'Chạm để gửi lại email xác minh',
+          onTap: _sendVerificationEmail,
+        ),
       LuxeSettingsRow(
         icon: Icons.lock_reset_rounded,
         title: 'Đổi mật khẩu',
@@ -541,7 +663,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         'Nguồn',
         _source == 'flutter_app' ? 'Ứng dụng mobile' : _source,
       ),
-      _buildMetaRow('UID', FirebaseAuth.instance.currentUser?.uid ?? ''),
+      _buildMetaRow(
+        'Mã tài khoản',
+        FirebaseAuth.instance.currentUser?.uid ?? '',
+      ),
     ],
   );
 

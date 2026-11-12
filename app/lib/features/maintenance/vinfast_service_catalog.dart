@@ -66,7 +66,7 @@ class VinFastServiceCatalog {
     // ── Pin ──
     VinFastServicePreset(
       type: ServiceType.battery,
-      title: 'Pin Lithium-ion',
+      title: 'Pin / ắc quy',
       subtitle: 'Cổng kết nối + hình dáng vỏ',
       suggestedOdoInterval: 1000,
       group: 'Pin',
@@ -178,6 +178,37 @@ class VinFastServiceCatalog {
       group: 'Động cơ',
     ),
   ];
+
+  /// QA 150 (owner's choice): the milestone to offer once [done] is marked
+  /// complete, or null. Only for a service with a published interval, and
+  /// only when no other open milestone of that service exists (the standard
+  /// schedule already lists them). The owner still confirms and may edit.
+  static MaintenanceTaskModel? nextAfter(
+    MaintenanceTaskModel done, {
+    required int currentOdo,
+    required List<MaintenanceTaskModel> all,
+  }) {
+    VinFastServicePreset? preset;
+    for (final p in presets) {
+      if (p.type == done.serviceType) preset = p;
+    }
+    if (preset == null) return null;
+    final open = all.any(
+      (t) =>
+          t.taskId != done.taskId &&
+          !t.isCompleted &&
+          t.serviceType == done.serviceType,
+    );
+    if (open) return null;
+    final from = currentOdo > done.targetOdo ? currentOdo : done.targetOdo;
+    return MaintenanceTaskModel(
+      vehicleId: done.vehicleId,
+      title: done.title,
+      description: done.description,
+      targetOdo: from + preset.suggestedOdoInterval,
+      serviceType: done.serviceType,
+    );
+  }
 
   /// Nhóm theo `group` để hiển thị section.
   static Map<String, List<VinFastServicePreset>> grouped() {

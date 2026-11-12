@@ -185,11 +185,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       validator: (value) {
                         final email = value?.trim() ?? '';
-                        if (email.isEmpty) return 'Nhập email';
+                        if (email.isEmpty) return 'Vui lòng nhập email';
                         if (!RegExp(
                           r'^[^\s@]+@[^\s@]+\.[^\s@]+$',
                         ).hasMatch(email)) {
-                          return 'Email chưa đúng định dạng';
+                          return 'Email không hợp lệ';
                         }
                         return null;
                       },

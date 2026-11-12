@@ -276,8 +276,8 @@ class NotificationService {
       title = 'Đã dừng sạc';
       body = 'Shelly đã xác nhận tắt theo yêu cầu của bạn.';
     } else if (interrupted) {
-      title = 'Phiên Smart Charge đã bị ngắt';
-      body = 'Relay đã tắt trước giờ dự kiến. Mở Smart Charge để kiểm tra.';
+      title = 'Phiên sạc đã bị ngắt';
+      body = 'Ổ Shelly đã tắt trước giờ dự kiến. Mở tab Sạc pin để kiểm tra.';
     } else {
       title = 'Đã sạc xong theo hẹn giờ';
       body = 'Shelly đã tự ngắt đúng giờ và được đọc lại xác nhận.';
@@ -590,18 +590,19 @@ class NotificationService {
 
   // ── Maintenance Notifications ──
 
-  /// Thông báo bảo dưỡng sắp đến hạn
-  Future<void> notifyMaintenanceDue(
+  /// QA 150: one maintenance notification per round; the caller writes the
+  /// title and body (see `MaintenanceReminderSummary`).
+  Future<void> notifyMaintenanceSummary(
     String taskId,
     String title,
-    int remainingKm,
+    String body,
   ) async {
     await initialize();
     final id = idMaintenanceBase + taskId.hashCode.abs() % 999;
     await _plugin.show(
       id,
-      '🔧 Bảo dưỡng sắp đến hạn',
-      '$title — Còn $remainingKm km nữa',
+      title,
+      body,
       NotificationDetails(
         iOS: _iosDetails(),
         android: AndroidNotificationDetails(

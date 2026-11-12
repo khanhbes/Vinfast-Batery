@@ -133,7 +133,7 @@ void main() {
     expect(find.byType(PremiumScreen), findsOneWidget);
   });
 
-  testWidgets('a locked entry is faded, ignores taps, its tag opens Premium', (
+  testWidgets('a locked entry is faded, stays closed, its tag opens Premium', (
     tester,
   ) async {
     var opened = 0;
@@ -158,9 +158,15 @@ void main() {
       ),
     );
     expect(filter.colorFilter, PremiumLocked.lockedFilter);
+    // QA 150: the tap explains the plan; the feature itself stays closed.
     await tester.tap(find.text('Lộ trình'), warnIfMissed: false);
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     expect(opened, 0);
+    expect(find.textContaining('có trong gói Pro'), findsOneWidget);
+    await tester.tap(find.text('Để sau'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
     await tester.tap(
       find.byKey(const ValueKey('premium-locked-tag-trip_estimate')),
     );

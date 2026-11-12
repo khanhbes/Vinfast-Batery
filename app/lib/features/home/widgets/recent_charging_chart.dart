@@ -149,28 +149,35 @@ class _RecentChargingPanelState extends State<RecentChargingPanel> {
             SizedBox(
               height: 140,
               child: LayoutBuilder(
-                builder: (context, c) => GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (d) {
-                    final i = (d.localPosition.dx / c.maxWidth * 7)
-                        .floor()
-                        .clamp(0, 6);
-                    HapticFeedback.selectionClick();
-                    setState(() => _selected = _selected == i ? null : i);
-                  },
-                  child: TweenAnimationBuilder<double>(
-                    tween: Tween(begin: 0, end: 1),
-                    duration: MediaQuery.disableAnimationsOf(context)
-                        ? Duration.zero
-                        : const Duration(milliseconds: 1100),
-                    curve: LuxeMotion.enter,
-                    builder: (context, grow, _) => CustomPaint(
-                      size: Size(c.maxWidth, 140),
-                      painter: _BarsPainter(
-                        values: [for (final d in week) d.kwh],
-                        grow: grow,
-                        selected: _selected,
-                        accent: context.planAccent,
+                builder: (context, c) => Semantics(
+                  // QA 150: the bars had no description for TalkBack.
+                  container: true,
+                  label:
+                      'Biểu đồ điện nạp 7 ngày: tổng ${_kwh(total)} kWh '
+                      'trong $count phiên. Chạm một cột để xem ngày đó.',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTapDown: (d) {
+                      final i = (d.localPosition.dx / c.maxWidth * 7)
+                          .floor()
+                          .clamp(0, 6);
+                      HapticFeedback.selectionClick();
+                      setState(() => _selected = _selected == i ? null : i);
+                    },
+                    child: TweenAnimationBuilder<double>(
+                      tween: Tween(begin: 0, end: 1),
+                      duration: MediaQuery.disableAnimationsOf(context)
+                          ? Duration.zero
+                          : const Duration(milliseconds: 1100),
+                      curve: LuxeMotion.enter,
+                      builder: (context, grow, _) => CustomPaint(
+                        size: Size(c.maxWidth, 140),
+                        painter: _BarsPainter(
+                          values: [for (final d in week) d.kwh],
+                          grow: grow,
+                          selected: _selected,
+                          accent: context.planAccent,
+                        ),
                       ),
                     ),
                   ),
@@ -278,7 +285,7 @@ class _EmptyWeek extends StatelessWidget {
         SizedBox(width: 12),
         Expanded(
           child: Text(
-            'Chưa có phiên sạc nào trong 7 ngày qua. Số liệu lấy từ các phiên Smart Charge đã hoàn tất trên tài khoản.',
+            'Chưa có phiên sạc nào trong 7 ngày qua. Số liệu lấy từ các phiên sạc đã hoàn tất trên tài khoản.',
             style: LuxeText.caption,
           ),
         ),

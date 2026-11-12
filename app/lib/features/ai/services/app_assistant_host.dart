@@ -134,6 +134,9 @@ class AppAssistantActionHost implements AssistantActionHost {
           // QA 143: the same range the Overview shows (learned km/1 % and
           // the 5 % reserve) and where its km/1 % comes from, so the bot
           // neither computes its own nor calls a catalog figure "learned".
+          // QA 150: charging tips depend on it (lead-acid wants a full charge).
+          if ((vehicle.batteryType ?? '').trim().isNotEmpty)
+            'batteryChemistry': vehicle.batteryType!.trim(),
           ...?_rangeContext(vehicle),
           'targetSoc': ?target?.round(),
         },

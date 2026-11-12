@@ -150,7 +150,10 @@ class OnboardingService {
     if (dob == null || dob.trim().isEmpty) return null;
     final parsed = parseDateOfBirth(dob);
     if (parsed == null) {
-      return 'Định dạng ngày sinh phải là dd/mm/yyyy';
+      // QA 150: 31/02/2000 has the right format; the date does not exist.
+      return RegExp(r'^\s*\d{1,2}/\d{1,2}/\d{4}\s*$').hasMatch(dob)
+          ? 'Ngày này không có trong lịch. Kiểm tra lại ngày và tháng.'
+          : 'Nhập ngày sinh theo ngày/tháng/năm.';
     }
     final now = DateTime.now();
     if (parsed.isAfter(now)) {

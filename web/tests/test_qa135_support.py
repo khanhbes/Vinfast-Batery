@@ -84,7 +84,7 @@ def test_ticket_flow_user_admin_reply_and_unread():
     ticket = svc.create("u1", "u1@x.vn", {"subject": "Không bật được sạc", "category": "shelly",
                                          "message": "Bấm vuốt để sạc nhưng ổ không bật.",
                                          "diagnostics": {"appVersion": "1.3.0", "token": "t"}}, tier="pro")
-    assert ticket["status"] == "open" and ticket["categoryLabel"] == "Ổ sạc Shelly"
+    assert ticket["status"] == "open" and ticket["categoryLabel"] == "Ổ Shelly"
     mail = http.calls[0]["body"]
     assert mail["content"]["subject"] == "[Pinova hỗ trợ] Không bật được sạc"
     assert "u1@x.vn" in mail["content"]["plainText"] and "appVersion: 1.3.0" in mail["content"]["plainText"]

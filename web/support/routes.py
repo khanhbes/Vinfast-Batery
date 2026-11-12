@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from . import privacy
+from . import privacy, terms
 from .tickets import SupportError
 
 
@@ -31,6 +31,12 @@ def create_support_blueprint(*, service, auth_resolver, require_admin, tier_of=N
     @bp.get("/privacy-policy")
     def privacy_page():
         return privacy.render_page(), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+    # QA 150: general terms of use (the app and the stores link here).
+    @bp.get("/dieu-khoan-su-dung")
+    @bp.get("/terms")
+    def terms_page():
+        return terms.render_page(), 200, {"Content-Type": "text/html; charset=utf-8"}
 
     @bp.get("/api/account/privacy-consent")
     def privacy_status():

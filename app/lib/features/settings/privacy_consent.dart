@@ -23,6 +23,19 @@ abstract final class PrivacyConsent {
     '/chinh-sach-bao-mat',
   );
 
+  /// QA 150: the general terms of use (`web/support/terms.py`).
+  static Uri get termsUri => Uri.parse(
+    '${AppConstants.apiBaseUrl.trim().replaceAll(RegExp(r'/+$'), '')}'
+    '/dieu-khoan-su-dung',
+  );
+
+  static Future<void> openTerms() async {
+    final ok = await launchUrl(termsUri, mode: LaunchMode.externalApplication);
+    if (!ok) {
+      AppPopup.showMessage('Chưa mở được trang điều khoản. Thử lại sau.');
+    }
+  }
+
   static Future<void> openPolicy() async {
     final ok = await launchUrl(policyUri, mode: LaunchMode.externalApplication);
     if (!ok) {
@@ -94,7 +107,7 @@ class PrivacyConsentCheckbox extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     checked: value,
-    label: 'Đồng ý Chính sách bảo mật',
+    label: 'Đồng ý Điều khoản sử dụng và Chính sách bảo mật',
     child: InkWell(
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.circular(12),
@@ -121,6 +134,17 @@ class PrivacyConsentCheckbox extends StatelessWidget {
                     ),
                     children: [
                       const TextSpan(text: 'Tôi đã đọc và đồng ý '),
+                      TextSpan(
+                        text: 'Điều khoản sử dụng',
+                        style: TextStyle(
+                          color: context.planAccent,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.underline,
+                        ),
+                        recognizer: TapGestureRecognizer()
+                          ..onTap = () => unawaited(PrivacyConsent.openTerms()),
+                      ),
+                      const TextSpan(text: ' và '),
                       TextSpan(
                         text: 'Chính sách bảo mật',
                         style: TextStyle(

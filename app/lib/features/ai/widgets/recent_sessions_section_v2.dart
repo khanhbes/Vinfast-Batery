@@ -77,7 +77,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Phiên Smart Charge hoàn tất sẽ xuất hiện tại đây.',
+                  'Phiên sạc hoàn tất sẽ xuất hiện tại đây.',
                   textAlign: TextAlign.center,
                   style: LuxeText.caption,
                 ),

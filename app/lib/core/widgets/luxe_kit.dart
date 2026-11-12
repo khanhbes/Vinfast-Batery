@@ -305,6 +305,8 @@ Future<T?> showLuxeSheet<T>(
   enableDrag: enableDrag,
   useRootNavigator: useRootNavigator,
   showDragHandle: false,
+  // QA 150: TalkBack read the backdrop as "Scrim".
+  barrierLabel: 'Đóng',
   barrierColor: luxeSheetBarrier,
   backgroundColor: LuxeColors.sheet,
   shape: const RoundedRectangleBorder(

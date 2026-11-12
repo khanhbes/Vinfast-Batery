@@ -138,7 +138,8 @@ class AppNoticeCopy {
     'Cần cập nhật thông tin onboarding',
     'Đang chờ đồng bộ onboarding',
     'Không thể hoàn tất.',
-    'Định dạng ngày sinh phải là dd/mm/yyyy',
+    'Ngày này không có trong lịch. Kiểm tra lại ngày và tháng.',
+    'Nhập ngày sinh theo ngày/tháng/năm.',
     'Ngày sinh không thể ở tương lai',
     'Người dùng phải từ đủ 16 tuổi trở lên',
     'Tuổi không hợp lệ (vượt quá 120 tuổi)',
@@ -209,6 +210,7 @@ class AppNoticeCopy {
         'Chi tiết',
         'Mở cài đặt',
         'Thử lại',
+        'Hoàn tác',
       }.contains(value)
       ? value
       : 'Mở';

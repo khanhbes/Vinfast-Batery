@@ -687,7 +687,7 @@ class _ModelCard extends StatelessWidget {
                       status.ready
                           ? 'Đủ dữ liệu mới — nên huấn luyện'
                           : status.pending == 0 && status.trained > 0
-                          ? 'Đã học ${status.trained} $unit · chờ ${status.required} $unit mới'
+                          ? 'Đã học ${status.trained} $unit · cần thêm ${status.required} $unit để cập nhật'
                           : status.pending == 0
                           ? 'Đang thu thập dữ liệu'
                           : '${status.pending} $unit mới đang chờ',
@@ -778,6 +778,15 @@ class _ModelCard extends StatelessWidget {
                 ),
               ],
             ),
+          // QA 150: the dimmed button gave no reason.
+          if (!busy && enabled && !canTrain) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Chưa có dữ liệu mới để huấn luyện.',
+              key: ValueKey('train-idle-$unit'),
+              style: LuxeText.caption,
+            ),
+          ],
         ],
       ),
     );

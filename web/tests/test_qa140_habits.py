@@ -98,3 +98,36 @@ def test_free_sees_the_score_and_one_comment_pro_sees_everything():
     pro = service.charge_assessment("owner", "car")
     assert pro["full"] is True and len(pro["comments"]) >= 2
     assert pro["charts"] is not None and pro["schedule"]["startHour"] == 7
+
+
+def test_schedule_follows_the_window_most_charges_fall_in():
+    """QA 150: 2 of 11 charges at 11:00 gave "11:00, pin khoảng 58%" while nine
+    were evening plug-ins near 10 %."""
+    rows = [(1, 19, 9, 80), (2, 11, 9, 60), (4, 19, 9, 80), (9, 23, 0, 100), (14, 22, 12, 80),
+            (15, 17, 9, 42), (18, 21, 11, 90), (21, 22, 1, 80), (24, 13, 58, 75), (25, 20, 10, 80),
+            (26, 11, 58, 80)]
+    schedule = charge_habits([_session(*row) for row in rows], now=NOW, wh_per_pct=26, power_w=440)["schedule"]
+    assert schedule["startHour"] == 21 and schedule["typicalStartPct"] == 9
+    assert schedule["share"] >= 0.6 and 11 not in (schedule["startHour"],)
+
+
+def test_no_schedule_when_the_charges_follow_no_hour():
+    scattered = [_session(day, hour, 30, 80) for day, hour in ((1, 7), (2, 12), (3, 18), (4, 23), (5, 3))]
+    assert charge_habits(scattered, now=NOW)["schedule"] is None
+    # Around midnight is one habit, not two.
+    late = [_session(day, hour, 30, 80) for day, hour in ((1, 23), (2, 0), (3, 1), (4, 23), (5, 12))]
+    assert charge_habits(late, now=NOW)["schedule"]["startHour"] in (23, 0)
+
+
+def test_lead_acid_is_scored_the_other_way_round():
+    """QA 150: "Ít khi sạc tới 100%, tốt cho tuổi thọ pin" was told to lead-acid owners."""
+    partial = [_session(d, 21, 30, 80) for d in range(1, 15, 2)]
+    lithium = charge_habits(partial, now=NOW, wh_per_pct=13, power_w=200)
+    lead = charge_habits(partial, now=NOW, wh_per_pct=13, power_w=200, lead_acid=True)
+    assert any("tốt cho tuổi thọ pin" in c["text"] for c in lithium["comments"])
+    assert not any("tốt cho tuổi thọ pin" in c["text"] for c in lead["comments"])
+    assert any("Ắc quy chì" in text for text in lead["suggestions"])
+    assert lead["score"] < lithium["score"] and lead["schedule"]["targetPct"] == 100
+    full = [_session(d, 21, 30, 100, reason="battery_full") for d in range(1, 15, 2)]
+    assert any(c["level"] == "good" and "ắc quy chì" in c["text"]
+               for c in charge_habits(full, now=NOW, lead_acid=True)["comments"])

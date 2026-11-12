@@ -8,6 +8,7 @@ import '../../../core/theme/plan_style.dart';
 import '../../../core/widgets/charge_confirm_control.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/widgets/luxe_submit_button.dart';
+import '../../../core/widgets/luxe_time_picker.dart';
 import '../../../data/services/charge_estimator.dart';
 import 'timed_charging_section_v2.dart';
 import 'charge_edit_controls.dart';
@@ -95,14 +96,10 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
   }
 
   Future<void> _pick() async {
-    final picked = await showTimePicker(
-      context: context,
+    final picked = await showLuxeTimePicker(
+      context,
       initialTime: TimeOfDay.fromDateTime(_stopAt),
-      helpText: 'NGẮT LÚC',
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child!,
-      ),
+      title: 'Ngắt lúc',
     );
     if (picked == null || !mounted) return;
     _set(TimedChargingSectionV2.stopAtFor(picked, widget.clock()));

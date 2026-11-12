@@ -241,10 +241,10 @@ void main() {
       scrollable: _vertical(),
     );
     expect(find.byType(HistoryEmptyArt), findsOneWidget);
-    expect(find.text('Chưa có phiên Smart Charge hoàn tất'), findsOneWidget);
+    expect(find.text('Chưa có phiên sạc hoàn tất'), findsOneWidget);
     // A vertical drag that starts on the summary card (which listens for
     // horizontal month swipes) must still scroll the page.
-    final title = find.text('Chưa có phiên Smart Charge hoàn tất');
+    final title = find.text('Chưa có phiên sạc hoàn tất');
     final before = tester.getTopLeft(title).dy;
     await tester.drag(find.text('Chi phí'), const Offset(0, -240));
     await tester.pumpAndSettle();

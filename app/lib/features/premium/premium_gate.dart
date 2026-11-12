@@ -118,9 +118,10 @@ class PremiumBadge extends StatelessWidget {
   Widget build(BuildContext context) => PlanTag(tier: tier);
 }
 
-/// An entry to a feature outside the plan (QA 136): drawn in grey, does not
-/// react to taps, and only its plan tag is tappable (opens Pinova Premium
-/// at that feature). Inside the plan it is just [child].
+/// An entry to a feature outside the plan (QA 136): drawn in grey and never
+/// opens the feature. A tap on it explains the plan it needs (QA 150); its
+/// plan tag opens Pinova Premium at that feature. Inside the plan it is just
+/// [child].
 ///
 /// QA 139: grey and a little darker instead of 38 % opacity, so the text
 /// that sells the feature stays readable (secondary text about 4.8:1)
@@ -189,21 +190,28 @@ class PremiumLocked extends ConsumerWidget {
           label: '${feature.label}, cần gói ${tier.label}',
           enabled: false,
           excludeSemantics: true,
-          child: IgnorePointer(
-            child: ColorFiltered(
-              colorFilter: lockedFilter,
-              child: !reserveTagSpace
-                  ? child
-                  : Padding(
-                      padding: stacked
-                          ? EdgeInsets.only(top: scaler.scale(30))
-                          : EdgeInsetsDirectional.only(
-                              end: scaler.scale(
-                                tier == PlanTier.ultra ? 74 : 50,
+          // QA 150: a tap on the locked entry itself did nothing, which read
+          // as a broken app. The feature stays closed; the tap explains why.
+          child: GestureDetector(
+            key: ValueKey('premium-locked-body-${feature.id}'),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => PremiumGate.showUpgrade(context, feature),
+            child: IgnorePointer(
+              child: ColorFiltered(
+                colorFilter: lockedFilter,
+                child: !reserveTagSpace
+                    ? child
+                    : Padding(
+                        padding: stacked
+                            ? EdgeInsets.only(top: scaler.scale(30))
+                            : EdgeInsetsDirectional.only(
+                                end: scaler.scale(
+                                  tier == PlanTier.ultra ? 74 : 50,
+                                ),
                               ),
-                            ),
-                      child: child,
-                    ),
+                        child: child,
+                      ),
+              ),
             ),
           ),
         ),

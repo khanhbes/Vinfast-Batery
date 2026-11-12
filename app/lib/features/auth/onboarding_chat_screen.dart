@@ -194,9 +194,9 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       case 4:
         return 'Hằng ngày bạn phi bao xa thế? Kéo thanh trượt để mình tính toán tầm hoạt động và gợi ý lịch sạc chuẩn như chuyên gia 📊';
       case 5:
-        return 'Đi làm hay đi chơi nhiều hơn? Còn bao nhiêu % pin thì bạn thường cắm sạc? Chia sẻ nhỏ để bảo vệ cell pin LFP nhé! 🔋';
+        return 'Đi làm hay đi chơi nhiều hơn? Còn bao nhiêu % pin thì bạn thường cắm sạc? Chia sẻ nhỏ để bảo vệ pin nhé! 🔋';
       case 6:
-        return 'Sạc thông minh với ổ cắm Shelly: hẹn giờ sạc, ổ tự ngắt theo bộ đếm phần cứng và báo khi sạc xong. Bạn có muốn kết nối không?';
+        return 'Sạc thông minh với ổ Shelly: hẹn giờ sạc, ổ tự ngắt điện đúng giờ và báo khi sạc xong. Ổ Shelly mua riêng; chưa có vẫn dùng được app. Bạn có muốn kết nối không?';
       case 7:
         return 'Cho mình xin phép nhắc bạn khi pin đầy nhé? Hứa là chỉ báo tin quan trọng, không bao giờ spam bạn đâu! 🔔';
       case 8:
@@ -227,7 +227,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       case 2:
         return 'Nếu không nhớ chính xác số ODO, cứ ước lượng gần đúng nha. AI thông minh sẽ tự học và hiệu chỉnh dần nè! 💡';
       case 3:
-        return 'Nhập ngày sinh theo mẫu Ngày/Tháng/Năm (ví dụ 15/08/1998). Dữ liệu chỉ dùng cho tài khoản của bạn.';
+        return 'Nhập ngày sinh theo mẫu Ngày/Tháng/Năm (ví dụ 15/08/1998). App dùng để xác nhận bạn đủ 16 tuổi; bạn có thể bỏ qua.';
       case 4:
         return 'Di chuyển quanh phố thường tầm 15-30km. Bạn kéo thanh trượt ước lượng nhé! 🛣️';
       case 5:
@@ -391,6 +391,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           _catalogSpecs = specs.where((s) => s.selectable).toList();
           _catalogIsLoading = false;
         });
+        await _resumeFromDraft();
       }
     } catch (e) {
       if (mounted) {
@@ -399,6 +400,34 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           _catalogLoadFailed = true;
         });
       }
+    }
+  }
+
+  String? get _stepKey => _draft == null
+      ? null
+      : 'onboarding_step_${_draft!.uid}_${_draft!.operationId}';
+
+  /// QA 150: closing the app at the review step came back to step 1 with the
+  /// chosen model forgotten while the other answers were kept. The saved draft
+  /// names the model; the step it was left at is kept on this phone.
+  Future<void> _resumeFromDraft() async {
+    final draft = _draft;
+    if (draft == null || _selectedSpec != null || _currentStep != 0) return;
+    final spec = _catalogSpecs
+        .where((s) => s.modelId == draft.catalogId)
+        .firstOrNull;
+    if (spec == null) return;
+    int? step;
+    try {
+      step = (await SharedPreferences.getInstance()).getInt(_stepKey!);
+    } catch (_) {
+      step = null;
+    }
+    if (!mounted || _selectedSpec != null || _currentStep != 0) return;
+    setState(() => _selectedSpec = spec);
+    if (step != null && step >= 3) {
+      _createdVehicleId = 'pending:${draft.operationId}';
+      _goToStepOrSkip(step);
     }
   }
 
@@ -532,6 +561,14 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       _movingForward = clampedNext >= _currentStep;
       _currentStep = clampedNext;
     });
+    final key = _stepKey;
+    if (key != null) {
+      unawaited(
+        SharedPreferences.getInstance()
+            .then((prefs) => prefs.setInt(key, clampedNext))
+            .catchError((_) => false),
+      );
+    }
   }
 
   Future<void> _updateDraftAndPersist({
@@ -1184,6 +1221,17 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
               ),
             ),
           ),
+        // QA 150: an owner whose model is not listed had no way forward.
+        const Padding(
+          padding: EdgeInsets.only(top: 2, bottom: 6),
+          child: Text(
+            'Không thấy mẫu xe của bạn? Hãy chọn mẫu gần giống nhất để bắt '
+            'đầu; bạn đổi được sau ở Cài đặt → Xe của tôi, hoặc gửi yêu cầu '
+            'thêm mẫu ở Cài đặt → Trợ giúp.',
+            key: ValueKey('onboarding-model-missing'),
+            style: LuxeText.caption,
+          ),
+        ),
       ],
     );
   }
@@ -1250,7 +1298,9 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           // QA 143: 1 234 567 km was accepted and then blocked every real ODO.
           inputFormatters: [
             FilteringTextInputFormatter.digitsOnly,
-            LengthLimitingTextInputFormatter(AppConstants.maxOdoDigits),
+            // QA 150: one digit more than the range, so a too-long number
+            // shows the error above instead of being cut silently.
+            LengthLimitingTextInputFormatter(AppConstants.maxOdoDigits + 1),
           ],
         ),
         const SizedBox(height: 12),
@@ -1279,7 +1329,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           ),
           decoration: InputDecoration(
             labelText: 'Ngày sinh',
-            hintText: 'dd/mm/yyyy',
+            hintText: 'ngày/tháng/năm',
             helperText: 'Nếu cung cấp, bạn cần đủ 16 tuổi.',
             helperMaxLines: 3,
             errorText: text.isNotEmpty
@@ -1402,8 +1452,9 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             max: 100,
             divisions: 19,
             label: value == null ? 'Chưa chọn' : '${value.toInt()} km',
-            semanticFormatterCallback: (value) =>
-                '${value.toInt()} km mỗi ngày',
+            // QA 150: read "20 km mỗi ngày" before anything was chosen.
+            semanticFormatterCallback: (v) =>
+                value == null ? 'Chưa chọn' : '${v.toInt()} km mỗi ngày',
             onChanged: (value) {
               if (value != _dailyDistanceKm) HapticFeedback.selectionClick();
               _setDistance(value);
@@ -1511,7 +1562,8 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
             max: 60,
             divisions: 10,
             label: soc == null ? 'Chưa chọn' : '${soc.toInt()}%',
-            semanticFormatterCallback: (value) => '${value.toInt()} phần trăm',
+            semanticFormatterCallback: (v) =>
+                soc == null ? 'Chưa chọn' : '${v.toInt()} phần trăm',
             onChanged: (value) {
               if (value != _typicalSocWhenCharge) {
                 HapticFeedback.selectionClick();
@@ -1610,14 +1662,14 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
       children: [
         _plainInfo(
           Icons.power_rounded,
-          'Thiết lập bộ sạc',
-          'Ứng dụng sẽ hướng dẫn kiểm tra kết nối và an toàn. Chỉ điều khiển sau khi thiết bị được xác minh.',
+          'Ổ cắm thông minh Shelly là gì?',
+          'Shelly Plug S Gen3 là ổ cắm có Wi-Fi, cắm giữa ổ điện và bộ sạc xe. Nhờ nó app bật, tắt và tự ngắt sạc. Thiết bị mua riêng, không kèm theo xe.',
         ),
         const SizedBox(height: 10),
         _plainInfo(
           Icons.timer_rounded,
-          'Tự ngắt bằng bộ đếm phần cứng',
-          'Hẹn giờ được nạp vào rơ-le, an toàn kể cả khi điện thoại mất mạng.',
+          'Chưa có ổ Shelly vẫn dùng được',
+          'Bạn vẫn theo dõi pin, quãng đường, bảo dưỡng và hỏi Pinova Bot. Khi có ổ, vào Cài đặt → Sạc thông minh Shelly để thiết lập.',
         ),
         const SizedBox(height: 20),
         OutlinedButton.icon(
@@ -1766,7 +1818,7 @@ class _OnboardingChatScreenState extends ConsumerState<OnboardingChatScreen> {
           index: 5,
           child: _summaryGroup('Kết nối và thông báo', [
             _buildSummaryRow(
-              label: 'Bộ sạc Shelly',
+              label: 'Ổ Shelly',
               value: _shellyStatus == 'connected'
                   ? 'Đã xác minh trong thiết lập'
                   : 'Chưa thiết lập',
@@ -2032,7 +2084,7 @@ class OnboardingStepCopy {
       optional: true,
     ),
     OnboardingStepCopy(
-      'Kết nối bộ sạc Shelly',
+      'Kết nối ổ Shelly',
       'Bạn có thể thiết lập ngay hoặc mở lại từ Cài đặt.',
       optional: true,
     ),

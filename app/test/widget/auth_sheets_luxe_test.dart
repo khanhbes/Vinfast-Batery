@@ -54,7 +54,7 @@ void main() {
       await tester.ensureVisible(submit);
       await tester.tap(submit);
       await tester.pump();
-      expect(find.text('Nhập email'), findsOneWidget);
+      expect(find.text('Vui lòng nhập email'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

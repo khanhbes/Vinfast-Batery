@@ -138,7 +138,7 @@ class AppPopup {
     String title,
     String? detail,
   ) {
-    final approvedTitle = AppNoticeCopy.approved(title);
+    final approvedTitle = AppNoticeCopy.approved(title) ?? _authored(title);
     final isFailure =
         kind == AppNoticeKind.error || kind == AppNoticeKind.warning;
     final safeTitle =
@@ -148,10 +148,28 @@ class AppPopup {
         : AppNoticeCopy.approved(detail) ??
               (title == 'Cảnh báo an toàn sạc'
                   ? AppNoticeCopy.safetyFallback
-                  : isFailure
-                  ? AppNoticeCopy.error(detail)
-                  : null);
+                  : _authored(detail) ??
+                        (isFailure ? AppNoticeCopy.error(detail) : null));
     return (safeTitle, safeDetail == safeTitle ? null : safeDetail);
+  }
+
+  /// An id, a URL, an email, an IP, or a machine-style name such as
+  /// `private-device` / `internal.lan`.
+  static final _privateText = RegExp(
+    r'https?:|www\.|@|[A-Za-z0-9_-]{16,}|\d{7,}|\d{1,3}(\.\d{1,3}){3}'
+    r'|[A-Za-z][A-Za-z0-9]*[-_.][A-Za-z0-9]*[A-Za-z]',
+  );
+  static final _vietnamese = RegExp('[À-ỹ]');
+
+  /// QA 150: copy the app wrote itself is shown as written. Before, any
+  /// sentence missing from the approved list became a bare "Thông báo" (27
+  /// call sites: "Đã gửi cho đội Pinova", "Đã bật gói Pro", …). Vietnamese
+  /// text with nothing that looks private is the app's own; raw exceptions
+  /// and device values are not, and keep the old fallback.
+  static String? _authored(String text) {
+    final value = text.trim();
+    if (value.isEmpty || !_vietnamese.hasMatch(value)) return null;
+    return _privateText.hasMatch(value) ? null : value;
   }
 
   static String _signature(AppNoticeKind kind, String title, String? detail) =>

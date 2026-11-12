@@ -483,7 +483,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       );
       if (!_disposed) {
         state = state.copyWith(
-          gatewayError: 'Không thể khởi tạo Smart Charge. Hãy thử lại.',
+          gatewayError: 'Không thể khởi tạo phần sạc. Hãy thử lại.',
         );
       }
     } finally {
@@ -517,7 +517,15 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   void _applySavedTarget(double saved) {
     final current = state.draft.currentSoc;
-    final target = max(saved, current + 1).clamp(1, 100).toDouble();
+    // QA 150: with the battery above the saved target the default became
+    // current + 1 (88% -> 89%); offer the next usual stop instead.
+    final target = saved > current
+        ? saved.clamp(1, 100).toDouble()
+        : const [
+            80.0,
+            90.0,
+            100.0,
+          ].firstWhere((stop) => stop > current, orElse: () => 100.0);
     if (target <= current || target == state.draft.targetSoc) return;
     state = state.copyWith(
       draft: SmartChargingPlanDraft(
@@ -1425,7 +1433,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
     final capacityError =
         draft.strategy != ChargingStrategy.manualTimed &&
             draft.estimatedCapacityWh <= 0
-        ? 'Xe chưa có dung lượng pin đã được xác minh. Hãy cập nhật catalog hoặc dùng Sạc hẹn giờ.'
+        ? 'Xe chưa có dung lượng pin đã được xác minh. Hãy chọn lại mẫu xe trong danh mục hoặc dùng Sạc hẹn giờ.'
         : null;
     if (error != null || capacityError != null) {
       state = state.copyWith(
@@ -1897,7 +1905,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       if (!_disposed) {
         state = state.copyWith(
           phase: SmartChargingViewPhase.active,
-          actionError: 'Chưa dừng được sạc. Hãy kiểm tra ổ cắm Shelly.',
+          actionError: 'Chưa dừng được sạc. Hãy kiểm tra ổ Shelly.',
         );
       }
       return false;

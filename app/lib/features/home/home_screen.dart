@@ -257,6 +257,27 @@ class HomeScreen extends ConsumerWidget {
                           ),
                         ),
 
+                        // QA 150: a new account saw "—%" and, first, a card
+                        // about a charger it may not own. The first thing to
+                        // do is to tell the app the battery level.
+                        if (vehicleId.isNotEmpty &&
+                            vehicleAsync.valueOrNull?.hasBatteryData == false)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                              child: LuxeFirstReadingPrompt(
+                                onEnter: () => BatteryReadingFlow.run(
+                                  context,
+                                  vehicleId: vehicleId,
+                                  currentOdoKm: vehicleAsync
+                                      .valueOrNull
+                                      ?.currentOdo
+                                      .toDouble(),
+                                ),
+                              ),
+                            ),
+                          ),
+
                         // ── Shelly checklist banner if skipped in onboarding ──
                         const _ShellyChecklistSliver(),
 

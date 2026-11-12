@@ -350,8 +350,15 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 600));
     expect(find.byType(PremiumScreen), findsNothing);
-    expect(find.byKey(const ValueKey('premium-gate-sheet')), findsNothing);
+    // QA 150: the tap explains the plan and changes nothing.
+    expect(find.byKey(const ValueKey('premium-gate-sheet')), findsOneWidget);
     expect(container.read(appearanceProvider).dashboard, DashboardStyle.lcd);
+    Navigator.of(
+      tester.element(find.byKey(const ValueKey('premium-gate-sheet'))),
+    ).pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(find.byKey(const ValueKey('premium-gate-sheet')), findsNothing);
     await tester.tap(
       find.byKey(const ValueKey('premium-locked-tag-appearance')).first,
     );

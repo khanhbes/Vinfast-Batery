@@ -56,7 +56,7 @@ class ChargeLogRepository {
       }
       return VehicleModel.fromFirestore(doc);
     } on FirebaseException catch (e) {
-      // Bad selectedVehicleId (xe đã bị xoá / không thuộc user) → null thay vì throw.
+      // Bad selectedVehicleId (xe đã bị xóa / không thuộc user) → null thay vì throw.
       if (e.code == 'permission-denied' || e.code == 'not-found') {
         if (e.code == 'permission-denied') {
           final vehicles = await _getVehiclesFromApi();

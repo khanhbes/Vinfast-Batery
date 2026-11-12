@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from . import charge_ai, charge_model
-from .habits import charge_habits
+from .habits import charge_habits, is_lead_acid
 
 
 # QA 142: the cluster shows up to six ODO digits.
@@ -431,7 +431,9 @@ class VehicleLearningMixin:
         powers = [float(s.average_power_w) for s in sessions if s.average_power_w]
         power = learned.power_w or (sorted(powers)[len(powers) // 2] if powers else None)
         wh = learned.wh_per_pct or self._charge_base(vehicle)
-        result = charge_habits(sessions, now=self.clock(), wh_per_pct=wh, power_w=power)
+        result = charge_habits(sessions, now=self.clock(), wh_per_pct=wh, power_w=power,
+                               lead_acid=is_lead_acid(vehicle.get("batteryType")
+                                                      or vehicle.get("batteryChemistry")))
         entitlements = getattr(self, "entitlements", None)
         full = entitlements is None or entitlements.allows(uid, "battery_health")
         result.update({"vehicleId": vehicle_id, "full": full})

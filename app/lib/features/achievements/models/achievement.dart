@@ -174,7 +174,7 @@ final List<AchievementDef> achievementCatalog = [
   _def(
     'kwh_1',
     'Giọt năng lượng',
-    'Nạp tổng cộng 1 kWh qua Smart Charge.',
+    'Nạp tổng cộng 1 kWh qua ổ Shelly.',
     AchievementCategory.energy,
     _b,
     Icons.water_drop_rounded,
@@ -456,7 +456,7 @@ final List<AchievementDef> achievementCatalog = [
   ),
   _def(
     'care80_20',
-    'Bảo vệ cell pin',
+    'Bảo vệ pin',
     'Mục tiêu tối đa 80% trong 20 phiên.',
     AchievementCategory.care,
     _s,
@@ -773,7 +773,7 @@ final List<AchievementDef> achievementCatalog = [
   _def(
     'explore_shelly',
     'Kết nối thông minh',
-    'Liên kết ổ cắm Shelly với ứng dụng.',
+    'Liên kết ổ Shelly với ứng dụng.',
     AchievementCategory.explore,
     _b,
     Icons.power_rounded,

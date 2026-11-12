@@ -56,7 +56,9 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     _yearCtrl = TextEditingController(text: '${v['year'] ?? 2024}');
     _licensePlateCtrl = TextEditingController(text: v['licensePlate'] ?? '');
     _batteryTypeCtrl = TextEditingController(
-      text: v['batteryType'] ?? v['batteryChemistry'] ?? 'LFP',
+      text: batteryChemistryLabel(
+        (v['batteryType'] ?? v['batteryChemistry']) as String?,
+      ),
     );
     _batteryCapCtrl = TextEditingController(
       text: groupThousands(VehicleModel.capacityWhFrom(v).round()),
@@ -115,7 +117,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     final sohText = _sohCtrl.text.trim();
     final soh = sohText.isEmpty ? null : int.tryParse(sohText);
     if (sohText.isNotEmpty && (soh == null || soh < 1 || soh > 100)) {
-      AppPopup.showMessage('SoH phải từ 1 đến 100%.');
+      AppPopup.showMessage('Sức khỏe pin phải từ 1 đến 100%.');
       return;
     }
     final odo = int.tryParse(_odoCtrl.text.trim().replaceAll(' ', ''));
@@ -260,7 +262,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
               child: LuxeNotice(
                 icon: Icons.verified_user_rounded,
                 message:
-                    'Thông số hãng được quản lý bởi catalog chung. Bạn chỉ có thể sửa tên gọi riêng, biển số, ODO và tình trạng pin thực tế.',
+                    'Thông số hãng lấy từ danh mục xe chung. Bạn chỉ có thể sửa tên gọi riêng, biển số, ODO và tình trạng pin thực tế.',
               ),
             ),
             LuxeReveal(
@@ -279,7 +281,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                   icon: Icons.pin_rounded,
                 ),
                 _SpecRow(
-                  label: 'Loại pin (LFP / NMC)',
+                  label: 'Loại pin',
                   controller: _batteryTypeCtrl,
                   isEditing: false,
                   icon: Icons.electric_bolt_rounded,
@@ -299,7 +301,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                   keyboardType: TextInputType.number,
                 ),
                 _SpecRow(
-                  label: 'SoH (%)',
+                  label: 'Sức khỏe pin (%)',
                   controller: _sohCtrl,
                   hint: 'Chưa nhập',
                   isEditing: _isEditing,
@@ -394,7 +396,10 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                           fontWeight: FontWeight.w300,
                         ),
                       ),
-                      Text('SoH', style: LuxeText.label.copyWith(fontSize: 11)),
+                      Text(
+                        'Sức khỏe pin',
+                        style: LuxeText.label.copyWith(fontSize: 11),
+                      ),
                     ],
                   ),
                 ),

@@ -259,7 +259,7 @@ class _SmartChargeTelemetryTaskHandler extends TaskHandler {
     } catch (_) {
       // The Shelly timer stays armed if polling or persistence is unavailable.
       await FlutterForegroundTask.updateService(
-        notificationTitle: 'Smart Charge đang chạy',
+        notificationTitle: 'Đang theo dõi phiên sạc',
         notificationText:
             'Mất dữ liệu tạm thời; timer an toàn vẫn ở trên Shelly',
       );

@@ -275,6 +275,7 @@ class _PremiumScreenState extends ConsumerState<PremiumScreen> {
           const SizedBox(height: 18),
           _TierSwitch(
             selected: _tier,
+            current: plan.isPremium ? plan.tier : null,
             onChanged: (tier) {
               HapticFeedback.selectionClick();
               setState(() => _tier = tier);
@@ -421,7 +422,13 @@ class _Hero extends StatelessWidget {
         const Text('Pin bền hơn, sạc an tâm hơn', style: LuxeText.title),
         const SizedBox(height: 6),
         Text(
-          highlight != null
+          // QA 150: the trial is only offered to who can still take it.
+          !(plan.trialAvailable && !plan.isPremium)
+              ? (highlight != null
+                    ? '“${highlight!.label}” có trong gói '
+                          '${highlight!.tier.label}.'
+                    : 'Xem quyền lợi từng gói, gia hạn hoặc nhập mã khuyến mãi.')
+              : highlight != null
               ? '“${highlight!.label}” có trong gói ${highlight!.tier.label}. '
                     'Dùng thử 7 ngày miễn phí để mở ngay.'
               : 'Chọn gói phù hợp. Dùng thử 7 ngày miễn phí, không cần '
@@ -446,8 +453,15 @@ class _Hero extends StatelessWidget {
 // ───────────────────────────── Pro | Ultra ─────────────────────────────
 
 class _TierSwitch extends StatelessWidget {
-  const _TierSwitch({required this.selected, required this.onChanged});
+  const _TierSwitch({
+    required this.selected,
+    required this.onChanged,
+    this.current,
+  });
   final PlanTier selected;
+
+  /// The plan in use, if any (QA 150: "ĐỀ XUẤT" was shown to Ultra owners).
+  final PlanTier? current;
   final ValueChanged<PlanTier> onChanged;
 
   @override
@@ -459,6 +473,11 @@ class _TierSwitch extends StatelessWidget {
           child: _TierPill(
             tier: tier,
             selected: selected == tier,
+            badge: current == tier
+                ? 'ĐANG DÙNG'
+                : tier == PlanTier.ultra && current == null
+                ? 'ĐỀ XUẤT'
+                : null,
             onTap: () => onChanged(tier),
           ),
         ),
@@ -472,9 +491,11 @@ class _TierPill extends StatelessWidget {
     required this.tier,
     required this.selected,
     required this.onTap,
+    this.badge,
   });
   final PlanTier tier;
   final bool selected;
+  final String? badge;
   final VoidCallback onTap;
 
   static const _silver = LinearGradient(
@@ -506,9 +527,9 @@ class _TierPill extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              if (ultra)
+              if (badge != null)
                 Text(
-                  'ĐỀ XUẤT',
+                  badge!,
                   style: TextStyle(
                     color: selected ? PlanColors.ink : PlanColors.lavender,
                     fontSize: 11,
@@ -681,7 +702,9 @@ class _BenefitsCard extends StatelessWidget {
               LuxeNotice(
                 icon: Icons.touch_app_rounded,
                 color: ultra ? PlanColors.lavender : PlanColors.steelText,
-                message: 'Bạn vừa mở: ${highlight!.label}.',
+                message:
+                    'Tính năng bạn muốn dùng: ${highlight!.label} '
+                    '(gói ${highlight!.tier.label}).',
               ),
             ],
             const SizedBox(height: 12),
@@ -902,9 +925,19 @@ class _ActionBar extends StatelessWidget {
     final covered = paidPlan && plan.tier.covers(tier) && !renew;
     final amount =
         promo?.finalPrice(tier, period) ?? PlanTable.price(tier, period);
-    final verb = renew ? 'Gia hạn' : 'Chọn';
+    // QA 150: with a 100% code the code is the main action, not the trial.
+    final verb = renew
+        ? 'Gia hạn'
+        : amount == 0
+        ? 'Kích hoạt'
+        : 'Chọn';
+    // QA 150: while payments are closed a price on the button led to a
+    // dead end; the way in is a code.
+    final canPay = AppConstants.directPayments && plan.momoAvailable;
     final buyLabel = amount == 0
         ? '$verb ${tier.label} · miễn phí với mã'
+        : !canPay
+        ? 'Nhập mã để kích hoạt ${tier.label}'
         : '$verb ${tier.label} · ${formatVnd(amount)}/${period == PlanPeriod.year ? 'năm' : 'tháng'}';
     final trial = plan.trialAvailable && !plan.isPremium;
     final Widget content;
@@ -918,7 +951,7 @@ class _ActionBar extends StatelessWidget {
             : 'Gói ${plan.tier.label} của bạn đã gồm mọi thứ của ${tier.label}. '
                   'Đổi sang ${tier.label} được sau khi gói hiện tại hết hạn.',
       );
-    } else if (trial) {
+    } else if (trial && amount != 0) {
       content = Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1151,7 +1184,8 @@ class _CompareTable extends StatelessWidget {
     ('Lịch sử sạc', '30 ngày', 'Đầy đủ', 'Đầy đủ'),
     ('Sạc đến % tự tắt, đổi mục tiêu', '—', '✓', '✓'),
     ('Lộ trình', '—', '✓', '✓'),
-    ('Sức khỏe pin, bài kiểm tra', '—', '✓', '✓'),
+    ('Sức khỏe pin (ước tính)', '✓', '✓', '✓'),
+    ('Xu hướng pin, bài kiểm tra, thói quen sạc', '—', '✓', '✓'),
     ('Giao diện tùy chọn, xuất file', '—', '✓', '✓'),
     ('Số xe', '1', '2', '10'),
     ('Sạc đêm an toàn', '—', '—', '✓'),

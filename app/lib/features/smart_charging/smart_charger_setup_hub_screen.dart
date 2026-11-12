@@ -635,7 +635,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
             Icon(Icons.help_outline_rounded, color: _ui.primary),
             SizedBox(width: 8),
             Text(
-              'Hướng dẫn Smart Charger',
+              'Hướng dẫn ổ Shelly',
               style: TextStyle(color: LuxeColors.text, fontSize: 15.5),
             ),
           ],

@@ -343,7 +343,7 @@ def check_input_guardrail(message: str, policy: dict[str, Any] | None = None) ->
     if _SAFETY_BYPASS_REQUEST.search(text):
         return {
             "reply": (
-                "Vì an toàn điện và phòng chống cháy nổ, ngưỡng bảo vệ **12 A / 2500 W** và bước xác nhận trên ổ cắm Shelly "
+                "Vì an toàn điện và phòng chống cháy nổ, ngưỡng bảo vệ **12 A / 2500 W** và bước xác nhận trên ổ Shelly "
                 "là cố định, không thể tắt hoặc bỏ qua dưới bất kỳ quyền hạn nào."
             ),
             "actions": [],

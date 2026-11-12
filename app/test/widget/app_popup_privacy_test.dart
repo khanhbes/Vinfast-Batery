@@ -61,6 +61,63 @@ void main() {
     await tester.pump();
   });
 
+  // QA 150: 27 call sites showed a bare "Thông báo" for the app's own copy.
+  testWidgets('copy the app wrote is shown as written', (tester) async {
+    await tester.pumpWidget(host());
+    AppPopup.showSuccess(
+      'Đã gửi cho đội Pinova',
+      detail: 'Trả lời sẽ hiện trong Trợ giúp và Trung tâm thông báo.',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Đã gửi cho đội Pinova'), findsOneWidget);
+    expect(
+      find.text('Trả lời sẽ hiện trong Trợ giúp và Trung tâm thông báo.'),
+      findsOneWidget,
+    );
+    for (final (title, detail) in [
+      ('Đã bật gói Ultra', 'Dùng đến 11/11/2027.'),
+      ('Đã áp mã PINOVA2: giảm 100%.', null),
+      ('Đã thêm VinFast Evo200', null),
+      ('Đã lưu 60%', 'Đã thêm vào dữ liệu học.'),
+      ('Đã hẹn sạc đêm lúc 02:15', null),
+    ]) {
+      AppPopup.dismiss();
+      await tester.pump(const Duration(seconds: 3));
+      AppPopup.showSuccess(title, detail: detail);
+      await tester.pumpAndSettle();
+      expect(find.text(title), findsOneWidget, reason: title);
+      if (detail != null) expect(find.text(detail), findsOneWidget);
+    }
+    AppPopup.dismiss();
+    await tester.pump(const Duration(seconds: 3));
+    AppPopup.showWarning('Hãy chọn xe trước', userInitiated: true);
+    await tester.pumpAndSettle();
+    expect(find.text('Hãy chọn xe trước'), findsOneWidget);
+    AppPopup.dismiss();
+    await tester.pump();
+  });
+
+  testWidgets('authored copy with a device value is still replaced', (
+    tester,
+  ) async {
+    await tester.pumpWidget(host());
+    for (final title in [
+      'Đã áp dụng Server: https://example.test',
+      'Không phản hồi từ 192.0.2.4',
+      'Đã chọn shellyplugsg3-a1b2c3',
+      'Connection refused',
+    ]) {
+      // Same replaced text each time: clear the 2 s repeat guard.
+      AppPopup.resetForTesting();
+      await tester.pump();
+      AppPopup.showSuccess(title);
+      await tester.pumpAndSettle();
+      expect(find.text('Thông báo'), findsOneWidget, reason: title);
+    }
+    AppPopup.dismiss();
+    await tester.pump();
+  });
+
   testWidgets('safety copy remains specific and keeps navigation tappable', (
     tester,
   ) async {

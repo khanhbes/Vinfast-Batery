@@ -121,12 +121,13 @@ class ModelTrainingStatus {
     if (_model.isEmpty || _model['layer'] == 'ai') return null;
     final have = _int(_model['aiCharges']);
     final need = _int(_model['aiNeedCharges'], fallback: 30);
-    if (have < need) return 'AI nhỏ: $have/$need lần sạc';
+    // QA 150: "AI nhỏ: 0/30" was a third unexplained counter on the card.
+    if (have < need) return 'AI nâng cao cần $need lần sạc, đã có $have';
     final days = _num(_model['aiDays']) ?? 0;
     final needDays = _num(_model['aiNeedDays']) ?? 14;
     return days < needDays
-        ? 'AI nhỏ: cần dữ liệu trong ${needDays.round()} ngày'
-        : 'AI nhỏ: đã đủ dữ liệu, sẽ thử khi huấn luyện';
+        ? 'AI nâng cao cần dữ liệu trong ${needDays.round()} ngày'
+        : 'AI nâng cao đã đủ dữ liệu, sẽ thử khi huấn luyện';
   }
 
   static ModelTrainingStatus fromJson(Object? raw) {

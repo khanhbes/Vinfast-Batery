@@ -747,6 +747,9 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
     final counted = elapsed > 0 ? elapsed : days.length;
     final caption = weekly
         ? 'điện nạp · ${(counted / 7).ceil()} tuần'
+        // QA 150: "11 ngày" under a month title read as a mistake.
+        : elapsed > 0 && elapsed < days.length
+        ? 'điện nạp · $counted ngày tính đến hôm nay'
         : 'điện nạp · $counted ngày';
     return (
       buckets: buckets,
@@ -1022,7 +1025,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Text(
-                      'Đã hiển thị toàn bộ phiên sạc',
+                      'Hết phiên sạc trong khoảng đang xem',
                       textAlign: TextAlign.center,
                       style: LuxeText.label.copyWith(fontSize: 11.5),
                     ),
@@ -1176,6 +1179,13 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
   Future<void> _export() async {
     if (!_exportAllowed) {
       PremiumGate.showUpgrade(context, PremiumFeature.historyExport);
+      return;
+    }
+    // QA 150: an empty month opened the share sheet with an empty file.
+    if (_hasSuccessfulLoad &&
+        !_loading &&
+        !_filteredItems.any((s) => s.state.isTerminal)) {
+      AppPopup.showInfo('Chưa có phiên sạc để xuất');
       return;
     }
     final contextGeneration = _contextGeneration;
@@ -1369,16 +1379,33 @@ class _HistoryHeader extends StatelessWidget {
         ),
       ),
       const SizedBox(width: 12),
-      PremiumLocked(
-        feature: PremiumFeature.historyExport,
-        allowed: exportAllowed,
-        tagAlignment: Alignment.bottomCenter,
-        tagPadding: EdgeInsets.zero,
-        child: HistoryGlassButton(
-          icon: Icons.ios_share_rounded,
-          tooltip: 'Xuất báo cáo',
-          onPressed: onExport,
-        ),
+      // QA 150: a lone PRO pill over the button read as "History is Pro".
+      // The button stays visible; the caption says what the pill is for.
+      Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PremiumLocked(
+            feature: PremiumFeature.historyExport,
+            allowed: exportAllowed,
+            tagAlignment: AlignmentDirectional.topEnd,
+            tagPadding: EdgeInsets.zero,
+            child: HistoryGlassButton(
+              icon: Icons.ios_share_rounded,
+              tooltip: 'Xuất báo cáo',
+              onPressed: onExport,
+            ),
+          ),
+          if (!exportAllowed) ...[
+            const SizedBox(height: 4),
+            const ExcludeSemantics(
+              child: Text(
+                'Xuất tệp',
+                key: ValueKey('history-export-caption'),
+                style: LuxeText.caption,
+              ),
+            ),
+          ],
+        ],
       ),
     ],
   );
@@ -1467,7 +1494,7 @@ class _EmptyHistory extends StatelessWidget {
         Text(
           isFiltered
               ? 'Không có phiên sạc phù hợp bộ lọc'
-              : 'Chưa có phiên Smart Charge hoàn tất',
+              : 'Chưa có phiên sạc hoàn tất',
           textAlign: TextAlign.center,
           style: LuxeText.item,
         ),

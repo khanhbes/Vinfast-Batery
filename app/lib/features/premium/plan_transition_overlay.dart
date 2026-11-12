@@ -154,10 +154,23 @@ class _PlanTransitionOverlayState extends State<PlanTransitionOverlay>
           'Dừng sạc và mọi ngắt an toàn không bao giờ bị khóa',
           'Nâng gói lại bất cứ lúc nào ở Cài đặt → Pinova Premium',
         ]
+      // QA 150: named, not "the first three of the tier": that list put
+      // "Thống kê chi phí nâng cao" here, which the app does not have.
       : [
-          for (final f in PremiumFeature.values)
-            if (f.tier == widget.to) f.label,
-        ].take(3).toList();
+          for (final f
+              in widget.to == PlanTier.ultra
+                  ? const [
+                      PremiumFeature.learningTrain,
+                      PremiumFeature.nightCharging,
+                      PremiumFeature.ultraLook,
+                    ]
+                  : const [
+                      PremiumFeature.targetCharging,
+                      PremiumFeature.tripEstimate,
+                      PremiumFeature.batteryHealth,
+                    ])
+            f.label,
+        ];
 
   @override
   Widget build(BuildContext context) {

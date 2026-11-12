@@ -226,14 +226,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ],
                       style: fieldStyle,
                       decoration: _inputDecoration(
-                        label: 'Số điện thoại',
+                        label: 'Số điện thoại (không bắt buộc)',
                         hint: '09xxxxxxxx',
                         prefixIcon: Icons.phone_android_rounded,
                       ),
                       validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Vui lòng nhập số điện thoại';
-                        }
+                        // QA 150: nothing in the app needs the number, so
+                        // it is optional (as the privacy policy says).
+                        if (v == null || v.trim().isEmpty) return null;
                         if (v.trim().length < 9) {
                           return 'Số điện thoại không hợp lệ';
                         }
@@ -323,6 +323,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     if (v) _error = null;
                   }),
                 ),
+                if (!_agreed)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 52, bottom: 4),
+                    child: Text(
+                      'Tích ô đồng ý ở trên để đăng ký.',
+                      key: ValueKey('register-consent-hint'),
+                      style: LuxeText.caption,
+                    ),
+                  ),
                 const SizedBox(height: 10),
                 FilledButton(
                   onPressed: _loading || !_agreed ? null : _register,

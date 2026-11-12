@@ -275,7 +275,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                         icon: Icons.psychology_rounded,
                         title: 'Trợ lý AI & Dự báo Pin',
                         subtitle: availability.enabled
-                            ? 'Thuật toán tối ưu sạc & bảo vệ cell pin'
+                            ? 'Thuật toán tối ưu sạc & bảo vệ pin'
                             : availability.reason,
                         badge: LuxeTag(
                           availability.enabled ? 'Sẵn sàng' : 'Cần thiết lập',
@@ -315,6 +315,13 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                       onTap: () => unawaited(PrivacyConsent.openPolicy()),
                     ),
                     LuxeSettingsRow(
+                      key: const ValueKey('more-terms'),
+                      icon: Icons.gavel_rounded,
+                      title: 'Điều khoản sử dụng',
+                      subtitle: 'Quy định khi dùng Pinova và sạc thông minh',
+                      onTap: () => unawaited(PrivacyConsent.openTerms()),
+                    ),
+                    LuxeSettingsRow(
                       icon: Icons.menu_book_rounded,
                       title: 'Hướng dẫn sử dụng',
                       subtitle: 'Tìm chức năng và làm quen từng bước',
@@ -323,7 +330,7 @@ class _MoreScreenState extends ConsumerState<MoreScreen> {
                     LuxeSettingsRow(
                       icon: Icons.notifications_none_rounded,
                       title: 'Trung tâm thông báo',
-                      subtitle: 'Lịch sử cảnh báo sạc & tin tức',
+                      subtitle: 'Kết quả phiên sạc, cảnh báo và nhắc bảo dưỡng',
                       trailing: unreadCount > 0
                           ? _CountBadge(unreadCount)
                           : null,

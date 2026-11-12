@@ -150,7 +150,7 @@ const _pages = [
     '02 · SẠC THÔNG MINH',
     'Sạc thông minh,',
     'có bảo vệ an toàn',
-    'Kết nối ổ cắm Shelly để hẹn giờ sạc. Rơ-le tự ngắt theo bộ đếm phần cứng, kể cả khi điện thoại mất mạng.',
+    'Cắm thêm ổ cắm thông minh Shelly (mua riêng) để hẹn giờ sạc. Ổ tự ngắt điện đúng giờ, kể cả khi điện thoại mất mạng.',
   ),
   _IntroPage(
     '03 · QUÉT ĐỒNG HỒ',

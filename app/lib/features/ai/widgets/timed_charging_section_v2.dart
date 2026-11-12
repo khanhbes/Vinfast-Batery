@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/theme/plan_style.dart';
 import '../../../core/widgets/app_popup.dart';
+import '../../../core/widgets/luxe_time_picker.dart';
 import '../../../data/services/charge_estimator.dart';
 import 'charge_edit_controls.dart';
 
@@ -176,14 +177,10 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   }
 
   Future<void> _pick() async {
-    final picked = await showTimePicker(
-      context: context,
+    final picked = await showLuxeTimePicker(
+      context,
       initialTime: _end,
-      helpText: 'NGẮT LÚC',
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child!,
-      ),
+      title: 'Ngắt lúc',
     );
     if (picked != null && mounted) _setEnd(picked);
   }
@@ -390,7 +387,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Hẹn giờ được nạp thẳng vào ổ cắm Shelly, an toàn độc lập với điện thoại. Đang sạc vẫn đổi được giờ ngắt.',
+                      'Hẹn giờ được nạp thẳng vào ổ Shelly, an toàn độc lập với điện thoại. Đang sạc vẫn đổi được giờ ngắt.',
                       style: TextStyle(
                         color: LuxeColors.muted,
                         fontSize: 12.5,

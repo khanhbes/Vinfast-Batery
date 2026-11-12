@@ -201,7 +201,7 @@ class _Body extends StatelessWidget {
         const SizedBox(height: 16),
         const LuxeNotice(
           message:
-              'Xe không gửi dữ liệu cell pin, nên đây là ước tính từ điện năng '
+              'Xe không gửi dữ liệu pin cho app, nên đây là ước tính từ điện năng '
               'ổ Shelly đo và % bạn đọc trên đồng hồ (hiệu suất sạc khoảng 90%). '
               'Pin mới thường 95–100%; dưới 70% nên đưa xe đi kiểm tra.',
         ),

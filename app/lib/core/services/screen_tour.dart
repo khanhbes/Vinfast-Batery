@@ -40,14 +40,65 @@ abstract final class ScreenTour {
     }
   }
 
+  /// QA 150: an owner who has used the app for a while and signs in again
+  /// (new phone, reinstall) met four guides in a row. Guides are for new
+  /// accounts; an older one only sees them after asking (Xem lại hướng dẫn).
+  static const establishedAfter = Duration(days: 3);
+  static DateTime? Function() accountCreatedAt = _firebaseCreatedAt;
+  static DateTime Function() now = DateTime.now;
+
+  static DateTime? _firebaseCreatedAt() {
+    try {
+      return Firebase.apps.isEmpty
+          ? null
+          : FirebaseAuth.instance.currentUser?.metadata.creationTime;
+    } on Object {
+      return null;
+    }
+  }
+
   static String _key(String uid) => '$_prefix.$uid';
+  static String _replayKey(String uid) => '$_prefix.replay.$uid';
+  static String _lastKey(String uid) => '$_prefix.last.$uid';
+
+  /// QA 150: a new owner met 13 guide steps in 15 minutes. After one guide
+  /// the next screen's guide waits this long (it opens on a later visit).
+  /// Not applied after "Xem lại hướng dẫn": that owner asked for them.
+  static const spacing = Duration(minutes: 10);
+
+  static Future<bool> _tooSoon(String uid) async {
+    try {
+      final prefs = await preferences();
+      if (prefs.getBool(_replayKey(uid)) == true) return false;
+      final last = prefs.getInt(_lastKey(uid));
+      if (last == null) return false;
+      final gap = now().millisecondsSinceEpoch - last;
+      return gap >= 0 && gap < spacing.inMilliseconds;
+    } on Object {
+      return false;
+    }
+  }
+
+  static Future<void> _markShown(String uid) async {
+    try {
+      final prefs = await preferences();
+      await prefs.setInt(_lastKey(uid), now().millisecondsSinceEpoch);
+    } on Object {
+      // Pacing is a courtesy; a guide shown early is harmless.
+    }
+  }
 
   static Future<bool> seen(String tourId, {String? uid}) async {
     final id = uid ?? currentUid();
     if (id == null) return true;
     try {
-      final list = (await preferences()).getStringList(_key(id)) ?? const [];
-      return list.contains(tourId);
+      final prefs = await preferences();
+      final list = prefs.getStringList(_key(id)) ?? const [];
+      if (list.contains(tourId)) return true;
+      final created = accountCreatedAt();
+      return created != null &&
+          now().difference(created) > establishedAfter &&
+          prefs.getBool(_replayKey(id)) != true;
     } on Object {
       return true; // never trap the owner in a guide loop
     }
@@ -70,7 +121,9 @@ abstract final class ScreenTour {
     final id = uid ?? currentUid();
     if (id == null) return;
     try {
-      await (await preferences()).remove(_key(id));
+      final prefs = await preferences();
+      await prefs.remove(_key(id));
+      await prefs.setBool(_replayKey(id), true);
     } on Object {
       // Nothing to reset.
     }
@@ -91,6 +144,7 @@ abstract final class ScreenTour {
     if (tourId != overviewInstall && !await seen(overviewInstall, uid: uid)) {
       return false;
     }
+    if (tourId != overviewInstall && await _tooSoon(uid)) return false;
     // Let the screen finish its first layout and entrance animation.
     await Future<void>.delayed(const Duration(milliseconds: 700));
     if (!context.mounted ||
@@ -116,6 +170,7 @@ abstract final class ScreenTour {
       // QA 149: closes with the screen it explains.
       route: ModalRoute.of(context),
     );
+    if (entry != null) await _markShown(uid);
     return entry != null;
   }
 }

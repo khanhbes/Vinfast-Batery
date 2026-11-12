@@ -33,7 +33,7 @@ class DashboardWidgetId {
       case rangePrediction:
         return 'Dự đoán quãng đường';
       case batteryHealth:
-        return 'Sức khỏe pin (SoH)';
+        return 'Sức khỏe pin';
       case recentCharging:
         return 'Xu hướng sạc gần đây';
       case efficiencyReference:
@@ -71,7 +71,7 @@ class DashboardWidgetId {
       case rangePrediction:
         return 'Ước tính khoảng cách đi được theo % pin hiện tại';
       case batteryHealth:
-        return 'Điểm đánh giá SoH và tình trạng lão hóa pin';
+        return 'Sức khỏe và tình trạng lão hóa của pin';
       case recentCharging:
         return 'Biểu đồ các phiên sạc gần nhất';
       case efficiencyReference:

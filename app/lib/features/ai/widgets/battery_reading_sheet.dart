@@ -327,8 +327,11 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
             keyboardType: TextInputType.number,
             // QA 143: "8031500" fit in the % field until Save.
             inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-              LengthLimitingTextInputFormatter(3),
+              // QA 150: dropping the dot turned "50.5" into "505".
+              TextInputFormatter.withFunction(
+                (old, next) =>
+                    RegExp(r'^\d{0,3}$').hasMatch(next.text) ? next : old,
+              ),
             ],
             textInputAction: TextInputAction.next,
             onChanged: (_) {

@@ -89,7 +89,7 @@ class _ShellyQrScannerDialogState extends State<ShellyQrScannerDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Mã QR hoặc Barcode được in trên tem thân ổ cắm Shelly hoặc trên vỏ hộp.',
+                'Mã QR hoặc Barcode được in trên tem thân ổ Shelly hoặc trên vỏ hộp.',
                 style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 12),

@@ -393,12 +393,13 @@ class GuideRegistry {
       category: GuideCategory.charging,
       titleVi: 'Bắt đầu hoặc dừng sạc',
       titleEn: 'Start or stop charging',
-      summaryVi: 'Kiểm tra trạng thái sạc trước khi dùng nút điều khiển.',
+      summaryVi:
+          'Dự đoán thời gian sạc, rồi vuốt để bật. Cần ổ cắm thông minh Shelly.',
       summaryEn: 'Check charging status before using a control.',
       stepsVi: [
-        'Mở tab Sạc pin.',
-        'Kiểm tra xe và trạng thái kết nối.',
-        'Chỉ chạm Bắt đầu/Dừng khi nút được mở; chờ xác nhận trạng thái.',
+        'Mở tab Sạc pin, chọn Sạc AI (sạc đến % bạn muốn) hoặc Theo giờ.',
+        'Kéo núm theo % pin trên đồng hồ xe, rồi bấm Dự đoán thời gian sạc.',
+        'Vuốt để sạc. Muốn dừng thì bấm Dừng sạc; ổ Shelly cũng tự ngắt khi hết giờ.',
       ],
       stepsEn: [
         'Open Charging.',
@@ -406,7 +407,7 @@ class GuideRegistry {
         'Use Start/Stop only when enabled, then wait for confirmation.',
       ],
       noteVi:
-          'Nếu nút đang khóa, hãy hoàn tất thiết lập hoặc kết nối mạng trước.',
+          'Chưa có ổ Shelly thì app vẫn dự đoán thời gian sạc, nhưng không bật hay ngắt sạc được.',
       noteEn:
           'If a control is disabled, finish setup or restore the network connection first.',
       destination: GuideDestination.charging,
@@ -452,7 +453,7 @@ class GuideRegistry {
     GuideItem(
       id: 'guide_shelly_setup',
       category: GuideCategory.charging,
-      titleVi: 'Kết nối ổ cắm Shelly',
+      titleVi: 'Kết nối ổ Shelly',
       titleEn: 'Connect Shelly Smart Charge',
       summaryVi: 'Kết nối ổ cắm và xác minh an toàn trước khi điều khiển.',
       summaryEn: 'Connect the plug and verify safety before enabling controls.',

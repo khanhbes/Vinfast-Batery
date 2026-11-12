@@ -185,7 +185,7 @@ class _VehicleGarageScreenState extends ConsumerState<VehicleGarageScreen> {
                     Text(
                       _isLoading
                           ? 'Đang tải danh sách xe…'
-                          : '$activeCount xe đang dùng · $archivedCount đã lưu trữ',
+                          : '$activeCount xe trong gara · $archivedCount đã lưu trữ',
                       style: LuxeText.caption,
                     ),
                     const SizedBox(height: 16),
@@ -430,8 +430,8 @@ class _VehicleCard extends StatelessWidget {
                           stroke: 4,
                           color: sohColor,
                           semanticLabel: soh == null
-                              ? 'Chưa có SoH'
-                              : 'SoH ${soh!.toInt()} phần trăm',
+                              ? 'Chưa có sức khỏe pin'
+                              : 'Sức khỏe pin ${soh!.toInt()} phần trăm',
                           child: ExcludeSemantics(
                             child: Text(
                               soh == null ? '—' : '${soh!.toInt()}',
@@ -449,7 +449,7 @@ class _VehicleCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'SoH · ODO',
+                                'Sức khỏe pin · ODO',
                                 style: LuxeText.label.copyWith(fontSize: 11.5),
                               ),
                               Text(
@@ -640,7 +640,13 @@ class _AddVehicleSheetState extends State<_AddVehicleSheet> {
     if (!mounted) return;
     setState(() => _isAdding = false);
 
-    if (result['success'] == true) {
+    if (result['success'] == true && result['alreadyExists'] == true) {
+      // QA 150: nothing was added; the garage keeps one vehicle per model.
+      AppPopup.showInfo(
+        'Bạn đã có mẫu xe này trong gara',
+        detail: 'Mỗi mẫu xe chỉ thêm được một lần. Hãy chọn mẫu khác.',
+      );
+    } else if (result['success'] == true) {
       final newId = (result['vehicleId'] as String?) ?? '';
       // Hiệu ứng xác nhận ngắn rồi đóng sheet
       await _showSuccessOverlay(spec.modelName);

@@ -28,7 +28,7 @@ class PredictionCardV2 extends StatelessWidget {
   /// "1 giờ 50 – 2 giờ 20" uncertainty band (Task 126).
   final String? rangeLabel;
 
-  /// Replaces "Dự kiến dừng lúc … · rơ-le tự ngắt" (target charging).
+  /// Replaces "Dự kiến dừng lúc … · ổ tự ngắt điện" (target charging).
   final String? stopLine;
 
   final int durationMinutes;
@@ -105,7 +105,7 @@ class PredictionCardV2 extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  stopLine ?? 'Dự kiến dừng lúc $stopTime · rơ-le tự ngắt',
+                  stopLine ?? 'Dự kiến dừng lúc $stopTime · ổ tự ngắt điện',
                   style: const TextStyle(color: LuxeColors.muted, fontSize: 13),
                 ),
               ),

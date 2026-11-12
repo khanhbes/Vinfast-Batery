@@ -228,7 +228,7 @@ class AppChatToolGateway implements ChatToolGateway {
         _guard(owner, vehicle.vehicleId, generation);
         if (binding == null) {
           return const LocalChatReply(
-            'Xe này chưa có bộ sạc Shelly đã liên kết. Mở thiết lập để nhập mã kết nối.',
+            'Xe này chưa có ổ Shelly đã liên kết. Mở thiết lập để nhập mã kết nối.',
           );
         }
         final live = await _backendRead(

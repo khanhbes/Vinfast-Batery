@@ -179,7 +179,7 @@ class NightChargingMixin:
             raise SmartChargeError("invalidNightPlan", "Pin hiện tại phải thấp hơn mục tiêu ít nhất 5%.")
         binding = self.binding(uid, vehicle_id)
         if not binding:
-            raise SmartChargeError("notConfigured", "Xe chưa liên kết ổ sạc Shelly.", 409)
+            raise SmartChargeError("notConfigured", "Xe chưa liên kết ổ Shelly.", 409)
         # Same model as the Charge tab; no ON yet.
         preview = self._night_preview(uid, vehicle_id, current, target)
         now = self.clock()

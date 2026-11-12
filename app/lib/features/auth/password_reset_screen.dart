@@ -46,7 +46,11 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
     if (_sending || _cooldownSeconds > 0) return;
     final email = _emailController.text.trim();
     if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
-      setState(() => _error = 'Nhập địa chỉ email hợp lệ.');
+      setState(
+        () => _error = email.isEmpty
+            ? 'Vui lòng nhập email'
+            : 'Email không hợp lệ',
+      );
       return;
     }
     setState(() {

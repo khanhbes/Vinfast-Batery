@@ -151,17 +151,17 @@ void main() {
     addTearDown(controller.dispose);
     await _mount(tester, controller);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    expect(find.text('Chưa có phiên Smart Charge hoàn tất'), findsNothing);
+    expect(find.text('Chưa có phiên sạc hoàn tất'), findsNothing);
     controller.requests.single.result.completeError(StateError('offline'));
     await tester.pump();
     expect(find.text('Không thể đồng bộ lịch sử sạc.'), findsOneWidget);
-    expect(find.text('Chưa có phiên Smart Charge hoàn tất'), findsNothing);
+    expect(find.text('Chưa có phiên sạc hoàn tất'), findsNothing);
     await tester.tap(find.text('THỬ LẠI'));
     controller.requests.last.result.complete(
       const SmartChargeHistoryPage(items: []),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Chưa có phiên Smart Charge hoàn tất'), findsOneWidget);
+    expect(find.text('Chưa có phiên sạc hoàn tất'), findsOneWidget);
   });
 
   testWidgets('latest refresh wins when responses arrive in reverse order', (
@@ -305,7 +305,7 @@ void main() {
         find.textContaining('Không thể đồng bộ lịch sử sạc.'),
         findsOneWidget,
       );
-      expect(find.text('Chưa có phiên Smart Charge hoàn tất'), findsNothing);
+      expect(find.text('Chưa có phiên sạc hoàn tất'), findsNothing);
     },
   );
 

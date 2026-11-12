@@ -95,7 +95,6 @@ void main() {
     for (final message in [
       'Vui lòng nhập họ tên',
       'Vui lòng nhập email',
-      'Vui lòng nhập số điện thoại',
       'Vui lòng nhập mật khẩu',
       'Vui lòng xác nhận mật khẩu',
     ]) {

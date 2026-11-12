@@ -14,9 +14,7 @@ final selectedVehicleIdProvider = StateProvider<String>((ref) => '');
 final vehicleProvider = StreamProvider.family<VehicleModel?, String>((ref, id) {
   if (id.isEmpty) return Stream.value(null);
   var first = true;
-  return ref.watch(chargeLogRepositoryProvider).watchVehicle(id).map((
-    vehicle,
-  ) {
+  return ref.watch(chargeLogRepositoryProvider).watchVehicle(id).map((vehicle) {
     if (!first) ref.invalidate(allVehiclesProvider);
     first = false;
     return vehicle;

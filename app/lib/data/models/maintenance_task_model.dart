@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 ///
 /// Nhóm:
 /// - Hệ điều khiển: brakeLever, throttleGrip, lightsHornDash
-/// - Khung & khoá: sideStand, seatLock
+/// - Khung & khóa: sideStand, seatLock
 /// - Pin: battery, batteryCheck (legacy)
 /// - Phanh: brakeFluid, brakeFront, brakeRear, brakeHose, brakeCable, brakeService (legacy)
 /// - Bánh xe: wheelFront, wheelRear, tireFront, tireRear, tireRotation (legacy)
@@ -17,7 +17,7 @@ enum ServiceType {
   throttleGrip,
   lightsHornDash,
 
-  // ── Khung & khoá ──
+  // ── Khung & khóa ──
   sideStand,
   seatLock,
 

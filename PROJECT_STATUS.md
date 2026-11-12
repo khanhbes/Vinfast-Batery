@@ -12,6 +12,368 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 150. Task Completion Log — Kiểm thử toàn diện trước phát hành trên Xiaomi 1.3.24+227 (QA Lead + UX Researcher + Content Auditor, 10–11/11/2026) — Báo cáo xong; Đợt 1 và 2 đã sửa (150.14, 150.15), APK 1.3.25+228 đã cài; Đợt 3–6 (150.16–150.19) code + test xong, APK 1.3.27+230 đã build, chưa cài; chưa deploy
+
+**Phạm vi:** APK profile 1.3.24+227, API production, Xiaomi Android 16 (1200×2608, chữ ×1.0). Ba vai: người mới (tài khoản thử `pinova.qa.20261110@example.com`, Free → Pro → Ultra bằng mã `PINOVA2`/`PINOVA1`), người dùng cũ (tài khoản Feliz của chủ app, gói Ultra, **chỉ xem**), và người kiểm thử (nhập biên, CRUD, rà mã nguồn). Không sửa tệp nào trong repo, không deploy, không bật relay. Một phiếu hỗ trợ "QA kiem thu 11-11" đã gửi lên production (chủ app đã duyệt trước).
+
+**Cách đọc mức độ:** Cao = nên sửa trước khi phát hành rộng; Trung bình = sửa trong đợt kế; Thấp = dọn dẹp. "Tỉ lệ" là số lần tái hiện trên số lần thử. Mục ghi "từ mã nguồn" là kết luận đọc code hoặc chạy hàm thuần trên máy tính, chưa thấy trên màn hình.
+
+### 150.1. Tóm tắt điều hành
+
+**Kết luận:** app chạy ổn định (không treo, không văng lần nào trong hai ngày), số liệu thật của chủ xe khớp nhau ở mọi màn, quyền theo gói đúng và được chặn ở máy chủ. Chưa nên phát hành rộng khi còn ba việc: thông báo thành công bị rỗng ở 27 chỗ, lời khuyên pin lithium áp cho xe ắc quy chì, và người mới chưa có Shelly không biết làm gì tiếp.
+
+| Hạng mục | Điểm /10 | Lý do ngắn |
+|---|---|---|
+| Chức năng lõi (pin, ODO, lịch sử, bảo dưỡng) | 8 | Tính đúng, kiểm biên tốt; còn vài lỗi lưu hồ sơ và thêm xe |
+| Logic AI (dự đoán sạc, lộ trình, sức khỏe pin, thói quen) | 7.5 | Số liệu khớp và trung thực; "Lịch sạc gợi ý" sai với dữ liệu thật |
+| Quyền theo gói và thanh toán bằng mã | 8.5 | Đúng bảng `features.py`, chặn ở máy chủ; chưa kiểm hết hạn/hạ gói |
+| Trải nghiệm người mới | 6 | Hiểu app làm gì, nhưng kẹt ở Shelly và bị 13 bước hướng dẫn trong 15 phút |
+| Trải nghiệm người dùng cũ | 8 | Dữ liệu rõ, trung thực; bị bốn hướng dẫn khi đăng nhập lại |
+| Nội dung | 6 | Trung thực về "ước tính"; nhiều thuật ngữ, năm tên cho một thiết bị, vài lời hứa chưa có |
+| Giao diện và chuyển động | 8.5 | Nhất quán LUXE, hiệu ứng đổi gói mượt; một sheet lệch phong cách |
+| Trợ năng | 6.5 | Vùng chạm và nhãn nhìn chung có; biểu đồ không mô tả, vài nhãn tiếng Anh |
+| Ổn định và hiệu năng cơ bản | 7.5 | Khởi động lạnh 5–7 s tới khi đủ dữ liệu; kích hoạt gói 12–15 s |
+| **Tổng** | **7.2** | |
+
+**Số lượng:** 11 lỗi (1 Cao, 6 Trung bình, 4 Thấp), 16 vấn đề nội dung (1 Cao, 10 Trung bình, 5 Thấp), 15 mục UX (1 Cao, 11 Trung bình, 2 nhóm Thấp, 1 quyết định của chủ app), 5 nhóm trợ năng. Không có lỗi bảo mật hay lộ dữ liệu tài khoản khác.
+
+### 150.2. Hành trình người mới (Free)
+
+1. **Mở lần đầu:** logo 1 s, màn Bắt đầu sau khoảng 5 s. Bốn trang giới thiệu đẹp, hiểu ngay app theo dõi pin và sạc. Trang 2 dùng "rơ-le tự ngắt theo bộ đếm phần cứng" và không nói ổ Shelly là thiết bị phải mua.
+2. **Đăng ký:** bắt buộc số điện thoại (không giải thích), nút Đăng ký mờ tới khi tích ô đồng ý mà không có dòng nhắc. Không xác minh email. Không có Điều khoản sử dụng.
+3. **Khảo sát 9 bước:** khoảng 2 phút. Không có lựa chọn "xe khác"; hỏi ngày sinh không nói để làm gì; bước Shelly không giải thích Shelly là gì.
+4. **Tổng quan trống:** pin "—%". Hàng đầu tiên có nút là "Thiết lập bộ sạc Shelly"; chỗ nhập % pin nằm dưới ba ô tiện ích.
+5. **Nhập 60% và ODO:** quãng đường 43 km, tính tay đúng.
+6. **Thử sạc:** xem được dự đoán (1 giờ 28 phút), bước bật sạc khóa Pro, giải thích rõ. Dòng "Hoàn tất cài đặt ổ sạc" trông như liên kết nhưng chạm không có gì.
+7. **Khám phá:** bốn hướng dẫn liên tiếp (13 bước). Ô khóa (Sạc đêm, Lộ trình) chạm vào thân không phản hồi.
+8. **Pinova Bot:** trả lời đúng số liệu, từ chối lạc đề và chèn lệnh, SOS không dấu hoạt động. Hết 10 tin thì báo rõ.
+
+**Cảm nhận vai người mới:** "Tôi hiểu app làm gì, nhưng không biết Shelly là gì, mua ở đâu, và không có nó thì app còn dùng được gì."
+
+### 150.3. Hành trình người dùng cũ (Ultra, dữ liệu thật, chỉ xem)
+
+- Đăng nhập lại trên máy vừa xóa dữ liệu: vào thẳng Tổng quan nhưng gặp bốn hướng dẫn (Tổng quan, Sạc pin, Lịch sử, Tiện ích).
+- Mọi con số khớp chéo: tháng 11 có 4 phiên = 7.40 kWh = 16 giờ 43 phút; 7 ngày = 5.12 kWh / 3 phiên; điện nạp 60 ngày 17.17 kWh = tháng 10 (9.77) + tháng 11 (7.40); 2 379/2 400 Wh = 99%; 26.4 Wh cho 1% × 100 × 0,9 = 2 376 Wh; 1.21 km cho 1% ở cả Tổng quan và AI cá nhân.
+- Cảnh báo số pin cũ ("Số này lưu từ 1 ngày trước…") và thẻ "Thông báo đang tắt" đúng lúc, dễ hiểu.
+- Điểm trừ: "Lịch sạc gợi ý" trái với thói quen thật (BUG-03); "chờ 10 chuyến mới" dễ hiểu sai.
+
+### 150.4. Bản đồ ứng dụng đã đi qua
+
+| Khu vực | Màn | Trạng thái kiểm |
+|---|---|---|
+| Trước đăng nhập | Bắt đầu (4 trang), Đăng nhập, Đăng ký, Quên mật khẩu | Đã kiểm, kể cả nhập sai |
+| Khảo sát | 9 bước, xem lại, lưu | Đã kiểm, kể cả tắt app giữa chừng |
+| Tổng quan | Thẻ xe (Luxe, Đồng hồ xe), dải số liệu, quãng đường, dung lượng, 7 ngày, sheet % pin và ODO | Đã kiểm |
+| Sạc pin | Sạc AI (dự đoán), Theo giờ (biên 5 phút / 10 giờ), Lịch sử (tháng, lọc, xuất) | Đã kiểm trừ bật sạc thật |
+| Tiện ích | Sức khỏe pin, Thói quen sạc, Sạc đêm, Lộ trình, AI cá nhân, Bảo dưỡng, Thành tựu | Đã kiểm trừ hẹn sạc đêm thật |
+| Cài đặt | Hồ sơ (sửa, đổi mật khẩu, xóa tài khoản: chỉ xem), Xe của tôi, Premium, Giao diện, Trợ giúp, Hướng dẫn, Trung tâm thông báo | Đã kiểm |
+| Pinova Bot | 13 câu trên Free | Đã kiểm trên Free |
+| Chưa vào | Thiết lập Shelly, Quét đồng hồ, Pinova Bot đang nhớ gì, Chính sách bảo mật (mở Chrome) | Xem 150.12 |
+
+### 150.5. Ma trận quyền theo gói
+
+"Máy" = thấy trên điện thoại; "Mã" = đọc mã nguồn máy chủ.
+
+| Quyền | Free | Pro | Ultra | Chặn ở máy chủ |
+|---|---|---|---|---|
+| Sạc đến % tự ngắt | Khóa, có sheet giải thích (Máy) | Mở (Máy, chưa bật thật) | Mở | Có, `service.py:1002` |
+| Sửa mục tiêu khi đang sạc | Chưa kiểm | Chưa kiểm | Chưa kiểm | Có, `service.py:1648` |
+| Lộ trình | Khóa (Máy) | Mở (Máy) | Mở | Có, `trip_routes.py:41` |
+| Sức khỏe pin đầy đủ | Ước tính mở, bài kiểm tra khóa (Máy) | Mở (Máy) | Mở, có biểu đồ (Máy) | Có, cờ `full` |
+| Xuất lịch sử | Khóa (Máy) | PDF/CSV (Máy) | Mở (Máy) | Không, chỉ ở app (dữ liệu của chính người dùng) |
+| Kiểu giao diện | Khóa (Máy) | Chưa thử | Mở (Máy) | Không, chỉ ở app |
+| Sạc đêm | Khóa (Máy) | Khóa (Máy) | Mở (Máy), dừng ở "chưa liên kết Shelly" | Có, `night.py:164` |
+| Nút Huấn luyện | Mờ (Máy) | Chưa thử | Mở (Máy) | Có, `learning.py:450` |
+| Aurora | Khóa | Khóa | Có công tắc (Máy) | Không, chỉ ở app |
+| Số xe | 1 (Máy) | 2 (Máy) | 10 (chưa thử tới 10) | Có, `server.py:1286` |
+| Tin Pinova Bot mỗi ngày | 10 (Máy: tin thứ 13 báo hết, SOS và câu bị từ chối không tính) | 30 (chưa thử) | 100 (chưa thử) | Có |
+| Lịch sử | 30 ngày (chưa kiểm trên máy) | Đầy đủ | Đầy đủ (Máy) | Có, `routes.py:112` |
+| Thông báo tiến độ sạc | Chưa kiểm | Chưa kiểm | Chưa kiểm | **Không thấy chỗ kiểm gói** (cần xác nhận) |
+
+### 150.6. Ma trận vòng đời gói
+
+| Bước | Kết quả | Ghi chú |
+|---|---|---|
+| Tài khoản mới | Free, không tự bật dùng thử | Dùng thử 7 ngày là nút tùy chọn |
+| Mã trống / sai / chữ thường | "Nhập mã khuyến mãi." / "Mã khuyến mãi không đúng." / nhận | Đúng |
+| Free → Pro bằng `PINOVA2` | Miễn phí, dùng đến 11/11/2027, kích hoạt 12–15 s | Thông báo sau khi áp mã bị rỗng (BUG-01) |
+| Dùng lại `PINOVA2` | "Bạn đã dùng mã này." | Đúng |
+| Pro → Ultra bằng `PINOVA1` | Miễn phí, "Ultra bắt đầu ngay", kích hoạt khoảng 5 s | Không nói phần Pro còn lại bị thay |
+| Ultra chọn Pro | Không có nút mua, "Đổi sang Pro được sau khi gói hiện tại hết hạn" | Đúng quy tắc hạ gói |
+| Lịch sử thanh toán | 2 đơn, đúng thứ tự, mã đơn chép được | Không ghi mã đã dùng |
+| Dùng thử 7 ngày, hết hạn, hạ gói thật, quy đổi Pro đã trả tiền, MoMo | **Chưa kiểm** | Cần đổi thời gian hoặc thanh toán thật |
+
+### 150.7. Ma trận kiểm thử tổng thể
+
+| Nhóm | Đạt | Lỗi / vấn đề | Chưa kiểm |
+|---|---|---|---|
+| Đăng nhập, đăng ký, quên mật khẩu | Kiểm lỗi nhập, cách ly sau đăng xuất | Lệch câu chữ, không xác minh email | Đổi mật khẩu thật, đặt lại qua email |
+| Khảo sát | Tuổi, ODO, bước tùy chọn | Bản nháp khôi phục một phần, thiếu "xe khác" | — |
+| % pin và ODO | 0–100, ODO không lùi | "50.5" thành "505", ODO 7 số tự cắt | Quét đồng hồ (camera) |
+| Dự đoán sạc | Thời gian, giờ xong, xác nhận số cũ | Dòng trạng thái giống liên kết | Bật sạc thật, ngắt đúng % |
+| Sạc theo giờ | Kẹp 5 phút và 10 giờ | Hộp chọn giờ lệch phong cách | Bật thật |
+| Lịch sử | Tổng tháng, lọc, đổi tháng | Viên "PRO" khó hiểu, xuất khi 0 phiên | Giới hạn 30 ngày Free |
+| Sức khỏe pin, Thói quen | Số khớp chéo | Lịch sạc gợi ý sai | — |
+| Lộ trình | 30 km: hao, còn lại, gợi ý sạc | Chú thích 0.78 không khớp 34% | Tìm địa điểm, tuyến thật |
+| Bảo dưỡng | Tạo lịch, không trùng, xóa có hỏi | Sheet thêm mốc lệch phong cách | — |
+| Thành tựu | Điểm cộng đúng | Popup chen ngang kết quả | — |
+| Premium | Giá, % giảm, báo giá, mã | Xem 150.8 | Xem 150.6 |
+| Pinova Bot | Số liệu, SOS, từ chối, hạn mức | Tự mở Premium khi đang hỏi | Thẻ hành động, bộ nhớ, 30/100 tin |
+| Trợ giúp | Tự kiểm tra, gửi phiếu, xem phiếu | Thông báo gửi xong bị rỗng | Trả lời từ admin, email |
+| Hồ sơ | Xóa tài khoản rõ ràng (chỉ xem) | Lưu tên rỗng, số điện thoại "12" | Xóa thật |
+| Trạng thái, mạng yếu, xoay màn hình, chữ lớn | — | — | Toàn bộ (cần chủ máy đổi cài đặt) |
+
+### 150.8. Danh sách vấn đề
+
+Bằng chứng ảnh nằm trong thư mục tạm `…\scratchpad\review\` (tên ảnh ghi ở cột Bằng chứng); thư mục này không nằm trong repo.
+
+#### Lỗi (BUG)
+
+| ID | Mức | Phạm vi | Vị trí | Bước tái hiện | Thực tế | Mong đợi | Tỉ lệ | Bằng chứng | Đề xuất sửa |
+|---|---|---|---|---|---|---|---|---|---|
+| BUG-01 | **Cao** | Mọi gói, 27/71 lời gọi | `core/widgets/app_popup.dart:136-145` + danh sách `_approved` trong `core/utils/error_mapper.dart` | Áp mã khuyến mãi; hoặc đổi xe trong gara; hoặc thêm xe; hoặc gửi phiếu hỗ trợ | Thông báo chỉ có chữ "Thông báo", không có nội dung và mất phần chi tiết | Hiện câu do app viết ("Đã gửi cho đội Pinova", "Đã áp mã…") | 4/4 trên máy; 27 chỗ theo quét mã nguồn (gồm "Đã bật gói…", "Đã xóa tài khoản Pinova.", "Đã huấn luyện xong.", "Đã lưu …%") | `p6_06_sent` | `showSuccess/showInfo/showWarning` với câu viết sẵn trong mã nên đi đường tin cậy như `showMessage` (vẫn lọc ID/URL/email); thêm test: mọi tiêu đề chữ cố định phải hiện đúng |
+| BUG-02 | Trung bình | Mọi gói (thấy trên Free) | `web/assistant/engine.py:374` (`_PROMISE`), `:1002` | Hỏi bot "sac den 80 hay 100 tot hon" | Bot hỏi "Bạn có muốn mình mở trang Pinova Premium…không?" nhưng app mở Premium ngay và đóng khung chat | Chỉ mở khi người dùng trả lời đồng ý | 1/1 trên máy; tái hiện bằng hàm `promised_navigation` trên máy tính | Nhật ký 11/11 15:57 | Bỏ qua khi câu chứa cụm khớp kết thúc bằng "?" hoặc đứng sau "muốn / có muốn / có thể / nếu cần"; thêm ca test câu hỏi |
+| BUG-03 | Trung bình | Pro/Ultra có ≥ 3 lần sạc | `web/shelly/habits.py:157-177` (`suggest_schedule`) | Tiện ích → Thói quen sạc → cuối trang | "Bạn thường cắm sạc lúc 11:00 (T7, CN), pin khoảng 58%" trong khi 9/11 lần cắm buổi tối, pin lúc cắm trung bình 13% | Gợi ý theo khung giờ thật, hoặc không gợi ý khi chưa rõ thói quen | 1/1 (tài khoản chủ app) | `p5_15_habits3` | Gom giờ theo khung ±1–2 giờ; chỉ gợi ý khi khung chiếm ≥ 40% số lần; lấy trung vị % của cả khung; ẩn nút "Áp dụng vào Sạc đêm" khi giờ gợi ý là ban ngày |
+| BUG-04 | Trung bình | Pro/Ultra | `web/vehicle_catalog.py:423-424`; `vehicle_garage_screen.dart:650` | Đã có Evo200 → Thêm xe mới → chọn lại Evo200 | Báo đã thêm (và thông báo bị rỗng theo BUG-01), gara vẫn 2 xe | Báo "Bạn đã có mẫu xe này" hoặc cho thêm xe thứ hai cùng mẫu | 1/1 | Nhật ký 11/11 16:13 | Chỉ coi là trùng khi có `Idempotency-Key` (khảo sát); ngoài ra trả cờ `alreadyExists` để app báo đúng. Chủ app quyết định có cho hai xe cùng mẫu không |
+| BUG-05 | Trung bình | Mọi gói | `features/settings/profile_screen.dart:96-126` | Hồ sơ → Sửa → xóa hết Họ và tên → Lưu | "Đã cập nhật thông tin", tên trống, avatar "?" | "Vui lòng nhập họ tên" (≥ 2 ký tự như Đăng ký) | 1/1 | Nhật ký 11/11 15:46 | Dùng chung validator với Đăng ký |
+| BUG-06 | Trung bình | Mọi gói | Cùng tệp | Sửa số điện thoại thành "12" → Lưu | Lưu được | Báo số không hợp lệ (≥ 9 chữ số) | 1/1 | Nhật ký 11/11 15:47 | Như BUG-05 |
+| BUG-07 | Trung bình | Người mới | Khảo sát (`onboarding_chat_screen.dart`) | Tới bước 9 → tắt hẳn app → mở lại | Về bước 1, mẫu xe bị quên, ODO và thói quen vẫn còn | Về đúng bước đang dở, giữ mẫu xe | 1/1 | Nhật ký 10/11 15:31 | Lưu bước hiện tại và mẫu xe vào bản nháp |
+| BUG-08 | Thấp | Ultra | Sạc đêm, thanh trượt pin | Bật TalkBack / xem cây trợ năng | Đọc "75%, 60%" | Đọc một giá trị đúng | 1/1 | `p4_3x_night` | Sửa `Semantics.value` |
+| BUG-09 | Thấp | Mọi gói | Sheet % pin và ODO | Gõ "50.5" | Thành "505" rồi báo ngoài khoảng | Chặn dấu chấm hoặc nhận 50 | 1/1 | Nhật ký 10/11 15:36 | Bàn phím số nguyên |
+| BUG-10 | Thấp | Người mới | Khảo sát bước 3 | Gõ ODO 1234567 | Tự cắt còn 123456, không báo | Báo "tối đa 999 999 km" | 1/1 | Nhật ký 10/11 15:28 | Thêm dòng báo |
+| BUG-11 | Thấp | Pro/Ultra | Lịch sử → Xuất CSV khi 0 phiên | Bấm Xuất CSV | Mở hộp chia sẻ với tệp rỗng | Báo "Chưa có phiên sạc để xuất" | 1/1 | Nhật ký 11/11 16:08 | Kiểm số phiên trước |
+
+#### Nội dung (CNT)
+
+| ID | Mức | Vị trí | Hiện tại | Vấn đề | Đề xuất chữ / cách sửa |
+|---|---|---|---|---|---|
+| CNT-01 | **Cao** (cần chủ app xác nhận loại pin từng mẫu) | `web/assistant/knowledge.py:104-105`; tab Sạc "80% Bảo vệ pin · Khuyên dùng"; `habits.py` (chấm điểm, "Xả sâu…"); Sạc đêm giới hạn 80–90%; mục bảo dưỡng "Pin Lithium-ion"; nhãn "Loại pin (LFP / NMC)" | Xe trong hồ sơ ghi "Lead-acid" nhưng mọi lời khuyên là của pin lithium | Ắc quy chì nên sạc đầy sau khi dùng; khuyên dừng 80% có thể làm ắc quy mau hỏng. `batteryChemistry` hiện chỉ dùng để hiển thị | Đưa `batteryChemistry` vào ngữ cảnh bot, thói quen, sạc đêm, lịch bảo dưỡng. Với ắc quy chì: "Ắc quy chì nên sạc đầy sau mỗi lần dùng, đừng để cạn lâu." Nhãn: "Loại pin" và "Ắc quy chì" |
+| CNT-02 | Trung bình (từ mã nguồn) | `data/models/entitlement.dart:46-50`, `premium/plan_transition_overlay.dart:158` | Màn chúc mừng Ultra lấy ba nhãn đầu của gói: "AI cá nhân", "Thống kê chi phí nâng cao", "Sạc đêm an toàn" | "Thống kê chi phí nâng cao", "Sạc giờ điện rẻ", "Chia sẻ xe", "Báo cáo pin hằng tháng" không tồn tại trong app | Chọn nhãn theo danh sách có thật: "AI cá nhân · Sạc đêm an toàn · Tối đa 10 xe"; bỏ bốn mục chưa có khỏi enum hoặc đánh dấu không hiển thị |
+| CNT-03 | Trung bình | `night_charging_screen.dart:314`; `knowledge.py:33` | "đúng khung giá điện đêm", "đúng giờ điện rẻ" | Điện sinh hoạt tính bậc thang, không có giá đêm; chính lời nhắc của bot cấm hứa "sạc giờ điện rẻ" | "Sạc muộn nhất có thể để pin vừa đủ lúc bạn thức dậy, không ngâm ở mức cao cả đêm." |
+| CNT-04 | Trung bình | Hướng dẫn sử dụng → Bắt đầu hoặc dừng sạc | "Chỉ chạm Bắt đầu/Dừng khi nút được mở" | App thật: Dự đoán → Vuốt để sạc; không nhắc Sạc AI/Theo giờ, không nói cần ổ Shelly; không có mục cho Tiện ích và Premium | Viết lại 3 bước theo màn thật; thêm mục "Chưa có ổ Shelly thì dùng được gì" và "Các gói" |
+| CNT-05 | Trung bình | Toàn app | "bộ sạc Shelly", "ổ sạc Shelly", "ổ cắm Shelly", "ổ Shelly", "Shelly" | Năm tên cho một thiết bị | Chọn một: "ổ cắm thông minh Shelly" lần đầu, "ổ Shelly" các lần sau |
+| CNT-06 | Trung bình | Bắt đầu, khảo sát, AI cá nhân, Sức khỏe pin, Xe của tôi | "rơ-le", "bộ đếm phần cứng", "AI nhỏ", "bù lệch đồng hồ", "SoH", "cell pin", "catalog", "UID", "Lead-acid", "CSV", "Smart Charge", "công suất dưới 40 W suốt 5 phút" | Người mới không hiểu | "ổ tự ngắt điện", "mô hình riêng", "độ chai pin", "danh mục xe", "tệp bảng tính (CSV)", "phiên sạc" |
+| CNT-07 | Trung bình | `premium_screen.dart:684` | "Bạn vừa mở: Sạc đến % tự ngắt." | Đọc như đã mở khóa | "Tính năng bạn muốn dùng: Sạc đến % tự ngắt (gói Pro)." |
+| CNT-08 | Trung bình | Trợ giúp → Câu hỏi thường gặp (`help_center_screen.dart:382-414`) | 6 câu | Thiếu câu người mới cần nhất | Thêm: "Shelly là gì, mua ở đâu, có bắt buộc không?", "Lấy mã khuyến mãi ở đâu?", "Free khác Pro, Ultra thế nào?" |
+| CNT-09 | Trung bình | Trang Premium | Bảng so sánh ghi Free không có "Sức khỏe pin"; tiêu đề vẫn mời "Dùng thử 7 ngày" với người đang Pro/Ultra; thẻ Ultra gắn "ĐỀ XUẤT" cho người đang Ultra | Sai với thực tế (Free xem được ước tính) | "Sức khỏe pin: Free ước tính · Pro/Ultra thêm xu hướng và bài kiểm tra"; ẩn lời mời dùng thử khi đã có gói |
+| CNT-10 | Trung bình | AI cá nhân (`personal_ai_settings_screen.dart:690`) | "Đã học 77 chuyến · chờ 10 chuyến mới"; ba bộ đếm "0/5", "0 trên 2", "0/30" trong một thẻ | "chờ 10" đọc như có 10 chuyến đang chờ; ba số không giải thích | "Đã học 77 chuyến · cần thêm 10 chuyến để cập nhật"; gộp còn một bộ đếm chính, hai số kia vào phần mở rộng |
+| CNT-11 | Trung bình | Cài đặt, Đăng ký, Premium | Không có Điều khoản sử dụng trong app; sheet thanh toán không có liên kết điều khoản Premium (trang `/dieu-khoan-premium` đã có) | Thiếu trước khi lên store | Thêm mục "Điều khoản sử dụng" và liên kết ở Đăng ký, Premium |
+| CNT-12 | Thấp | Nhiều màn | "123460" / "123 460" / "123.460 km" (bot); "0.0 kWh" / "0.00 kWh"; "1g28" / "1 giờ 28 phút"; "V1.3.24+227" / "Phiên bản 1.3.24+227"; ngày "9/11" / "09/11" / "11/11/2026 16:17" / "22:34 11/11"; "Còn lại 4.000 ký tự" | Không thống nhất | Dùng `number_text.dart` và một hàm ngày cho mọi nơi, kể cả nhãn trợ năng và bot |
+| CNT-13 | Thấp | Đăng nhập / Đăng ký / Quên mật khẩu; khảo sát | "Nhập email" / "Vui lòng nhập email" / "Nhập địa chỉ email hợp lệ."; 31/02/2000 báo "Định dạng ngày sinh phải là dd/mm/yyyy" | Lệch câu chữ; lỗi sai nguyên nhân | Một bộ câu; "Ngày này không có trong lịch. Nhập theo ngày/tháng/năm." |
+| CNT-14 | Thấp (đã xác minh bằng mô hình) | Lộ trình | "Theo định mức dòng xe (khoảng 0.78 km cho 1%)" nhưng 30 km chỉ hao 34% | 0.78 là số của hãng ở 30 km/h; tốc độ "Vừa" (21 km/h) tiết kiệm hơn nên ra 34%. Phép tính đúng, lời giải thích thiếu | "Hãng công bố 0.78 km cho 1% ở 30 km/h; với tốc độ bạn chọn, ước tính khoảng 0.88 km cho 1%." |
+| CNT-15 | Thấp | Thói quen sạc; Lịch sử; Sức khỏe pin | "3.0 lần mỗi tuần" dưới tiêu đề "60 ngày qua" (tính từ lần sạc đầu, khoảng 3,6 tuần); "11 lần sạc" và "10 lần sạc"; "Đã hiển thị toàn bộ phiên sạc" (chỉ của tháng); "điện nạp · 11 ngày" | Dễ hiểu sai | Ghi "từ lần sạc đầu trong 60 ngày"; "Hết phiên sạc của tháng 11"; "11 ngày đầu tháng" |
+| CNT-16 | Thấp | Trung tâm thông báo; Trợ giúp; sheet | Thân thông báo lặp nguyên tiêu đề; "Mở app để kiểm tra" khi đang trong app; "Có 1 vấn đề" nhưng 4 nút sửa; nhãn "MỌI GÓI"; "2 xe đang dùng" và tag "Đang dùng"; chính tả tuỳ/tùy, khoá/khóa, huỷ/hủy; "Số 7 đoạn như màn hình Feliz" với xe khác | Dọn chữ | Bỏ câu lặp; "Có 1 lỗi và 3 mục nên bật"; "Hủy", "khóa", "tùy" |
+
+#### Trải nghiệm (UX)
+
+| ID | Mức | Vị trí | Vấn đề | Đề xuất |
+|---|---|---|---|---|
+| UX-01 | **Cao** | Bắt đầu, khảo sát bước 7, Tổng quan trống, tab Sạc | Người chưa có Shelly không được giải thích Shelly là gì, mua ở đâu, không có thì dùng được gì. "Hoàn tất cài đặt ổ sạc" (`smart_charging_control_screen.dart:676`) trông như liên kết nhưng không bấm được; với người Pro chưa có Shelly đây là dòng duy nhất chỉ bước tiếp theo | Một màn "Ổ Shelly là gì" (ảnh, giá tham khảo, nơi mua, dùng app không cần Shelly: theo dõi pin, lộ trình, bảo dưỡng); biến dòng trạng thái thành nút mở thiết lập |
+| UX-02 | Trung bình | Tiện ích, Giao diện | Chạm vào thân ô bị khóa không có phản hồi, chỉ viên PRO/ULTRA nhỏ mới mở Premium | Chạm ô → mở sheet khóa như ở Sạc AI |
+| UX-03 | Trung bình | Trang Premium | Nút chính ghi giá nhưng không mua được; không nói lấy mã ở đâu; đã áp mã 100% Pro mà nút chính vẫn là "Dùng thử Ultra miễn phí 7 ngày"; "mã khuyến mãi" và "mã giảm giá" lẫn nhau | Khi chưa thu tiền: nút chính "Nhập mã để kích hoạt"; có mã hợp lệ thì nút chính là "Kích hoạt Pro miễn phí" |
+| UX-04 | Trung bình | Pinova Bot | Với tính năng trả phí bot hỏi chi tiết rồi mở màn bị khóa (mất 2/10 tin); đóng rồi mở lại là đoạn chat mới; ô chat nhận gợi ý mật khẩu của Google | Bot nói trước "Lộ trình thuộc gói Pro"; giữ đoạn chat gần nhất trong 30 phút; tắt autofill cho ô chat |
+| UX-05 | Trung bình | Hướng dẫn từng màn | Người mới: 13 bước trong 15 phút. Người cũ đăng nhập lại: 4 hướng dẫn liên tiếp | Người đã có dữ liệu (≥ 1 phiên sạc) thì không tự mở; người mới chỉ tự mở hướng dẫn Tổng quan, các màn khác hiện một chấm "Xem hướng dẫn" |
+| UX-06 | Trung bình | Đăng ký, khảo sát | Bắt buộc số điện thoại và hỏi ngày sinh không nói lý do; ngày sinh không xem/sửa được ở Hồ sơ; không có "xe khác"; nút Đăng ký mờ không giải thích | Thêm một dòng lý do; hiện ngày sinh ở Hồ sơ; thêm "Mẫu khác / không thấy xe của tôi" |
+| UX-07 | Trung bình | Lịch sử (Free) | Góc phải chỉ thấy viên "PRO" che nút xuất, dễ hiểu là cả Lịch sử thuộc Pro | Hiện nút "Xuất" kèm khóa nhỏ |
+| UX-08 | Trung bình | Hồ sơ → Đổi mật khẩu | Không có ô nhập lại mật khẩu mới, không có nút hiện mật khẩu, gợi ý bị cắt "Mật khẩu mới (tối thiểu 6 …" | Thêm ô xác nhận và nút mắt; rút gợi ý còn "Mật khẩu mới" + dòng phụ |
+| UX-09 | Trung bình | Bảo dưỡng → Thêm mốc | Nội dung cuộn đè lên thanh trạng thái, chữ bị cắt, huy hiệu màu ngoài bảng, nút X không nhãn | Chuyển sang `showLuxeSheet`, màu theo gói |
+| UX-10 | Trung bình (cần xác nhận ý đồ) | Trung tâm thông báo | Trống dù có 19 mốc bảo dưỡng quá hạn, hai lần đổi gói, một phiếu hỗ trợ; phụ đề lại ghi "pin, sạc và bảo dưỡng" | Ghi mục cho mốc quá hạn và đổi gói, hoặc sửa phụ đề |
+| UX-11 | Trung bình | Sạc đêm (Ultra, chưa có Shelly) | Phải vuốt và xác nhận % pin rồi mới báo "Xe chưa liên kết ổ sạc Shelly." | Kiểm liên kết khi mở màn, hiện nút "Thiết lập ổ Shelly" |
+| UX-12 | Trung bình | Tổng quan trống | Lời mời nhập % pin nằm dưới thẻ Shelly và ba ô tiện ích; thẻ "Cần thêm dữ liệu pin…" không nói phải làm gì | Đặt nút "Nhập % pin" ngay trong thẻ xe khi chưa có số |
+| UX-13 | Thấp | Nhiều nơi | Kích hoạt gói 12–15 s không có tiến độ; popup thành tựu che kết quả dự đoán; đánh dấu bảo dưỡng không có Hoàn tác; mục định kỳ không tự sinh mốc kế; nút Lưu bị bàn phím che; mục tiêu mặc định 89% khi pin 88%; nút Huấn luyện sáng khi vòng "2 trên 3" và nút mờ không phản hồi; lỗi biểu mẫu còn hiện sau khi đã điền; hai nút Lưu ở Hồ sơ; phím Back ở màn Bắt đầu thoát app | Xử lý dần |
+| UX-14 | Thấp | Bố cục | Màn AI cá nhân nhảy bố cục khi tải; tên xe trên tiêu đề rất nhỏ; sheet xuất có hai thanh kéo; hộp chọn giờ kiểu Material; nút bot che ô "Theo dõi pin" và chip lọc; thẻ Aurora bó hẹp ở Free | Xử lý dần |
+| UX-15 | Quyết định của chủ app | Đăng ký | Không xác minh email; Chính sách bảo mật mở trình duyệt ngoài không báo trước | Xác minh email trước khi mở thanh toán thật |
+
+#### Trợ năng (A11Y)
+
+- Biểu đồ 7 ngày (Tổng quan), biểu đồ Sức khỏe pin và các biểu đồ Thói quen không có mô tả; cả màn Sức khỏe pin là một nút đọc liền.
+- Nhãn tiếng Anh hoặc sai: nền sheet "Scrim", nền hộp thoại "Bỏ qua", nút X của sheet bảo dưỡng không nhãn, thanh trượt khảo sát đọc "20 km mỗi ngày, Chưa chọn".
+- Ô kiểu hiển thị (Giao diện) và ba mục Sạc AI/Theo giờ/Lịch sử không được đánh dấu là bấm được trong cây trợ năng (cần xác nhận bằng TalkBack).
+- Nội dung tin nhắn trong chi tiết phiếu hỗ trợ không thấy trong cây trợ năng (cần xác nhận).
+- Chưa kiểm: chữ ×1.3/×2, Giảm chuyển động, TalkBack thật (cần chủ máy đổi cài đặt).
+
+### 150.9. Kiểm kê nội dung
+
+- **Đúng và trung thực:** mọi số dự đoán đều ghi "ước tính" hoặc "khoảng"; giá, % giảm, quy đổi tháng đúng; cảnh báo số pin cũ; ghi chú "Xe không gửi dữ liệu cell pin"; thông báo sạc xong ghi "(ước tính)"; màn Xóa tài khoản liệt kê đủ dữ liệu bị xóa.
+- **Phải sửa:** CNT-01 (lời khuyên theo loại pin), CNT-02 và CNT-03 (lời hứa chưa có), CNT-04 (hướng dẫn lỗi thời), CNT-07.
+- **Nên thống nhất:** tên thiết bị Shelly, bộ thuật ngữ, định dạng số và ngày, câu báo lỗi email, chính tả.
+- **Tiếng Anh còn sót:** "Smart Charge", "Lead-acid", "SCOOTER", "catalog", "model", "mobile", "dial", "CSV", "UID", "Scrim", "dd/mm/yyyy".
+
+### 150.10. Đề xuất cải tiến
+
+1. Màn "Ổ Shelly là gì" và chế độ dùng app không cần Shelly nói rõ ngay từ khảo sát.
+2. Bộ đếm lượt Pinova Bot còn lại trong ngày.
+3. Lịch sử thanh toán ghi mã đã dùng, giá gốc và đơn nào đã bị thay.
+4. Báo giá Pro → Ultra nói rõ phần Pro còn lại được xử lý thế nào.
+5. Đánh dấu điểm ngoại lệ trên biểu đồ Sức khỏe pin để người dùng không lo khi một lần đo thấp.
+6. Xuất dữ liệu cá nhân trong Cài đặt.
+7. Mục tiêu sạc mặc định lấy mức gần nhất trong 80/90/100 thay vì +1%.
+8. Sheet thêm mốc bảo dưỡng: hỏi lại khi mốc nhỏ hơn ODO hiện tại.
+
+### 150.11. Điểm làm tốt
+
+- Không lần nào app treo hay văng; đăng xuất cách ly sạch dữ liệu tài khoản trước.
+- Số liệu thật khớp chéo giữa Tổng quan, Lịch sử, Thói quen, Sức khỏe pin và AI cá nhân.
+- An toàn sạc: xác nhận số pin cũ trước khi dự đoán, kẹp 5 phút/10 giờ, Free vẫn xem được dự đoán, khóa nằm ở bước bật.
+- Pinova Bot: đúng số liệu, SOS không dấu, từ chối lạc đề và chèn lệnh, báo hết lượt rõ ràng.
+- Quyền theo gói: đúng bảng, chặn ở máy chủ, câu hạ gói rõ.
+- Trợ giúp: tự kiểm tra 8 mục có nút sửa, phiếu hỗ trợ hiện ngay.
+- Xóa tài khoản: rõ ràng, hai lớp xác nhận.
+- Hiệu ứng đổi gói và chuyển trang mượt, không vỡ hình.
+
+### 150.12. Phạm vi chưa kiểm
+
+- Bật sạc thật, ngắt đúng %, sạc đêm thật, đổi mục tiêu khi đang sạc (tài khoản thử không có Shelly; tài khoản chủ app chỉ xem).
+- Thiết lập Shelly, quét đồng hồ bằng camera, hộp thoại quyền, thông báo đẩy.
+- Giới hạn lịch sử 30 ngày của Free trên máy (đã thấy chặn trong mã máy chủ); tài khoản Free cũ 02/11 chưa đăng nhập lại.
+- Dùng thử 7 ngày, hết hạn, hạ gói, quy đổi phần Pro đã trả tiền, MoMo.
+- Giới hạn bot 30/100 tin; thẻ hành động của bot; màn "Pinova Bot đang nhớ gì".
+- Đổi mật khẩu thật, đặt lại mật khẩu qua email, xóa tài khoản thật.
+- Mất mạng, mạng yếu, xoay màn hình, chữ lớn, Giảm chuyển động, TalkBack thật.
+- Nội dung Chính sách bảo mật (mở Chrome nên không đọc trên máy).
+- Gọi thẳng API bằng tài khoản Free để thử vượt quyền (mới đọc mã).
+- Điện thoại thứ hai, iOS.
+
+### 150.13. Lộ trình sửa đề xuất
+
+| Đợt | Việc | Ước lượng |
+|---|---|---|
+| 1. Trước phát hành rộng | BUG-01 (thông báo rỗng); CNT-01 (xác nhận loại pin từng mẫu rồi tách lời khuyên); UX-01 (giải thích Shelly, nút thiết lập); BUG-02; CNT-02, CNT-03 (bỏ lời hứa chưa có) | 2–3 ngày |
+| 2. Đợt kế | BUG-03, BUG-04, BUG-05, BUG-06, BUG-07; UX-02, UX-03, UX-05, UX-08, UX-11, UX-12; CNT-04, CNT-07, CNT-08, CNT-09, CNT-10, CNT-11 | 3–4 ngày |
+| 3. Dọn dẹp | Thống nhất tên Shelly, thuật ngữ, định dạng số và ngày (CNT-05, 06, 12–16); UX-09, UX-13, UX-14; trợ năng; BUG-08…11 | 2–3 ngày |
+| 4. Kiểm lại | Các mục ở 150.12 với chủ app bên cạnh máy, thêm một lượt chữ ×2 và TalkBack | 1 ngày |
+
+**Việc còn mở sau báo cáo này:** tài khoản thử `pinova.qa.20261110@example.com` đang ở gói Ultra với 2 xe và 19 mốc bảo dưỡng, có thể xóa qua Hồ sơ → Xóa tài khoản khi chủ app đồng ý; phiếu hỗ trợ "QA kiem thu 11-11" cần đóng ở trang quản trị; điện thoại đang đăng nhập tài khoản chủ app. Nhắc lại: khóa Firebase Admin `vinfast-873db-firebase-adminsdk-fbsvc-…json` cần được xoay vòng.
+
+### 150.14. QA150-FIX Đợt 1 (11/11/2026, chủ app duyệt) — Code + test xong, nằm trong APK 1.3.25+228, chưa deploy
+
+| ID | Đã sửa | Tệp |
+|---|---|---|
+| BUG-01 | Câu tiếng Việt do app viết hiện đúng như đã viết ở mọi thông báo thành công, thông tin và cảnh báo. Lớp che vẫn giữ: văn bản không có chữ tiếng Việt (lỗi thô), hoặc có đường dẫn, email, IP, chuỗi ≥ 16 ký tự, số ≥ 7 chữ số, tên kiểu máy (`private-device`, `internal.lan`) vẫn bị thay bằng "Thông báo" hoặc câu lỗi chung | `app/lib/core/widgets/app_popup.dart` (`_authored`), test `app_popup_privacy_test.dart` (+2 ca) |
+| BUG-02 | Câu hỏi mời ("Bạn có muốn mình mở … không?", "Nếu bạn muốn mình mở …", "Bạn cần mình mở …") không còn bị coi là lời hứa mở màn; lời hứa thật sau một câu hỏi vẫn được thực hiện | `web/assistant/engine.py` (`promised_navigation`, `_OFFER`), test `test_qa141_bot_promise.py` (+1 ca) |
+| UX-01 | Màn Bắt đầu, khảo sát bước Shelly và thẻ ở Tổng quan nói rõ: ổ cắm thông minh Shelly mua riêng, dùng để làm gì, chưa có vẫn dùng được app. Tab Sạc: dòng "Hoàn tất cài đặt ổ sạc" đổi thành câu giải thích kèm nút "Thiết lập ổ Shelly" (`charge-setup-button`). Bỏ "rơ-le", "bộ đếm phần cứng" ở các chỗ này | `getting_started_screen.dart`, `onboarding_chat_screen.dart`, `luxe_dashboard_cards.dart`, `smart_charging_control_screen.dart` |
+| CNT-02 | Màn chúc mừng đổi gói nêu đích danh quyền lợi có thật (Pro: Sạc đến % tự ngắt, Lộ trình, Sức khỏe pin đầy đủ; Ultra: AI cá nhân, Sạc đêm an toàn, Giao diện Aurora), không lấy "ba mục đầu của gói" nữa | `plan_transition_overlay.dart` |
+| CNT-03 | Bỏ "đúng khung giá điện đêm" ở màn Sạc đêm và "đúng giờ điện rẻ" trong kiến thức của Pinova Bot | `night_charging_screen.dart`, `web/assistant/knowledge.py` |
+
+**Chưa làm trong đợt 1:** CNT-01 (lời khuyên theo loại pin) chờ chủ app xác nhận mẫu nào dùng ắc quy chì. Nơi mua và giá ổ Shelly chưa ghi vì chưa có số liệu chính thức. Bốn mục chưa có trong `PremiumFeature` (`costAdvanced`, `offpeakSchedule`, `shareVehicle`, `monthlyReport`) vẫn nằm trong enum và `features.py`, chỉ không còn hiện ở màn chúc mừng.
+
+**Kiểm chứng:** `flutter test` toàn bộ: 1405 đạt, 216 bỏ qua, 0 lỗi. `flutter analyze` các tệp đã sửa: không có vấn đề. Backend `pytest -k "assistant or bot or knowledge or qa135 or qa141 or qa143 or night"`: 155 đạt (chưa chạy toàn bộ backend). Chưa kiểm trên điện thoại: cần build APK mới (bump phiên bản) và deploy API cho BUG-02, CNT-03.
+
+### 150.15. QA150-FIX Đợt 2 (12/11/2026, chủ app duyệt) — Code + test xong, APK 1.3.25+228 đã build và đã cài (12/11), chưa deploy
+
+| ID | Đã sửa | Tệp |
+|---|---|---|
+| BUG-03 | "Lịch sạc gợi ý" tìm khung giờ (±2 giờ, vòng qua nửa đêm) chứa nhiều lần cắm nhất; chỉ gợi ý khi khung có ≥ 3 lần và ≥ 40% số lần; giờ và % pin là trung vị của cả khung. Dữ liệu kiểu chủ xe (9/11 lần buổi tối) ra 21:00, pin khoảng 9%. Lịch ban ngày không còn nút "Áp dụng vào Sạc đêm"; câu ghi "khoảng 21:00" | `web/shelly/habits.py`, `charge_habits_screen.dart`, test `test_qa140_habits.py` (+2 ca) |
+| BUG-04 | Thêm lại mẫu xe đã có: máy chủ trả cờ `alreadyExists` (không ghi audit "create"), app báo "Bạn đã có mẫu xe này trong gara" và giữ sheet để chọn mẫu khác. Gara vẫn một xe mỗi mẫu | `web/vehicle_catalog.py`, `web/server.py`, `vehicle_garage_screen.dart` |
+| BUG-05, 06 | Hồ sơ kiểm tên ≥ 2 ký tự và số điện thoại 9–11 chữ số (để trống vẫn được) trước khi lưu (`profileInputProblem`) | `profile_screen.dart`, test `qa150_profile_input_test.dart` |
+| BUG-07 | Khảo sát mở lại: lấy lại mẫu xe từ bản nháp và về đúng bước đang dở (bước lưu trên máy theo `uid` + `operationId`) | `onboarding_chat_screen.dart` (`_resumeFromDraft`) |
+| UX-02 | Chạm vào thân ô bị khóa mở sheet giải thích gói cần có (`PremiumGate.showUpgrade`); tính năng vẫn đóng, viên gói vẫn mở trang Premium. Đây là đổi quyết định QA 136 ("không nhận chạm") | `premium_gate.dart`, test `qa136_plans_test.dart`, `qa135_premium_test.dart` |
+| UX-03 | Có mã 100% thì nút chính là "Kích hoạt Pro · miễn phí với mã", không còn là "Dùng thử Ultra"; dòng "Bạn vừa mở: …" thành "Tính năng bạn muốn dùng: … (gói …)" (CNT-07); lời mời dùng thử chỉ hiện với người còn dùng thử được | `premium_screen.dart` |
+| UX-05 | Tài khoản tạo quá 3 ngày không tự mở hướng dẫn màn hình khi đăng nhập lại; "Xem lại hướng dẫn" vẫn bật lại đủ | `core/services/screen_tour.dart`, test `qa150_screen_tour_test.dart` |
+| UX-08 | Đổi mật khẩu có ô nhập lại, nút hiện/ẩn mật khẩu, câu báo riêng cho từng lỗi (`passwordChangeProblem`), nhãn không còn bị cắt | `profile_screen.dart` |
+| UX-11 | Màn Sạc đêm báo ngay "Sạc đêm cần ổ cắm thông minh Shelly đã liên kết…" kèm nút "Thiết lập ổ Shelly" khi xe chưa liên kết | `night_charging_screen.dart` |
+| UX-12 | Tổng quan: xe chưa có số pin thì ngay dưới thẻ xe có thẻ "Nhập % pin trên đồng hồ xe" với nút mở sheet nhập | `home_screen.dart`, `luxe_dashboard_cards.dart` (`LuxeFirstReadingPrompt`) |
+| CNT-04 | Hướng dẫn "Bắt đầu hoặc dừng sạc" viết lại theo màn thật (Sạc AI/Theo giờ, kéo núm, Dự đoán, Vuốt để sạc) và nói rõ cần ổ Shelly | `core/services/guide_registry.dart` |
+| CNT-08 | Câu hỏi thường gặp thêm "Ổ Shelly là gì, có bắt buộc không?" và "Gói Free, Pro và Ultra khác nhau thế nào?"; câu về mã nói rõ mã do Pinova phát, hiện chưa thu tiền | `help_center_screen.dart` |
+| CNT-09 | Bảng so sánh: "Sức khỏe pin (ước tính)" có ở mọi gói; "Xu hướng pin, bài kiểm tra, thói quen sạc" là Pro/Ultra | `premium_screen.dart` |
+| CNT-10 | AI cá nhân: "Đã học 77 chuyến · cần thêm 10 chuyến để cập nhật" | `personal_ai_settings_screen.dart` |
+
+**Chưa làm trong đợt 2:**
+- CNT-11: không có trang Điều khoản sử dụng chung nào để dẫn tới (chỉ có `/dieu-khoan-premium`). Liên kết "Điều khoản gói Premium" đã có sẵn trong sheet thanh toán khi mở thu tiền; test `qa145_payments_test.dart` cố ý ẩn nó ở đơn miễn phí nên giữ nguyên. Cần chủ app soạn nội dung Điều khoản sử dụng.
+- UX-05 mới giải quyết phần người dùng cũ; người mới vẫn gặp đủ các hướng dẫn (mỗi lần một cái).
+- CNT-09: thẻ Ultra vẫn gắn "ĐỀ XUẤT" với người đang dùng Ultra.
+- CNT-10: ba bộ đếm lần sạc trong thẻ AI cá nhân chưa gộp.
+- UX-03: khi chưa mở thu tiền, nút chính vẫn ghi giá rồi mới giải thích ở sheet.
+- UX-04, UX-06, UX-07, UX-09, UX-10 và CNT-01 chưa đụng tới.
+
+**Kiểm chứng:** `flutter test` toàn bộ: 1407 đạt, 216 bỏ qua; 4 ca lỗi ở lần chạy đầu đều là test khóa hành vi cũ (ô khóa không nhận chạm, lịch 7:00 có nút Sạc đêm, tìm "Shelly" chỉ ra một hướng dẫn), đã sửa test và chạy lại 3 tệp đó: đạt. `flutter analyze lib`: không có vấn đề. Backend `pytest tests` toàn bộ: 947 đạt, 15 bỏ qua. Phiên bản 1.3.25+228; `flutter build apk --profile --no-pub --dart-define=APP_API_BASE_URL=<API production>` exit 0, 245 s; APK `app/build/app/outputs/flutter-apk/app-profile.apk`, 174.302.514 byte, SHA-256 `8DF68CE61DCD6470117D33D4CF83F8F12F9E93BA7831E9F8EC1733170F76B68E`. Chưa cài lên máy. Chưa deploy: BUG-02, BUG-03, BUG-04 (phần máy chủ) và CNT-03 (kiến thức bot) chỉ có hiệu lực sau khi deploy API; app mới chạy được với API cũ (cờ `alreadyExists` thiếu thì app xử lý như trước).
+
+### 150.16. QA150-FIX Đợt 3 (12/11/2026, chủ app yêu cầu "fix các lỗi chưa làm") — Code + test xong, CHƯA nằm trong APK đã cài (1.3.25+228), chưa deploy
+
+APK 1.3.25+228 (đợt 1 và 2) đã cài lên Xiaomi bằng `adb install -r` (versionCode 228). Các bản sửa của đợt 1 và 2 chưa được kiểm lại trên máy.
+
+| ID | Đã sửa | Tệp |
+|---|---|---|
+| CNT-01 | Lời khuyên theo loại pin của danh mục (`batteryChemistry`): ắc quy chì thì khuyên sạc đầy sau mỗi lần đi, không khuyên dừng ở 80%. Tab Sạc có bộ mức chọn nhanh riêng cho ắc quy chì; Thói quen sạc chấm điểm ngược lại (sạc đầy là tốt) và lịch gợi ý đặt mục tiêu 100%; Pinova Bot nhận `batteryChemistry` trong ngữ cảnh và kiến thức chăm pin nói riêng từng loại. Nhãn "Loại pin" hiện "Ắc quy chì" thay cho "Lead-acid" | `vehicle_model.dart` (`isLeadAcidChemistry`, `batteryChemistryLabel`), `smart_charging_control_screen.dart`, `vehicle_picker_sheet.dart`, `vehicle_spec_detail_screen.dart`, `vinfast_service_catalog.dart`, `app_assistant_host.dart`, `web/shelly/habits.py` (`is_lead_acid`), `web/shelly/learning.py`, `web/assistant/prompt_assembler.py`, `web/assistant/knowledge.py` |
+| CNT-09 | Trang Premium: gói đang dùng gắn "ĐANG DÙNG"; "ĐỀ XUẤT" chỉ còn ở gói chưa có | `premium_screen.dart` |
+| UX-03 | Khi chưa mở thu tiền, nút chính ghi "Nhập mã để kích hoạt <gói>" thay cho giá tiền | `premium_screen.dart` |
+| CNT-10 | Bộ đếm thứ ba trong thẻ AI cá nhân viết thành câu: "AI nâng cao cần 30 lần sạc, đã có 7" | `vehicle_learning_status.dart`, test `qa146_learning_tag_test.dart` |
+| UX-04 | Khảo sát có dòng "Không thấy mẫu xe của bạn?" và câu về ngày sinh rõ hơn | `onboarding_chat_screen.dart` |
+| UX-06 | Ô chat Pinova Bot không còn gợi ý mật khẩu/tự điền của bàn phím | `assistant_sheet.dart` |
+| UX-09 (một phần) | Sheet thêm mốc bảo dưỡng không đè lên thanh trạng thái; nút đóng 48 dp có nhãn "Đóng" | `maintenance_screen.dart` |
+| CNT-12 | Dòng phụ của Trung tâm thông báo ở tab Cài đặt thống nhất một cách viết | `more_screen.dart` |
+| BUG-02 (bổ sung) | Pinova Bot nói tính năng thuộc gói nào trước khi hỏi chi tiết | `web/assistant/engine.py` (quy tắc 12) |
+
+**Chưa làm:**
+- CNT-11: chưa có nội dung Điều khoản sử dụng chung; chủ app cần soạn.
+- CNT-01: dựa trên `batteryChemistry` của danh mục; chủ app chưa xác nhận mẫu nào thật sự dùng ắc quy chì. Sạc đêm chưa có quy tắc riêng cho ắc quy chì.
+- UX-05 (người mới vẫn gặp đủ hướng dẫn), UX-07 (viên PRO che nút xuất ở Lịch sử), UX-09 (màu và chữ bị cắt trong sheet bảo dưỡng), UX-10 (mốc bảo dưỡng quá hạn chưa vào Trung tâm thông báo).
+- Hồ sơ chưa hiện ngày sinh; chưa có câu giải thích vì sao cần số điện thoại (chưa rõ lý do, không bịa).
+- Các mục mức thấp BUG-08…11, CNT-13…16, UX-13/14 và phần "chưa kiểm" ở 150.12.
+
+**Kiểm chứng (12/11, trên máy tính):** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1411 đạt / 216 bỏ qua; `pytest tests` toàn bộ 948 đạt / 15 bỏ qua. Chưa build APK có đợt 3, chưa kiểm trên điện thoại, chưa deploy máy chủ (các bản sửa phía máy chủ của cả ba đợt chưa chạy trên production), chưa commit.
+
+### 150.17. QA150-FIX Đợt 4 (12/11/2026, chủ app yêu cầu: tự soạn điều khoản, tra loại pin trên mạng, sửa tiếp đợt dọn dẹp) — Code + test xong, CHƯA nằm trong APK đã cài (1.3.25+228), chưa deploy
+
+| ID | Đã sửa | Tệp |
+|---|---|---|
+| CNT-11 | Trang công khai **Điều khoản sử dụng** `/dieu-khoan-su-dung` (và `/terms`), phiên bản 2026-11-12: tài khoản (đủ 16 tuổi), số liệu là ước tính, an toàn điện khi sạc (12 A / 2500 W, gọi 114), các gói (chưa thu tiền, kích hoạt bằng mã), hành vi cấm, giới hạn trách nhiệm, luật Việt Nam. Chỉ ghi điều app đang làm thật. App: mục "Điều khoản sử dụng" ở Cài đặt; ô đồng ý lúc Đăng ký dẫn tới cả Điều khoản và Chính sách bảo mật. **Bản nháp do AI soạn, chủ app cần đọc lại (nên có người hiểu luật xem) trước khi lên store** | `web/support/terms.py` (mới), `web/support/routes.py`, `privacy_consent.dart`, `more_screen.dart`, test `test_qa140_privacy.py` |
+| CNT-01 (xác nhận) | Tra nguồn trên mạng: thế hệ LFP gồm Feliz S, Klara S (2022), Vento S, Theon S, Evo200; Evo Grand ghi LFP trong brochure của hãng; Evo Lite Neo và Klara A2 dùng ắc quy chì. Khớp với danh mục hiện có (ắc quy chì: `evo_lite_neo`, `klara_a2`, `tempest`), không đổi dữ liệu. **Tempest không tìm thấy nguồn xác nhận**, giữ nguyên theo QA 143. Màn Sạc đêm thêm ghi chú cho xe ắc quy chì: Sạc đêm dừng ở 80–90% (giới hạn của máy chủ, không đổi), muốn sạc đầy thì dùng Sạc AI mục tiêu 100% | `night_charging_screen.dart` |
+| UX-06 | Số điện thoại lúc Đăng ký thành không bắt buộc (không tính năng nào dùng số này; Chính sách bảo mật vốn ghi "nếu bạn nhập"). Nút Đăng ký mờ có dòng "Tích ô đồng ý ở trên để đăng ký." Hồ sơ hiện Ngày sinh đã lưu (`birthDateText`) | `register_screen.dart`, `profile_screen.dart` |
+| UX-05 | Người mới: sau một hướng dẫn màn hình, hướng dẫn của màn khác chờ ít nhất 10 phút (`ScreenTour.spacing`); không áp dụng sau khi bấm Xem lại hướng dẫn | `core/services/screen_tour.dart` |
+| UX-07 | Lịch sử (Free): nút xuất vẫn thấy, viên PRO ở góc nút và có chữ "Xuất tệp" bên dưới | `smart_charge_history_screen.dart` |
+| UX-09 | Sheet thêm mốc bảo dưỡng: bỏ khoảng 30 màu riêng từng loại dịch vụ (dùng platinum, phân biệt bằng icon và nhãn); tên mốc gợi ý được 2 dòng | `maintenance_screen.dart` |
+| UX-10 | Nhắc bảo dưỡng gộp thành một thông báo mỗi lượt cho mỗi trạng thái ("19 mốc bảo dưỡng đã quá hạn", trước là mỗi mốc một thông báo và ghi "Còn -320 km nữa") và ghi cùng dòng đó vào Trung tâm thông báo (`MaintenanceReminderSummary`). Dòng mô tả Trung tâm thông báo: "Kết quả phiên sạc, cảnh báo và nhắc bảo dưỡng" | `maintenance_reminder_service.dart`, `notification_service.dart` (`notifyMaintenanceSummary`), `more_screen.dart`, `notification_center_screen.dart` |
+| BUG-08 | Thanh trượt pin ở Sạc đêm đọc một giá trị ("Pin hiện tại 60%") | `night_charging_screen.dart` |
+| BUG-09 | Ô % pin: gõ dấu chấm bị từ chối, "50.5" không còn thành "505" | `battery_reading_sheet.dart` |
+| BUG-10 | Khảo sát: ODO 7 chữ số hiện lỗi "Nhập số km từ 0 đến 999 999." thay vì tự cắt | `onboarding_chat_screen.dart` |
+| BUG-11 | Xuất báo cáo khi không có phiên: báo "Chưa có phiên sạc để xuất" | `smart_charge_history_screen.dart` |
+| CNT-13 | Lỗi email thống nhất ("Vui lòng nhập email" / "Email không hợp lệ") ở Đăng nhập, Đăng ký, Quên mật khẩu; ngày không tồn tại (31/02) báo "Ngày này không có trong lịch…", sai định dạng báo "Nhập ngày sinh theo ngày/tháng/năm." | `login_screen.dart`, `password_reset_screen.dart`, `onboarding_service.dart`, `error_mapper.dart` |
+| CNT-14 | Lộ trình (nguồn danh mục): "Hãng công bố khoảng 0.78 km cho 1% ở 30 km/h. Mức hao ở trên đã tính theo tốc độ, tải và thời tiết bạn chọn…" | `trip_planner_screen.dart` |
+| CNT-15, 16 (một phần) | "Hết phiên sạc trong khoảng đang xem"; chính tả "Khóa yên", "xóa" | `smart_charge_history_screen.dart`, `maintenance_task_model.dart`, `charge_log_repository.dart` |
+
+Test mới: `app/test/unit/qa150_round4_test.dart` (8 ca), `test_qa140_privacy.py` (+1); sửa `onboarding_validation_test.dart`, `auth_layout_test.dart`, `auth_sheets_luxe_test.dart` theo câu chữ mới.
+
+**Chưa làm:** CNT-05, CNT-06 (thống nhất tên Shelly và thuật ngữ trên toàn app), CNT-12 (định dạng số/ngày ở mọi nơi), phần còn lại của CNT-15/16, UX-13, UX-14, nhóm trợ năng (mô tả biểu đồ, nhãn "Scrim"), UX-04 (giữ đoạn chat 30 phút), UX-15 (xác minh email, chủ app quyết định), mọi mục "chưa kiểm" ở 150.12. Sạc đêm cho ắc quy chì vẫn dừng ở 80–90%.
+
+**Kiểm chứng (12/11, trên máy tính):** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1419 đạt / 216 bỏ qua; `pytest tests` toàn bộ 949 đạt / 15 bỏ qua. Chưa build APK có đợt 3 và 4, chưa kiểm trên điện thoại, chưa deploy (trang Điều khoản chưa có trên production nên liên kết trong app chỉ chạy sau khi deploy), chưa commit.
+
+### 150.18. QA150-FIX Đợt 5 + APK 1.3.26+229 (12/11/2026, chủ app yêu cầu "fix nốt và build") — Code + test xong, APK đã build, chưa cài, chưa deploy
+
+| ID | Đã sửa | Tệp |
+|---|---|---|
+| UX-15 | Chủ app chọn "gửi email, không chặn": đăng ký xong app gửi email xác minh của Firebase (tiếng Việt), không chặn vào app. Hồ sơ hiện hàng "Email chưa xác minh" kèm gửi lại khi tài khoản chưa xác minh | `core/services/auth_service.dart`, `profile_screen.dart` |
+| CNT-05 | Một tên cho thiết bị: "ổ Shelly" (lần đầu giới thiệu vẫn là "ổ cắm thông minh Shelly"); thay 33 chỗ "bộ sạc/ổ sạc/ổ cắm Shelly" ở app và câu của máy chủ (bot, sạc đêm, phiếu hỗ trợ) | 38 tệp, gồm `web/assistant/guardrails.py`, `web/shelly/night.py`, `web/support/tickets.py` |
+| CNT-06 | Bỏ thuật ngữ: "Smart Charge/Smart Charger" → "phiên sạc", "ổ Shelly"; "rơ-le tự ngắt" → "ổ tự ngắt điện"; "SoH" → "Sức khỏe pin"; "catalog" → "danh mục xe"; "UID" → "Mã tài khoản"; "cell pin" → "pin" (câu khảo sát cũng không còn gọi mọi xe là LFP) | như trên |
+| UX-04 | Đóng rồi mở lại Pinova Bot trong 30 phút vẫn thấy đoạn chat vừa rồi (chỉ giữ trong bộ nhớ, theo tài khoản; bấm chat mới thì bỏ) | `assistant_sheet.dart` |
+| UX-13 (một phần) | Pin đang cao hơn mục tiêu đã lưu thì mục tiêu mặc định là mốc kế tiếp trong 80/90/100, không còn là pin + 1% | `smart_charging_controller.dart` |
+| Trợ năng (một phần) | Nền sheet đọc là "Đóng" thay cho "Scrim"; biểu đồ 7 ngày ở Tổng quan có mô tả (tổng kWh, số phiên) | `luxe_kit.dart`, `recent_charging_chart.dart` |
+
+**APK:** 1.3.26+229 profile, `app/build/app/outputs/flutter-apk/app-profile.apk`, 174 401 030 byte, SHA-256 `C2F8DB18AE07D2F0933D1ABB29D12C42091B81601187083658A530C78385BE5C`. Gồm cả đợt 3, 4, 5. **Chưa cài** (điện thoại vẫn 1.3.25+228).
+
+**Chưa làm:** CNT-12 (định dạng số/ngày ở mọi nơi, kể cả bot), phần còn lại của CNT-15/16; UX-13 còn lại (tiến độ khi kích hoạt gói, popup thành tựu che kết quả, Hoàn tác bảo dưỡng, nút Huấn luyện mờ không phản hồi, hai nút Lưu ở Hồ sơ); UX-14 (bố cục); trợ năng còn lại (biểu đồ Sức khỏe pin, thanh trượt khảo sát, các mục cần TalkBack thật); mọi mục "chưa kiểm" ở 150.12.
+
+**Kiểm chứng (12/11, trên máy tính):** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1419 đạt / 216 bỏ qua; `pytest tests` toàn bộ 949 đạt / 15 bỏ qua. Email xác minh và đoạn chat giữ 30 phút chưa có test tự động (cần Firebase thật) và chưa thử trên máy. Chưa deploy: các bản sửa phía máy chủ của cả năm đợt và trang `/dieu-khoan-su-dung` chưa có trên production. Chưa commit.
+
+### 150.19. QA150-FIX Đợt 6 + APK 1.3.27+230 (12/11/2026, chủ app yêu cầu "fix nốt toàn bộ") — Code + test xong, APK đã build, chưa cài, chưa deploy
+
+| ID | Đã sửa | Tệp |
+|---|---|---|
+| UX-13 | Bảo dưỡng: đánh dấu hoàn thành có nút "Hoàn tác". Hồ sơ: chỉ còn một nút Lưu (nút ở tiêu đề là Sửa/Hủy). AI cá nhân: nút Huấn luyện mờ có dòng "Chưa có dữ liệu mới để huấn luyện." | `maintenance_screen.dart`, `profile_screen.dart`, `personal_ai_settings_screen.dart`, `error_mapper.dart` (nhãn "Hoàn tác") |
+| CNT-15, 16 | Trợ giúp: "Có 1 lỗi cần xử lý và 3 mục nên xem". Gara: "2 xe trong gara". Lịch sử: "điện nạp · 11 ngày tính đến hôm nay". Thói quen: "Lần mỗi tuần (từ lần sạc đầu)". Giao diện: "Số 7 đoạn như đồng hồ xe" | `help_center_screen.dart`, `vehicle_garage_screen.dart`, `smart_charge_history_screen.dart`, `charge_habits_screen.dart`, `app_appearance.dart` |
+| CNT-12 (bot) | Pinova Bot viết số km và ODO tách nhóm bằng khoảng trắng như app (123 460 km) | `web/assistant/engine.py` |
+| Trợ năng | Thanh trượt khảo sát đọc "Chưa chọn" khi chưa chọn (trước đọc "20 km mỗi ngày") | `onboarding_chat_screen.dart` |
+
+**Đã xem và không sửa:** biểu đồ Sức khỏe pin đã có mô tả trợ năng (`health_trend_chart.dart`); kích hoạt gói đã có nút chờ "Đang kích hoạt…"; dung lượng pin ghi một số lẻ (2.4 kWh) là chủ ý, khác điện năng phiên sạc (2 số lẻ); phím Back ở màn Bắt đầu thoát app là hành vi chuẩn của Android.
+
+**APK:** 1.3.27+230 profile, `app/build/app/outputs/flutter-apk/app-profile.apk`, 174 401 030 byte, SHA-256 `1FA00F1093890D74FD959F97D5A9D1EEE6D7FC1B4B582B08364F3D19B555C491`. Thay bản 1.3.26+229 (chưa từng cài). **Chưa cài** (điện thoại vẫn 1.3.25+228).
+
+**Còn lại, cần nhìn trên máy hoặc cần chủ app quyết định:** popup thành tựu che kết quả dự đoán; mốc định kỳ không tự sinh mốc kế; nút Lưu bị bàn phím che; lỗi biểu mẫu còn hiện sau khi điền; UX-14 (màn AI cá nhân nhảy bố cục, tên xe nhỏ, hai thanh kéo ở sheet xuất, hộp chọn giờ kiểu Material, nút bot che ô, thẻ Aurora hẹp); định dạng ngày thống nhất; thân thông báo lặp tiêu đề, nhãn "MỌI GÓI" (chưa tìm thấy trong mã); trợ năng cần TalkBack thật; mọi mục "chưa kiểm" ở 150.12.
+
+**Kiểm chứng (12/11, trên máy tính):** `flutter analyze lib` không lỗi; `flutter test` toàn bộ 1419 đạt / 216 bỏ qua; `pytest tests` toàn bộ 949 đạt / 15 bỏ qua. Nút Hoàn tác chưa có test tự động (ghi Firestore). Chưa kiểm trên điện thoại, chưa deploy, chưa commit.
+
+---
+
 ## 149. Task Completion Log — Màn Bắt đầu nhiều màu, hiệu ứng nâng gói như phim ngắn, chuyển cảnh toàn app, khung quét theo màn hình Feliz và quét chính xác hơn (08/11/2026, chủ app yêu cầu) — Code + test xong, chưa cài lên máy
 
 **Yêu cầu:** màn Bắt đầu nhiều màu và cuốn hút hơn, vuốt lại thì phát lại hiệu ứng; hiệu ứng nâng gói và Bắt đầu mượt như một phim ngắn; chuyển động chữ, ảnh, nút, chuyển cảnh liền mạch; viền khung quét mềm, đúng hình màn hình Feliz; quét chính xác hơn; kiểm tra giao diện trên máy khi xe đang sạc, không được ngắt sạc.

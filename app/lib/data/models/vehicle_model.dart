@@ -408,3 +408,29 @@ class VehicleModel {
     );
   }
 }
+
+/// QA 150: every charging tip in the app was a lithium tip ("dừng ở 80%"),
+/// also for the models the catalogue lists as lead-acid, which want the
+/// opposite. The chemistry is the catalogue's (`batteryChemistry`).
+bool isLeadAcidChemistry(String? chemistry) {
+  final value = (chemistry ?? '').toLowerCase();
+  return value.contains('lead') ||
+      value.contains('axit') ||
+      value.contains('acid') ||
+      value.contains('chì');
+}
+
+/// The chemistry as the owner reads it.
+String batteryChemistryLabel(String? chemistry) {
+  final value = (chemistry ?? '').trim();
+  if (value.isEmpty || value.toLowerCase() == 'unknown') {
+    return 'Chưa có dữ liệu';
+  }
+  if (isLeadAcidChemistry(value)) return 'Ắc quy chì';
+  return switch (value.toLowerCase()) {
+    'lfp' => 'Pin lithium LFP',
+    'nmc' => 'Pin lithium NMC',
+    'li-ion' || 'lithium-ion' || 'lithium' => 'Pin lithium',
+    _ => value,
+  };
+}

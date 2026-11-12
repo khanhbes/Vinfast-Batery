@@ -112,6 +112,8 @@ class PromptAssembler:
                     "odoKm",
                     "sohPercent",
                     "capacityWh",
+                    # QA 150: charging tips differ for lead-acid.
+                    "batteryChemistry",
                     "kmPerPercent",
                     "kmPerPercentSource",
                     "rangeKm",

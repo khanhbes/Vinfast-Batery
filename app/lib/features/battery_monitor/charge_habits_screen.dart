@@ -360,7 +360,7 @@ class _StatsGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tiles = <(String, String)>[
-      ('Số lần mỗi tuần', '${stats['perWeek'] ?? '—'}'),
+      ('Lần mỗi tuần (từ lần sạc đầu)', '${stats['perWeek'] ?? '—'}'),
       ('% lúc cắm (trung bình)', '${stats['avgStartPct'] ?? '—'}%'),
       ('% lúc rút (trung bình)', '${stats['avgEndPct'] ?? '—'}%'),
       ('Sạc gần đầy', _pct(stats['fullShare'])),
@@ -715,7 +715,7 @@ class _ScheduleCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Bạn thường cắm sạc lúc $clock ($days), pin khoảng '
+            'Bạn thường cắm sạc khoảng $clock ($days), pin khoảng '
             '${s.typicalStartPct}%.',
             style: const TextStyle(
               color: LuxeColors.text,
@@ -751,40 +751,42 @@ class _ScheduleCard extends ConsumerWidget {
               text: 'Nhắc tôi lúc $clock $when',
             ),
           ),
-          const SizedBox(height: 8),
-          PremiumLocked(
-            feature: PremiumFeature.nightCharging,
-            tagAlignment: AlignmentDirectional.centerEnd,
-            tagPadding: const EdgeInsetsDirectional.only(end: 8),
-            child: FilledButton(
-              key: const ValueKey('habits-apply-night'),
-              onPressed: () {
-                final minutes = (s.estimatedMinutes ?? 180) + 20;
-                final wake = DateTime(
-                  2000,
-                  1,
-                  1,
-                  s.startHour,
-                ).add(Duration(minutes: minutes));
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => NightChargingScreen(
-                      vehicleId: vehicleId,
-                      initialTarget: s.targetPct.clamp(80, 90),
-                      initialWake: TimeOfDay(
-                        hour: wake.hour,
-                        minute: (wake.minute / 5).ceil() * 5 % 60,
+          // QA 150: a daytime habit is not a night plan.
+          if (s.startHour >= 18 || s.startHour < 5) const SizedBox(height: 8),
+          if (s.startHour >= 18 || s.startHour < 5)
+            PremiumLocked(
+              feature: PremiumFeature.nightCharging,
+              tagAlignment: AlignmentDirectional.centerEnd,
+              tagPadding: const EdgeInsetsDirectional.only(end: 8),
+              child: FilledButton(
+                key: const ValueKey('habits-apply-night'),
+                onPressed: () {
+                  final minutes = (s.estimatedMinutes ?? 180) + 20;
+                  final wake = DateTime(
+                    2000,
+                    1,
+                    1,
+                    s.startHour,
+                  ).add(Duration(minutes: minutes));
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => NightChargingScreen(
+                        vehicleId: vehicleId,
+                        initialTarget: s.targetPct.clamp(80, 90),
+                        initialWake: TimeOfDay(
+                          hour: wake.hour,
+                          minute: (wake.minute / 5).ceil() * 5 % 60,
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-              child: const _ButtonLabel(
-                icon: Icons.nights_stay_rounded,
-                text: 'Áp dụng vào Sạc đêm',
+                  );
+                },
+                child: const _ButtonLabel(
+                  icon: Icons.nights_stay_rounded,
+                  text: 'Áp dụng vào Sạc đêm',
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

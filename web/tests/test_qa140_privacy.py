@@ -41,3 +41,16 @@ def test_consent_needs_sign_in_and_the_current_version():
     caller["uid"] = None
     assert client.get("/api/account/privacy-consent").status_code == 401
     assert client.post("/api/account/privacy-consent", json={"version": privacy.VERSION}).status_code == 401
+
+
+def test_the_terms_page_is_public_and_points_to_the_other_pages():
+    """QA 150 (CNT-11): general terms of use."""
+    from support import terms
+    client, _caller = _client(uid=None)
+    page = client.get("/dieu-khoan-su-dung")
+    assert page.status_code == 200 and "text/html" in page.content_type
+    text = page.get_data(as_text=True)
+    for must in (terms.VERSION, privacy.CONTROLLER, privacy.CONTACT_EMAIL, "ước tính", "12 A / 2500 W",
+                 "/dieu-khoan-premium", "/chinh-sach-bao-mat", "Xóa tài khoản", "114"):
+        assert must in text, must
+    assert client.get("/terms").status_code == 200

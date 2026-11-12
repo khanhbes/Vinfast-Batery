@@ -73,7 +73,7 @@ class DeterministicPlaygroundGemini:
             if is_v24:
                 return [
                     {
-                        "text": "Không thể thực hiện. Giới hạn an toàn của ổ cắm Shelly là **12 A / 2500 W** và bắt buộc phải vuốt xác nhận."
+                        "text": "Không thể thực hiện. Giới hạn an toàn của ổ Shelly là **12 A / 2500 W** và bắt buộc phải vuốt xác nhận."
                     }
                 ]
             return [

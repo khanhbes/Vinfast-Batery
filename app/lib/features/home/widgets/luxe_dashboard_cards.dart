@@ -339,7 +339,7 @@ class LuxeStatsStrip extends ConsumerWidget {
           : (
               Icons.battery_std_rounded,
               v?.hasSohData == true ? '${v!.stateOfHealth.round()}%' : '—',
-              v?.hasSohData == true ? 'SoH bạn nhập' : 'dung lượng',
+              v?.hasSohData == true ? 'sức khỏe bạn nhập' : 'dung lượng',
             ),
     ];
     // QA 141: equal heights when a label wraps at large text.
@@ -721,6 +721,45 @@ class LuxeEfficiencyNote extends StatelessWidget {
   }
 }
 
+/// QA 150: shown until the vehicle has its first battery reading.
+class LuxeFirstReadingPrompt extends StatelessWidget {
+  const LuxeFirstReadingPrompt({super.key, required this.onEnter});
+  final VoidCallback onEnter;
+
+  @override
+  Widget build(BuildContext context) => LuxeGlass(
+    key: const ValueKey('first-reading-prompt'),
+    selected: true,
+    padding: const EdgeInsets.all(14),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Nhập % pin trên đồng hồ xe',
+          style: TextStyle(
+            color: LuxeColors.text,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Có số này app mới ước tính được quãng đường và thời gian sạc. '
+          'Bạn có thể quét đồng hồ hoặc nhập tay.',
+          style: LuxeText.caption,
+        ),
+        const SizedBox(height: 10),
+        FilledButton.icon(
+          key: const ValueKey('first-reading-button'),
+          onPressed: onEnter,
+          icon: const Icon(Icons.edit_rounded, size: 18),
+          label: const Text('Nhập % pin'),
+        ),
+      ],
+    ),
+  );
+}
+
 /// Prompt shown while the Shelly charger setup was skipped in onboarding.
 class LuxeShellyPrompt extends StatelessWidget {
   const LuxeShellyPrompt({super.key, required this.onSetup});
@@ -739,7 +778,7 @@ class LuxeShellyPrompt extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Thiết lập bộ sạc Shelly',
+                'Thiết lập ổ Shelly',
                 style: TextStyle(
                   color: LuxeColors.text,
                   fontSize: 14,
@@ -748,7 +787,7 @@ class LuxeShellyPrompt extends StatelessWidget {
               ),
               SizedBox(height: 2),
               Text(
-                'Hẹn giờ sạc và tự ngắt an toàn bằng rơ-le.',
+                'Ổ cắm thông minh mua riêng, giúp app hẹn giờ và tự ngắt sạc. Chưa có vẫn dùng được app.',
                 style: LuxeText.caption,
               ),
             ],

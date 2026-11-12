@@ -16,6 +16,8 @@ MIN_SESSIONS = 3
 MIN_ENERGY_WH = 30  # below: plugged in and out, not a charge
 FULL_PCT = 95
 LOW_PCT = 15
+SCHEDULE_WINDOW_HOURS = 2   # a habit: plug-ins within 2 h either side
+SCHEDULE_MIN_SHARE = 0.4    # of the charges; fewer is not a habit, no suggestion
 GOOD_TOP_PCT = 90
 TERMINAL = {"completed", "interrupted", "cancelled", "stopped"}
 
@@ -33,8 +35,13 @@ def _usable(session) -> bool:
             and session.stopped_at is not None)
 
 
+def is_lead_acid(chemistry) -> bool:
+    value = str(chemistry or "").lower()
+    return any(word in value for word in ("lead", "acid", "axit", "chì"))
+
+
 def charge_habits(sessions, *, now: datetime, wh_per_pct: float | None = None,
-                  power_w: float | None = None) -> dict:
+                  power_w: float | None = None, lead_acid: bool = False) -> dict:
     """Stats, charts, score, comments and a schedule from [sessions]."""
     since = now - timedelta(days=WINDOW_DAYS)
     rows = []
@@ -113,7 +120,17 @@ def charge_habits(sessions, *, now: datetime, wh_per_pct: float | None = None,
     # Score: 100, minus what wears an LFP/NMC pack or the outlet.
     score = 100
     comments, suggestions = [], []
-    if stats["fullShare"] > 0.5:
+    if lead_acid:
+        # QA 150: the opposite rule. A lead-acid battery left partly charged
+        # sulphates; it wants a full charge after use.
+        if stats["fullShare"] >= 0.5:
+            comments.append({"level": "good", "text": "Thường sạc đầy, đúng với ắc quy chì."})
+        else:
+            score -= 20 if stats["fullShare"] < 0.25 else 8
+            comments.append({"level": "warn" if stats["fullShare"] < 0.25 else "info", "text":
+                f"Chỉ {round(stats['fullShare'] * 100)}% số lần sạc lên gần đầy. Ắc quy chì để lưng chừng lâu ngày sẽ mau yếu."})
+            suggestions.append("Ắc quy chì nên sạc đầy sau mỗi lần dùng.")
+    elif stats["fullShare"] > 0.5:
         score -= 25
         comments.append({"level": "warn", "text":
             f"{round(stats['fullShare'] * 100)}% số lần sạc lên gần 100%. Giữ pin đầy lâu làm pin chai nhanh hơn."})
@@ -150,23 +167,45 @@ def charge_habits(sessions, *, now: datetime, wh_per_pct: float | None = None,
     result["grade"] = "good" if score >= 80 else "fair" if score >= 60 else "poor"
     result["comments"] = comments
     result["suggestions"] = suggestions
-    result["schedule"] = suggest_schedule(rows, wh_per_pct=wh_per_pct, power_w=power_w)
+    result["schedule"] = suggest_schedule(rows, wh_per_pct=wh_per_pct, power_w=power_w, lead_acid=lead_acid)
     return result
 
 
-def suggest_schedule(rows, *, wh_per_pct: float | None, power_w: float | None) -> dict | None:
+def suggest_schedule(rows, *, wh_per_pct: float | None, power_w: float | None,
+                     lead_acid: bool = False) -> dict | None:
     """When the owner usually plugs in, and a battery-friendly plan for it:
     start at that hour, stop at 85% (90% if they often need more)."""
     if len(rows) < MIN_SESSIONS:
         return None
+    # QA 150: the single most common clock hour was 2 of the owner's 11 charges
+    # (11:00, "pin khoảng 58%") while 9 of them were evening plug-ins near 13 %.
+    # A habit is a window of hours holding a real share of the charges.
     hours = Counter(r["start"].hour for r in rows)
-    hour, count = hours.most_common(1)[0]
-    days = Counter(r["start"].weekday() for r in rows if r["start"].hour == hour)
-    weekdays = sorted(d for d, c in days.items() if c >= 1)
-    starts = sorted(r["startPct"] for r in rows if r["start"].hour == hour)
-    typical_start = starts[len(starts) // 2]
+
+    def offset(hour: int, centre: int) -> int:
+        return (hour - centre + 12) % 24 - 12
+
+    def held(centre: int) -> int:
+        return sum(c for h, c in hours.items() if abs(offset(h, centre)) <= SCHEDULE_WINDOW_HOURS)
+
+    best = max(held(c) for c in range(24))
+    if best < MIN_SESSIONS or best / len(rows) < SCHEDULE_MIN_SHARE:
+        return None
+    # Among the windows that hold as many, the one centred on its own charges.
+    centre = min((c for c in range(24) if held(c) == best),
+                 key=lambda c: sum(abs(offset(h, c)) * n for h, n in hours.items()
+                                   if abs(offset(h, c)) <= SCHEDULE_WINDOW_HOURS))
+    members = [r for r in rows if abs(offset(r["start"].hour, centre)) <= SCHEDULE_WINDOW_HOURS]
+    count = len(members)
+    offsets = sorted(offset(r["start"].hour, centre) for r in members)
+    hour = (centre + offsets[(count - 1) // 2]) % 24
+    weekdays = sorted({r["start"].weekday() for r in members})
+    starts = sorted(r["startPct"] for r in members)
+    typical_start = (starts[(count - 1) // 2] + starts[count // 2]) / 2
     ends = [r["endPct"] for r in rows if r["endPct"] is not None]
     target = 90 if ends and sum(1 for e in ends if e >= FULL_PCT) / len(ends) > 0.6 else 85
+    if lead_acid:
+        target = 100
     minutes = None
     if wh_per_pct and power_w and power_w > 0 and target > typical_start:
         minutes = round((target - typical_start) * wh_per_pct / power_w * 60)

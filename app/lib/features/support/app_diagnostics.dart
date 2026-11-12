@@ -291,7 +291,7 @@ class AppDiagnostics {
     if (!shelly.isLinked) {
       return const DiagnosticCheck(
         id: 'shelly',
-        title: 'Ổ sạc Shelly',
+        title: 'Ổ Shelly',
         status: CheckStatus.warn,
         detail: 'Chưa liên kết ổ sạc. Sạc thông minh cần Shelly Plug S Gen3.',
         fix: CheckFix.openShellySetup,
@@ -301,7 +301,7 @@ class AppDiagnostics {
     if (shelly.codeRefreshRequired) {
       return const DiagnosticCheck(
         id: 'shelly',
-        title: 'Ổ sạc Shelly',
+        title: 'Ổ Shelly',
         status: CheckStatus.fail,
         detail: 'Cần nhập lại mã kết nối của quản trị viên.',
         fix: CheckFix.openShellySetup,
@@ -312,7 +312,7 @@ class AppDiagnostics {
     if (online == false) {
       return const DiagnosticCheck(
         id: 'shelly',
-        title: 'Ổ sạc Shelly',
+        title: 'Ổ Shelly',
         status: CheckStatus.fail,
         detail:
             'Ổ đang mất kết nối Shelly Cloud. Kiểm tra ổ có điện và Wi-Fi nhà, '
@@ -326,7 +326,7 @@ class AppDiagnostics {
         shelly.state != ShellyConnectionFlowState.connected) {
       return const DiagnosticCheck(
         id: 'shelly',
-        title: 'Ổ sạc Shelly',
+        title: 'Ổ Shelly',
         status: CheckStatus.unknown,
         detail:
             'Đã liên kết; chưa đọc được trạng thái mới. Mở tab Sạc pin để kiểm tra.',
@@ -334,7 +334,7 @@ class AppDiagnostics {
     }
     return DiagnosticCheck(
       id: 'shelly',
-      title: 'Ổ sạc Shelly',
+      title: 'Ổ Shelly',
       status: CheckStatus.ok,
       detail: shelly.status?.relay == true
           ? 'Trực tuyến · đang bật.'

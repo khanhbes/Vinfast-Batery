@@ -273,7 +273,10 @@ class _Summary extends StatelessWidget {
     final title = report == null
         ? 'Đang kiểm tra app…'
         : problems > 0
-        ? 'Có $problems vấn đề cần xử lý'
+        // QA 150: "Có 1 vấn đề" sat above four fix buttons.
+        ? warnings > 0
+              ? 'Có $problems lỗi cần xử lý và $warnings mục nên xem'
+              : 'Có $problems lỗi cần xử lý'
         : warnings > 0
         ? 'Hoạt động, $warnings mục nên xem'
         : 'Mọi thứ đều ổn';
@@ -380,9 +383,24 @@ class _Faq extends StatelessWidget {
   const _Faq();
 
   static const _items = <(String, String)>[
+    // QA 150: what a new owner asks first.
+    (
+      'Ổ Shelly là gì, có bắt buộc không?',
+      'Shelly Plug S Gen3 là ổ cắm thông minh có Wi-Fi, cắm giữa ổ điện và bộ '
+          'sạc xe; nhờ nó app bật, hẹn giờ và tự ngắt sạc. Ổ mua riêng, không '
+          'kèm theo xe. Chưa có ổ, bạn vẫn theo dõi pin, quãng đường, bảo '
+          'dưỡng và hỏi Pinova Bot.',
+    ),
+    (
+      'Gói Free, Pro và Ultra khác nhau thế nào?',
+      'Free: theo dõi pin, sạc hẹn giờ, quét đồng hồ, 1 xe. Pro thêm sạc đến '
+          '% tự ngắt, lộ trình, xuất lịch sử, 2 xe. Ultra thêm sạc đêm an '
+          'toàn, huấn luyện AI cá nhân, tối đa 10 xe. Bảng đầy đủ ở Cài đặt → '
+          'Pinova Premium.',
+    ),
     (
       'Vuốt để sạc nhưng ổ không bật',
-      'Ổ phải đang trực tuyến và đang tắt. Kiểm tra mục "Ổ sạc Shelly" ở trên; '
+      'Ổ phải đang trực tuyến và đang tắt. Kiểm tra mục "Ổ Shelly" ở trên; '
           'nếu ổ mất mạng, rút ra cắm lại và đợi 1–2 phút. App không gửi lệnh '
           'bật lần hai để tránh bật nhầm — hãy đọc lại trạng thái rồi thử lại.',
     ),
@@ -408,8 +426,10 @@ class _Faq extends StatelessWidget {
     ),
     (
       'Gói Premium và mã khuyến mãi',
-      'Cài đặt → Pinova Premium: dùng thử 7 ngày, xem quyền lợi và nhập mã. '
-          'An toàn sạc và trợ giúp luôn miễn phí.',
+      'Cài đặt → Pinova Premium: xem quyền lợi, dùng thử 7 ngày (một lần) và '
+          'nhập mã. Mã khuyến mãi do Pinova phát theo từng đợt; hiện app chưa '
+          'thu tiền nên gói trả phí chỉ bật bằng mã. An toàn sạc và trợ giúp '
+          'luôn miễn phí.',
     ),
   ];
 

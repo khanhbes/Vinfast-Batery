@@ -329,7 +329,7 @@ void main() {
       await tester.pumpWidget(_app(LuxeStatsStrip(vehicle: _car)));
       await tester.pump();
       expect(find.text('97%'), findsOneWidget);
-      expect(find.text('SoH bạn nhập'), findsOneWidget);
+      expect(find.text('sức khỏe bạn nhập'), findsOneWidget);
     });
   });
 

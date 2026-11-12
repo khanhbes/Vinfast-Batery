@@ -70,9 +70,7 @@ void main() {
         'Đang học · 2/5 lần sạc',
       );
       expect(
-        _status(
-          _learning('learning', charges: 6, gain: 75),
-        ).chargeLearningTag,
+        _status(_learning('learning', charges: 6, gain: 75)).chargeLearningTag,
         'Đang học · đã nạp 75/100%',
       );
     });
@@ -114,7 +112,7 @@ void main() {
           'aiCharges': 7,
           'aiNeedCharges': 30,
         }).aiProgressLabel,
-        'AI nhỏ: 7/30 lần sạc',
+        'AI nâng cao cần 30 lần sạc, đã có 7',
       );
       expect(
         charge({
@@ -124,7 +122,7 @@ void main() {
           'aiDays': 9,
           'aiNeedDays': 14,
         }).aiProgressLabel,
-        'AI nhỏ: cần dữ liệu trong 14 ngày',
+        'AI nâng cao cần dữ liệu trong 14 ngày',
       );
       expect(
         charge({
@@ -134,7 +132,7 @@ void main() {
           'aiDays': 40,
           'aiNeedDays': 14,
         }).aiProgressLabel,
-        'AI nhỏ: đã đủ dữ liệu, sẽ thử khi huấn luyện',
+        'AI nâng cao đã đủ dữ liệu, sẽ thử khi huấn luyện',
       );
       expect(charge({'layer': 'ai'}).aiProgressLabel, isNull);
       // An older server sends nothing and nothing is shown.

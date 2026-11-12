@@ -48,7 +48,8 @@ Map<String, dynamic> _data({required bool full}) => {
       : null,
   'schedule': full
       ? {
-          'startHour': 7,
+          // An evening habit: a daytime one has no night plan (QA 150).
+          'startHour': 21,
           'weekdays': [0, 2, 4],
           'typicalStartPct': 8,
           'targetPct': 85,
@@ -97,7 +98,7 @@ void main() {
       expect(find.text('GIỜ CẮM SẠC THEO THỨ'), findsOneWidget);
       expect(find.byKey(const ValueKey('habits-remind')), findsOneWidget);
       expect(find.byKey(const ValueKey('habits-apply-night')), findsOneWidget);
-      expect(find.textContaining('lúc 07:00'), findsWidgets);
+      expect(find.textContaining('lúc 21:00'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
     });
 

@@ -162,6 +162,17 @@ class AuthService {
         );
       }
 
+      // QA 150 (owner's choice): send Firebase's verification email, never
+      // block on it. Hồ sơ shows "Email chưa xác minh" with a resend row.
+      try {
+        await _auth.setLanguageCode('vi');
+        await user.sendEmailVerification().timeout(const Duration(seconds: 8));
+      } catch (error) {
+        debugPrint(
+          '[AuthService] verification email deferred (${error.runtimeType}).',
+        );
+      }
+
       try {
         await Future.wait<void>([
           _session.clearLegacyCredentials(),
@@ -685,7 +696,7 @@ class AuthService {
       if (safeUpdates.length != (updates?.length ?? 0)) {
         return {
           'success': false,
-          'error': 'Thông số kỹ thuật của xe chỉ do catalog quản lý.',
+          'error': 'Thông số kỹ thuật của xe chỉ do danh mục xe quản lý.',
         };
       }
       return ApiService().patch('/api/user/vehicles/$vehicleId', safeUpdates);

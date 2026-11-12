@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/providers/learned_models_provider.dart';
+import '../../core/providers/app_providers.dart';
 import '../../core/services/pinova_api.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/charge_confirm_control.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
+import '../../core/widgets/luxe_time_picker.dart';
 import '../../data/models/entitlement.dart';
+import '../../data/models/vehicle_model.dart';
 import '../../data/services/charge_estimator.dart';
+import '../../data/services/shelly_connection_coordinator.dart';
+import 'smart_charger_setup_hub_screen.dart';
 import '../ai/dashboard_scan_screen.dart';
 import '../ai/widgets/edit_current_battery_sheet.dart';
 import '../premium/premium_gate.dart';
@@ -233,6 +237,11 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
     return confirmed;
   }
 
+  bool get _shellyMissing {
+    final link = ShellyConnectionCoordinator.shared.current;
+    return !link.isLinked && link.serverBinding == null;
+  }
+
   Future<void> _arm() async {
     if (!_currentConfirmed && !await _confirmCurrent()) return;
     if (!mounted) return;
@@ -310,9 +319,8 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
         children: [
           const Text(
-            'Sạc đầy đến mức vừa đủ ngay trước khi bạn thức dậy: ít giờ pin '
-            'nằm ở mức cao, đúng khung giá điện đêm, và giám sát chặt hơn '
-            'ban ngày.',
+            'Sạc đến mức vừa đủ ngay trước khi bạn thức dậy: pin không nằm '
+            'ở mức cao suốt đêm, và ổ sạc được giám sát chặt hơn ban ngày.',
             style: LuxeText.body,
           ),
           const SizedBox(height: 16),
@@ -349,6 +357,8 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                       max: (_target - 5).toDouble(),
                       divisions: _target - 5,
                       label: '${_current.round()}%',
+                      semanticFormatterCallback: (v) =>
+                          'Pin hiện tại ${v.round()}%',
                       onChanged: _busy
                           ? null
                           : (v) => setState(() {
@@ -359,10 +369,12 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                   ),
                   SizedBox(
                     width: 56,
-                    child: Text(
-                      '${_current.round()}%',
-                      textAlign: TextAlign.end,
-                      style: LuxeText.item,
+                    child: ExcludeSemantics(
+                      child: Text(
+                        '${_current.round()}%',
+                        textAlign: TextAlign.end,
+                        style: LuxeText.item,
+                      ),
                     ),
                   ),
                 ],
@@ -376,6 +388,25 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                 ),
               ),
               const LuxeSectionLabel('Sạc đến'),
+              // QA 150: the night plan stops at 80-90% (server limit); a
+              // lead-acid pack wants a full charge, so say where to get one.
+              if (isLeadAcidChemistry(
+                ref
+                    .watch(vehicleProvider(widget.vehicleId))
+                    .valueOrNull
+                    ?.batteryType,
+              ))
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 10),
+                  child: LuxeNotice(
+                    key: ValueKey('night-lead-acid-note'),
+                    icon: Icons.info_rounded,
+                    color: LuxeColors.steel,
+                    message:
+                        'Xe dùng ắc quy chì nên được sạc đầy. Sạc đêm dừng ở '
+                        '80–90%; muốn sạc đầy, hãy dùng Sạc AI với mục tiêu 100%.',
+                  ),
+                ),
               LuxeSegmented<int>(
                 key: const ValueKey('night-target'),
                 segments: const [(80, '80%'), (85, '85%'), (90, '90%')],
@@ -398,9 +429,10 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                     onTap: _busy
                         ? null
                         : () async {
-                            final picked = await showTimePicker(
-                              context: context,
+                            final picked = await showLuxeTimePicker(
+                              context,
                               initialTime: _wake,
+                              title: 'Giờ thức dậy',
                             );
                             if (picked != null) setState(() => _wake = picked);
                           },
@@ -448,6 +480,31 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                     ),
                   ),
                   const SizedBox(height: 10),
+                ],
+                // QA 150: said after the swipe and the % check, "Xe chưa liên
+                // kết ổ Shelly" came two steps too late.
+                if (_shellyMissing) ...[
+                  const LuxeNotice(
+                    key: ValueKey('night-needs-shelly'),
+                    icon: Icons.power_rounded,
+                    color: LuxeColors.champagne,
+                    message:
+                        'Sạc đêm cần ổ cắm thông minh Shelly đã liên kết với '
+                        'xe này. Hãy thiết lập ổ trước khi hẹn.',
+                  ),
+                  Center(
+                    child: TextButton.icon(
+                      key: const ValueKey('night-setup-shelly'),
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const SmartChargerSetupHubScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.power_rounded, size: 18),
+                      label: const Text('Thiết lập ổ Shelly'),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                 ],
                 // QA 141: short enough to fit (the % was cut off).
                 ChargeConfirmControl(
