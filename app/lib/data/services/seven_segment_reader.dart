@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'dashboard_layout_parser.dart';
+import 'dashboard_templates.dart';
 
 /// A grayscale image (one byte per pixel, row-major).
 class GrayImage {
@@ -117,6 +118,34 @@ class GrayImage {
       }
     }
     return GrayImage(outW, outH, out);
+  }
+
+  /// QA 156: a dim frame (dusk, a garage) brought up so its brightest
+  /// pixels are near white. The reader's thresholds are absolute: at
+  /// half the light thin segments fell under them and "68" read "63".
+  /// A frame that is already bright comes back unchanged.
+  GrayImage stretched() {
+    final histogram = Int32List(256);
+    for (final p in pixels) {
+      histogram[p]++;
+    }
+    // The level only 0.3 % of the pixels exceed: the lit segments.
+    var left = (pixels.length * 0.003).ceil();
+    var hi = 255;
+    while (hi > 0 && (left -= histogram[hi]) > 0) {
+      hi--;
+    }
+    if (hi >= 215 || hi < 24) return this;
+    final gain = math.min(3.0, 235 / hi);
+    final table = Uint8List(256);
+    for (var v = 0; v < 256; v++) {
+      table[v] = math.min(255, (v * gain).round());
+    }
+    final out = Uint8List(pixels.length);
+    for (var i = 0; i < pixels.length; i++) {
+      out[i] = table[pixels[i]];
+    }
+    return GrayImage(width, height, out);
   }
 
   /// This image turned by [degrees] clockwise (a photo whose orientation
@@ -258,6 +287,24 @@ abstract final class SevenSegmentReader {
     GrayImage image, {
     double? lastOdoKm,
   }) {
+    // QA 156: a dim photo brought up and a tilted one turned level first,
+    // like a camera frame.
+    final bright = image.stretched();
+    final angle = levelAngle(bright);
+    if (angle == 0) return _readLevel(bright, lastOdoKm: lastOdoKm);
+    final level = bright.rotatedBy(angle);
+    return _unrotated(
+      _readLevel(level, lastOdoKm: lastOdoKm),
+      angle,
+      image,
+      level,
+    );
+  }
+
+  static DashboardLayoutReading _readLevel(
+    GrayImage image, {
+    double? lastOdoKm,
+  }) {
     final passes = [
       for (final pass in readPasses(image))
         DashboardLayoutParser.parse(pass, lastOdoKm: lastOdoKm),
@@ -290,6 +337,187 @@ abstract final class SevenSegmentReader {
       for (final (_, reading) in turned) reading,
     ]);
   }
+
+  /// QA 156: one camera frame, the way the scanner reads it: every
+  /// threshold pass parsed (by zone when the owner lines the cluster up
+  /// with [template], whose glass is [window] in [image]), then their
+  /// consensus. The scanner and the accuracy benchmark both call this.
+  static ({DashboardLayoutReading reading, bool hasDigits}) scanFrame(
+    GrayImage image, {
+    DashboardTemplate? template,
+    Rect? window,
+    double? lastOdoKm,
+  }) {
+    // QA 156: bring a dim frame up, then turn it level. A phone held a
+    // few degrees off lost one digit of "68" in four frames out of ten.
+    final bright = image.stretched();
+    final angle = levelAngle(bright);
+    if (angle != 0) {
+      final level = bright.rotatedBy(angle);
+      final rad = angle * math.pi / 180;
+      final cosA = math.cos(rad), sinA = math.sin(rad);
+      final cx = (image.width - 1) / 2, cy = (image.height - 1) / 2;
+      final ox = (level.width - 1) / 2, oy = (level.height - 1) / 2;
+      Rect? turned;
+      if (window != null) {
+        final dx = window.center.dx - cx, dy = window.center.dy - cy;
+        turned = Rect.fromCenter(
+          center: Offset(
+            cosA * dx - sinA * dy + ox,
+            sinA * dx + cosA * dy + oy,
+          ),
+          width: window.width,
+          height: window.height,
+        );
+      }
+      final scan = _scanLevel(
+        level,
+        template: template,
+        window: turned,
+        lastOdoKm: lastOdoKm,
+      );
+      Rect? back(Rect? box) {
+        if (box == null) return null;
+        final dx = box.center.dx - ox, dy = box.center.dy - oy;
+        return Rect.fromCenter(
+          center: Offset(
+            cosA * dx + sinA * dy + cx,
+            -sinA * dx + cosA * dy + cy,
+          ),
+          width: box.width,
+          height: box.height,
+        );
+      }
+
+      final r = scan.reading;
+      return (
+        reading: DashboardLayoutReading(
+          soc: r.soc,
+          odoKm: r.odoKm,
+          socBox: back(r.socBox),
+          odoBox: back(r.odoBox),
+          socConfident: r.socConfident,
+          odoConfident: r.odoConfident,
+          socCandidates: r.socCandidates,
+          odoCandidates: r.odoCandidates,
+          tempC: r.tempC,
+          tempBox: back(r.tempBox),
+          tempConfident: r.tempConfident,
+        ),
+        hasDigits: scan.hasDigits,
+      );
+    }
+    return _scanLevel(
+      bright,
+      template: template,
+      window: window,
+      lastOdoKm: lastOdoKm,
+    );
+  }
+
+  /// The angle (degrees, for [GrayImage.rotatedBy]) that turns [image]
+  /// level, or 0 when it already is or nothing tells. An LCD is rows:
+  /// digit bars, the battery bars, the underline. Turned level, the lit
+  /// pixels pile up on a few rows; the angle with the sharpest pile wins.
+  static double levelAngle(GrayImage image, {double maxDegrees = 12}) {
+    final w = image.width, h = image.height;
+    final mask = _binarize(image, 19, offset: 36, floor: 100);
+    var lit = 0;
+    for (final m in mask) {
+      lit += m;
+    }
+    if (lit < 200) return 0;
+    final stride = math.max(1, lit ~/ 9000);
+    final xs = <double>[], ys = <double>[];
+    var seen = 0;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        if (mask[y * w + x] == 0) continue;
+        if (seen++ % stride != 0) continue;
+        xs.add(x - w / 2);
+        ys.add(y - h / 2);
+      }
+    }
+    final span = (w + h).toDouble();
+    final bins = Int32List(span.ceil() + 2);
+    double sharpness(double degrees) {
+      final rad = degrees * math.pi / 180;
+      final s = math.sin(rad), c = math.cos(rad);
+      bins.fillRange(0, bins.length, 0);
+      for (var i = 0; i < xs.length; i++) {
+        bins[(s * xs[i] + c * ys[i] + span / 2).round()]++;
+      }
+      var sum = 0.0;
+      for (final b in bins) {
+        sum += b * b;
+      }
+      return sum;
+    }
+
+    final flat = sharpness(0);
+    var best = 0.0, bestScore = flat;
+    for (var a = -maxDegrees; a <= maxDegrees; a += 1) {
+      final score = sharpness(a);
+      if (score > bestScore) {
+        bestScore = score;
+        best = a;
+      }
+    }
+    final coarse = best;
+    for (final d in const [-0.5, 0.5]) {
+      final score = sharpness(coarse + d);
+      if (score > bestScore) {
+        bestScore = score;
+        best = coarse + d;
+      }
+    }
+    // Turning costs sharpness (resampling): only for a clear gain.
+    if (best.abs() < 1 || bestScore < 1.06 * flat) return 0;
+    return best;
+  }
+
+  static ({DashboardLayoutReading reading, bool hasDigits}) _scanLevel(
+    GrayImage image, {
+    DashboardTemplate? template,
+    Rect? window,
+    double? lastOdoKm,
+  }) {
+    final passes = readPasses(image);
+    final hasDigits = passes.any(
+      (p) => p.any((t) => RegExp(r'\d').hasMatch(t.text)),
+    );
+    final fitted = template != null && window != null
+        ? DashboardLayoutParser.fitWindow(
+            passes,
+            template: template,
+            window: window,
+          )
+        : null;
+    final reading = DashboardLayoutParser.combine([
+      for (final p in passes)
+        template != null && fitted != null
+            ? DashboardLayoutParser.parseTemplate(
+                p,
+                template: template,
+                window: fitted,
+                lastOdoKm: lastOdoKm,
+              )
+            : DashboardLayoutParser.parse(p, lastOdoKm: lastOdoKm),
+    ]);
+    return (reading: reading, hasDigits: hasDigits);
+  }
+
+  static DashboardLayoutReading readFrame(
+    GrayImage image, {
+    DashboardTemplate? template,
+    Rect? window,
+    double? lastOdoKm,
+  }) => scanFrame(
+    image,
+    template: template,
+    window: window,
+    lastOdoKm: lastOdoKm,
+  ).reading;
 
   /// Tried in order when the level image misses the % or the ODO.
   static const tiltAngles = <double>[-6, 6, -12, 12];
@@ -333,6 +561,9 @@ abstract final class SevenSegmentReader {
       odoConfident: r.odoConfident,
       socCandidates: r.socCandidates,
       odoCandidates: r.odoCandidates,
+      tempC: r.tempC,
+      tempBox: back(r.tempBox),
+      tempConfident: r.tempConfident,
     );
   }
 
@@ -366,6 +597,14 @@ abstract final class SevenSegmentReader {
   }
 
   static const _shortGlyphs = {'1', '4', '7'};
+
+  /// Long side, in pixels, of the guide-window crop the scanner reads
+  /// (QA 156: 720 before; with the phone a little far the % digits were
+  /// 25 px tall and a soft frame read "68" as "63").
+  static const frameSide = 900;
+
+  /// Token text of a digit-sized shape the reader could not decode.
+  static const unreadGlyph = DashboardLayoutParser.unreadGlyph;
 
   static const _patterns = <int, String>{
     // bits a b c d e f g (a = 64 … g = 1)
@@ -515,6 +754,9 @@ abstract final class SevenSegmentReader {
         _decodeScored(mask, w, h, piece, width: width, slant: slant);
 
     final cells = <_Cell>[];
+    // QA 156: digit-sized shapes that did not decode. A number next to
+    // one is missing a digit ("68" came out "8"); the parser drops it.
+    final unread = <Rect>[];
     for (final piece in pieces) {
       final ph = piece.height, pw = piece.width;
       if (ph < 10 || piece.members.isEmpty) continue;
@@ -550,11 +792,16 @@ abstract final class SevenSegmentReader {
           // usual width ending at their right edge (QA 135: "47" read
           // "41", "123" read "12").
           final ch = decode(piece, width: 0.56 * ph);
-          if (ch == '7' || ch == '3') cells.add(_Cell(ch!, piece.rect));
+          if (ch == '7' || ch == '3') {
+            cells.add(_Cell(ch!, piece.rect));
+            continue;
+          }
         }
+        if (ph >= 18) unread.add(piece.rect);
         continue;
       }
       if (pw > 1.0 * ph && !(ph >= 0.8 * pw && piece.members.length >= 3)) {
+        if (ph >= 18) unread.add(piece.rect);
         continue;
       }
       final natural = scored(piece);
@@ -577,6 +824,7 @@ abstract final class SevenSegmentReader {
         cells.add(_Cell(ch, piece.rect));
       } else {
         loose.add(piece.rect);
+        if (ph >= 18) unread.add(piece.rect);
       }
     }
     cells.sort((a, b) => a.box.left.compareTo(b.box.left));
@@ -685,6 +933,8 @@ abstract final class SevenSegmentReader {
         if (r.text != '1' || r.boxes.first.height >= 18)
           OcrToken(r.text, r.rect),
       for (final p in percents) OcrToken('%', p),
+      for (final u in unread)
+        if (!percents.contains(u)) OcrToken(unreadGlyph, u),
     ];
   }
 

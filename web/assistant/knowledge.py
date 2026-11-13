@@ -75,7 +75,7 @@ BUILTIN: list[dict] = [
      "body": "Giá điện (đồng/kWh) dùng để tính chi phí mỗi phiên sạc. Đặt trong phần thiết lập sạc hoặc nhờ Pinova Bot đổi."},
     {"id": "maintenance", "title": "Bảo dưỡng xe",
      "keywords": ["bảo dưỡng", "bảo hành", "lịch hẹn", "nhắc", "odo"],
-     "body": "Tiện ích → Bảo dưỡng xe hiển thị lịch bảo dưỡng theo ODO theo khuyến nghị VinFast. Pinova Bot có thể tạo, đổi ngày hoặc hủy lịch nhắc bảo dưỡng/bảo hành; ngày hết bảo hành do bạn cung cấp, không phải xác nhận của hãng."},
+     "body": "Tiện ích → Bảo dưỡng xe hiển thị lịch bảo dưỡng theo ODO và ngày hẹn. Lịch định kỳ theo sổ hướng dẫn VinFast Feliz S: lần đầu ở 1.000 km hoặc tháng thứ 1, sau đó mỗi 5.000 km hoặc 6 tháng, điều kiện nào đến trước; mỗi lần kiểm tra cùng 19 hạng mục (phanh, lốp, vành, giảm xóc, đèn còi, pin, động cơ...), sổ không định sẵn mốc thay phụ tùng. Dòng xe khác nên đối chiếu sổ của xe. Nút Tạo lịch chuẩn VinFast tạo mốc định kỳ kế tiếp; đánh dấu đã làm xong thì ghi ODO, ngày, chi phí và app đề xuất mốc sau. Pinova Bot có thể tạo, đổi ngày hoặc hủy lịch nhắc bảo dưỡng/bảo hành; ngày hết bảo hành do bạn cung cấp, không phải xác nhận của hãng."},
     {"id": "achievements", "title": "Thành tựu",
      "keywords": ["thành tựu", "huy hiệu", "hạng", "điểm"],
      "body": "Thành tựu ghi nhận thói quen tốt: sạc đúng mức bảo vệ pin, dùng Pinova Bot, duy trì bảo dưỡng... Mỗi thành tựu cho điểm và nâng hạng (Đồng, Bạc, Vàng...). Xem trong Tiện ích → Thành tựu."},

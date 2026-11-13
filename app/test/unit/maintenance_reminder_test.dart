@@ -7,25 +7,25 @@ import 'package:vinfast_battery/data/models/maintenance_task_model.dart';
 
 void main() {
   group('MaintenanceTaskModel.isDueSoon', () {
-    test('currentOdo < targetOdo-50 → false', () {
+    test('currentOdo < targetOdo-200 → false (QA 155)', () {
       final task = MaintenanceTaskModel(
         vehicleId: 'v1',
         title: 'Thay nhớt',
         targetOdo: 10000,
       );
-      expect(task.isDueSoon(9940), isFalse);
+      expect(task.isDueSoon(9790), isFalse);
     });
 
-    test('currentOdo == targetOdo-50 → true (boundary)', () {
+    test('currentOdo == targetOdo-200 → true (boundary)', () {
       final task = MaintenanceTaskModel(
         vehicleId: 'v1',
         title: 'Thay nhớt',
         targetOdo: 10000,
       );
-      expect(task.isDueSoon(9950), isTrue);
+      expect(task.isDueSoon(9800), isTrue);
     });
 
-    test('currentOdo between targetOdo-50 and targetOdo → true', () {
+    test('currentOdo between targetOdo-200 and targetOdo → true', () {
       final task = MaintenanceTaskModel(
         vehicleId: 'v1',
         title: 'Thay nhớt',

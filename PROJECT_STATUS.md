@@ -12,6 +12,58 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 156. Task Completion Log — Quét đồng hồ xe: độ chính xác khi cầm lệch tay và giao diện màn quét (13/11/2026, chủ app: "tập trung vào chức năng quét camera màn hình xe… cải tiến giao diện và đặc biệt là độ chính xác", kèm một ảnh mẫu màn hình Feliz) — Code + test xong, APK 2.1.5+238 đã cài lên Xiaomi, **chưa xem màn quét trên máy và chưa quét xe thật**
+
+**Cách đo (mới):** `test/unit/qa156_scan_bench_test.dart` lấy ảnh mẫu của chủ app (68%, ODO 4818, 31°C; lưu thành `test/fixtures/dashboard/feliz_photo_full.gray.gz`), cắt đúng như máy quét cắt khung ngắm, rồi làm lệch ngẫu nhiên: lệch tâm tới 8%, xa gần −15% đến +20%, nghiêng tới 7°, tối hơn 45% hoặc sáng hơn 30%, nhòe, nhiễu. Mỗi khung đọc qua cùng một hàm với app (`SevenSegmentReader.scanFrame`).
+
+**Kết quả trên một khung hình (trước → sau):**
+- % pin: đúng 54%, sai 41% → đúng 99,5–100%, sai 0–0,5% (200 và 150 khung).
+- ODO có mốc ODO cũ: đúng 82,5% → 100%. Không có mốc: đúng 73,8%, sai 24,5% → đúng 100%.
+- Nhiệt độ pin: đúng 88,3%, sai 5,3% → đúng 100%.
+- Lệch mạnh gấp 1,6 lần (ngoài mức dùng bình thường): % đúng 96,7%, sai 2,0%; ODO đúng 99,3%.
+- Thời gian đọc trên máy tính: khoảng 65 ms mỗi khung (đo trong test, chưa đo trên điện thoại).
+- **Giới hạn của phép đo:** tất cả từ **một** ảnh của một xe, lệch giả lập. Chưa có ảnh chụp đêm, nắng chói, kính bẩn, số khác (chữ số 2, 5, 7, 9 ở vị trí khác), hay dòng xe khác. Số trên chưa phải độ chính xác ngoài đời.
+
+**Nguyên nhân và cách sửa (`seven_segment_reader.dart`, `dashboard_layout_parser.dart`):**
+- **Nghiêng vài độ làm mất chữ số "6" của "68" (đọc thành 8 hoặc 6):** nay mỗi khung được xoay cho thẳng trước khi đọc (`levelAngle`: góc làm các hàng điểm sáng gọn nhất, tới ±12°). Ảnh chụp và ảnh chọn từ thư viện cũng vậy.
+- **Khung tối làm đoạn mảnh rơi dưới ngưỡng ("68" thành "63"):** nay khung tối được kéo sáng lên trước (`GrayImage.stretched`).
+- **Khung ngắm đặt lệch làm nhiệt độ "31" rơi vào vùng ODO (ODO đọc 31 hoặc 481831):** nay vị trí kính được dò lại từ chính các số đọc được (`fitWindow`: số tốc độ to ở giữa, chữ "C" cuối hàng dưới, dấu "%"), và một vùng chỉ ghép các chữ số cùng một hàng.
+- **Vùng cắt đọc ở 900 px** thay cho 720 px (cầm xa thì chữ số % chỉ cao 25 px).
+- **Thà không có số còn hơn số sai:** có hình cỡ chữ số không giải mã được nằm cạnh số trong vùng thì bỏ số của vùng đó; một mảnh cao hơn hẳn các chữ số còn lại (hai chữ số dính nhau vì lóa, "4818" thành "489") thì bỏ; các ngưỡng đọc ra hai số khác nhau với số phiếu gần nhau thì bỏ cả khung. Khung kế tiếp tới sau khoảng 0,15 giây, và việc khóa số vẫn cần nhiều khung trùng nhau như cũ.
+
+**Giao diện màn quét:**
+- Vùng chưa đọc và ô số đang xác nhận không còn màu champagne (màu của cảnh báo); nay bạch kim và màu gói, đã khớp vẫn emerald.
+- Dòng dưới khung nói việc cần làm tiếp: "Đã có % pin. Giữ yên để đọc ODO.", "Chưa thấy chữ số. Đưa điện thoại gần màn hình xe hơn." (sau 8 khung không thấy số). Dòng mặc định đổi thành "Đưa cả màn hình xe vào trong khung" vì không còn cần căn trùng viền.
+- Bỏ dấu "…" ở trạng thái ô số ("Đang tìm", "Đang xác nhận").
+
+**Kiểm thử:** `flutter analyze lib` sạch. Toàn bộ Flutter: 1492 đạt, 216 bỏ qua, 1 trượt (test ngưỡng 50 km của bảo dưỡng, đã sửa theo mục 155 và chạy lại đạt); sau lần sửa đó chưa chạy lại toàn bộ. Test tổng hợp cũ (`qa135_scan_synthetic_test.dart`, nghiêng 10–12°) đạt lại sau khi ảnh chụp cũng được xoay thẳng.
+
+**Chưa làm / cần chủ app:**
+- Quét thử trên xe thật với bản 2.1.5 và cho biết kết quả; lúc mình mở máy thì màn hình đang khóa nên chưa xem được màn quét.
+- Thêm ảnh thật ở điều kiện khác (đêm, nắng, kính bẩn, mức pin và ODO khác) để phép đo có ý nghĩa hơn.
+
+---
+
+## 155. Task Completion Log — Lịch bảo dưỡng theo đúng sổ tay VinFast, form thêm mốc (13/11/2026, chủ app: "fix nốt các lỗi, lịch có thể truy cập lịch công khai trên internet, làm theo đề xuất tốt nhất… kiểm tra chính vào phần giao diện (khi tạo lịch)") — Code + test xong, đã xem trên Xiaomi bản 2.1.4
+
+**Nguồn:** sổ hướng dẫn sử dụng VinFast Feliz S (PDF trên trang VinFast, mục 6.1.2 "Lịch trình bảo dưỡng"), đọc trực tiếp bảng: lần đầu 1 000 km hoặc tháng thứ 1, sau đó mỗi 5 000 km hoặc 6 tháng, điều kiện nào đến trước, tới 50 000 km / tháng 60 rồi lặp lại. Mỗi lần xem cùng 19 hạng mục; sổ chỉ ghi kiểm tra và bôi trơn, không định mốc thay phụ tùng. Sổ bảo hành xe LFP trên cùng trang trả lỗi 404, chưa đọc được. Chưa có sổ của đúng Feliz 2025 và các dòng khác.
+
+**Sai so với sổ, đã sửa:**
+- Danh mục cũ có chu kỳ riêng cho từng hạng mục (1 000 / 2 000 / 5 000 / 10 000 km) và hạng mục "Phớt động cơ"; cả hai đều không có trong sổ. "Tạo lịch chuẩn" tạo một lúc 19–20 mốc, phần lớn ở 6 000 km. Nay `VinFastSchedule` giữ đúng bảng (kể cả: bôi trơn tay phanh, chân chống, khóa yên từ mốc 5 000; cổ phốt bôi trơn ở 20 000 và 40 000; động cơ và độ sâu hoa lốp từ mốc 5 000).
+- **"Tạo lịch chuẩn VinFast" nay tạo một mốc "Bảo dưỡng định kỳ X km"** kèm danh sách việc của lần đó. Xe đã qua mốc thì hỏi lên lịch cho mốc đã qua hay mốc sau. Đã có mốc định kỳ đang mở thì không tạo thêm. Thẻ mốc định kỳ có "Xem hạng mục".
+- Làm xong một mốc thì mốc đề xuất kế tiếp là mốc sau của sổ (làm ở 5 398 km: mốc kế 10 000 km) kèm ngày hẹn 6 tháng sau ngày làm.
+- "Sắp đến hạn" từ 200 km (trước là 50 km), tương đương khoảng một tuần chạy như ngưỡng 7 ngày.
+
+**Form thêm mốc (xem trên máy):**
+- Trước: 20 thẻ mẫu chiếm hơn một màn hình phía trên các ô nhập, chữ bị cắt, khung sheet khác các sheet khác. Nay dùng `showLuxeSheet`, các ô nhập ở ngay đầu; chọn loại dịch vụ thì tự điền tên và mốc kế theo sổ (không ghi đè chữ người dùng đã gõ).
+- Có dòng "Xe đang ở X km" và giải thích ngày hẹn; ô ngày hẹn cao 48 dp, nút bỏ ngày là nút 48 dp; ô loại dịch vụ 48 dp; "Bảo dưỡng định kỳ" đứng đầu bộ chọn loại.
+- Sheet "Đã làm xong": nhãn ghi chú dài bị cắt ở 360 dp, đã rút gọn.
+- Pinova Bot: mục kiến thức Bảo dưỡng ghi lịch theo sổ.
+
+**Chưa đổi:** bộ chọn ngày vẫn là của Material (đã có tiếng Việt và màu gói).
+
+---
+
 ## 154. Task Completion Log — Mọi phiên sạc tối đa 7 giờ, Lịch bảo dưỡng: ngày hẹn được tính, sổ bảo dưỡng (13/11/2026, chủ app: "trần AI cũng để 7h", "tập trung kiểm tra tổng thể chức năng lịch bảo dưỡng, sửa chữa và nâng cấp") — Code + test xong, APK 2.1.3+236 đã build, **chưa cài lên máy (điện thoại không kết nối)**, **máy chủ chưa deploy**
 
 **Trần 7 giờ cho mọi phiên sạc (thay câu "Sạc AI giữ trần 10 giờ" ở mục 153):**

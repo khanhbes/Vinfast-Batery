@@ -31,21 +31,15 @@ MaintenanceTaskModel task(int target, {bool done = false, ServiceType? type}) =>
     );
 
 void main() {
-  test('standard schedule proposes the next interval and skips open types', () {
-    final first = VinFastServiceCatalog.presets.first;
-    final proposals = proposeSchedule(1240, [task(2000, type: first.type)]);
-    expect(proposals.length, VinFastServiceCatalog.presets.length);
-    final p = proposals.first;
-    expect(p.targetOdo % first.suggestedOdoInterval, 0);
-    expect(p.targetOdo, greaterThan(1240));
-    expect(p.targetOdo - 1240, lessThanOrEqualTo(first.suggestedOdoInterval));
-    expect(p.alreadyOpen, isTrue);
-    expect(
-      proposals
-          .skip(1)
-          .every((e) => !e.alreadyOpen || e.preset.type == first.type),
-      isTrue,
-    );
+  test('standard schedule proposes one visit and sees an open one', () {
+    // QA 155: one visit per milestone, as the service book has it.
+    final p = proposeVisit(1240, [task(2000)]);
+    expect(p.milestones, [1000, VinFastSchedule.intervalKm]);
+    expect(p.open, isNull, reason: 'an item milestone is not a visit');
+    final open = proposeVisit(1240, [
+      task(5000, type: ServiceType.inspection),
+    ]);
+    expect(open.open!.targetOdo, 5000);
   });
 
   test('charging week buckets only valid sessions into local days', () {

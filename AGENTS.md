@@ -322,9 +322,17 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - File trong OneDrive có lúc bị khóa khi đang đồng bộ (`OSError 22` lúc ghi): thử lại sau vài trăm ms, file không bị hỏng.
 - **QA 154 (13/11/2026, chủ app chọn):**
   - Mọi phiên sạc tối đa **7 giờ**, kể cả Sạc AI (`SESSION_MAX_MINUTES` máy chủ, `ChargeEstimator.maxMinutes` app). Dự đoán dài hơn bị từ chối; đừng nâng riêng một phía.
-  - Bảo dưỡng: đến hạn theo km **hoặc** ngày hẹn. Chỗ nào hỏi `urgency`/`isOverdue`/`isDueSoon` để hiển thị hay nhắc phải truyền `now`; không truyền thì chỉ tính km. Ngưỡng `dueSoonKm` 50, `dueSoonDays` 7.
-  - Hoàn thành một mốc chỉ qua `MaintenanceCompleteSheet` (ODO lúc làm bắt buộc, không vượt ODO xe quá 50 km; chi phí, ghi chú tùy chọn). Mốc kế tính từ `completedOdo`. Sửa, xóa, hoàn tác phải đặt lại cờ đã nhắc.
-  - Tổng kết năm (`MaintenanceYearSummary`) nói rõ bao nhiêu hạng mục có ghi chi phí; không có thì không hiện 0đ. Chu kỳ km trong `VinFastServiceCatalog` chưa đối chiếu với sổ bảo hành thật.
+  - Bảo dưỡng: đến hạn theo km **hoặc** ngày hẹn. Chỗ nào hỏi `urgency`/`isOverdue`/`isDueSoon` để hiển thị hay nhắc phải truyền `now`; không truyền thì chỉ tính km. Ngưỡng `dueSoonKm` 200 (QA 155), `dueSoonDays` 7.
+  - Hoàn thành một mốc chỉ qua `MaintenanceCompleteSheet` (ODO lúc làm bắt buộc, không vượt ODO xe quá 50 km; chi phí, ghi chú tùy chọn). Mốc kế là mốc sau của sổ tính từ `completedOdo` (QA 155). Sửa, xóa, hoàn tác phải đặt lại cờ đã nhắc.
+  - Tổng kết năm (`MaintenanceYearSummary`) nói rõ bao nhiêu hạng mục có ghi chi phí; không có thì không hiện 0đ. Chu kỳ đã theo sổ Feliz S (QA 155).
+- **QA 155 (13/11/2026) — bảo dưỡng theo sổ tay:**
+  - Lịch định kỳ là `VinFastSchedule` (sổ Feliz S mục 6.1.2: 1 000 km / tháng 1, rồi mỗi 5 000 km / 6 tháng, 19 hạng mục mỗi lần, chỉ kiểm tra và bôi trơn). Đừng thêm chu kỳ riêng cho từng hạng mục hay mốc thay phụ tùng khi không có nguồn.
+  - "Tạo lịch chuẩn" tạo **một** mốc `ServiceType.inspection` cho mỗi lần; danh sách việc lấy từ `VinFastSchedule.workAt`. `dueSoonKm` là 200.
+  - Form thêm mốc: ô nhập trước, chọn loại thì tự điền (`_applyType`), không ghi đè chữ đã gõ.
+- **QA 156 (13/11/2026) — quét đồng hồ:**
+  - Khung camera và bài đo đều đọc qua `SevenSegmentReader.scanFrame` (kéo sáng, xoay thẳng, dò lại vị trí kính bằng `fitWindow`, rồi đọc theo vùng). Đổi bộ đọc thì chạy `test/unit/qa156_scan_bench_test.dart` (`SCAN_BENCH_N`, `SCAN_BENCH_SPREAD`, `SCAN_BENCH_VERBOSE=1`) và so số trước sau; ngưỡng test: sai ≤ 1%, đúng ≥ 95%.
+  - Thà không có số còn hơn số sai: hình cỡ chữ số không giải mã được (`unreadGlyph`) cạnh một số, mảnh cao lệch, hay hai số tranh phiếu đều làm khung đó bỏ số. Đừng nới các chốt này để tăng tỉ lệ "đọc được".
+  - Phép đo hiện chỉ dựa trên một ảnh thật của một xe; số liệu không phải độ chính xác ngoài đời.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

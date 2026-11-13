@@ -22,20 +22,20 @@ void main() {
   );
 
   group('VinFastServiceCatalog.nextAfter', () {
-    test('offers the next interval from where the scooter is now', () {
+    test('offers the visit after the one the scooter is at', () {
       final done = task('a', ServiceType.brakeLever, 1000, done: true);
       final next = VinFastServiceCatalog.nextAfter(
         done,
         currentOdo: 1240,
         all: [done],
       )!;
-      expect(next.targetOdo, 2240);
+      expect(next.targetOdo, 5000);
       expect(next.taskId, isNull);
       expect(next.serviceType, ServiceType.brakeLever);
       expect(next.title, 'Tay phanh');
     });
 
-    test('done early: counts from the milestone, not from the odometer', () {
+    test('done early: still the visit after that milestone', () {
       final done = task('a', ServiceType.brakeLever, 1000, done: true);
       expect(
         VinFastServiceCatalog.nextAfter(
@@ -43,7 +43,7 @@ void main() {
           currentOdo: 900,
           all: [done],
         )!.targetOdo,
-        2000,
+        5000,
       );
     });
 

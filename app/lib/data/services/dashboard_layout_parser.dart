@@ -63,11 +63,17 @@ abstract final class DashboardLayoutParser {
   /// treated as a misread (a long trip between two readings).
   static const double maxOdoJumpKm = 3000;
 
+  /// A digit-sized shape the segment reader could not decode (QA 156).
+  static const unreadGlyph = '?';
+
   static DashboardLayoutReading parse(
     List<OcrToken> tokens, {
     double? lastOdoKm,
   }) {
-    final items = [for (final t in tokens) _Item.from(t)];
+    final items = [
+      for (final t in tokens)
+        if (t.text != unreadGlyph) _Item.from(t),
+    ];
     final percents = items.where((i) => i.isPercent).toList();
     final speedLabels = items.where((i) => i.isSpeedLabel).toList();
     final kmLabels = items.where((i) => i.isKmLabel).toList();
@@ -245,6 +251,114 @@ abstract final class DashboardLayoutParser {
   /// The most an ODO may run ahead of the last known one (QA 149).
   static const maxOdoLeapKm = 3000.0;
 
+  /// QA 156: where the template's glass really is. The owner holds the
+  /// phone roughly on the outline, never exactly: a window a little low
+  /// put the temperature "31" in the ODO zone (ODO read 31, or
+  /// 481831). The numbers themselves say where the glass is: the speed
+  /// digits are the tall ones in the middle, the "C" ends the bottom
+  /// row, the "%" follows the top-left number. Of the windows around
+  /// [window] (moved up to 16 % of its size, 0.75 to 1.3 times as big),
+  /// the one that puts the most of these in their zones wins; ties stay
+  /// with the window nearest the guide.
+  static Rect fitWindow(
+    List<List<OcrToken>> passes, {
+    required DashboardTemplate template,
+    required Rect window,
+  }) {
+    final digit = RegExp(r'\d');
+    final tokens = [
+      for (final p in passes)
+        for (final t in p)
+          if (t.text != unreadGlyph) t,
+    ];
+    if (tokens.isEmpty) return window;
+    const scales = [0.75, 0.84, 0.92, 1.0, 1.08, 1.18, 1.3];
+    var best = window;
+    var bestScore = double.negativeInfinity;
+    for (final scale in scales) {
+      final w = window.width * scale, h = window.height * scale;
+      for (var ix = -4; ix <= 4; ix++) {
+        for (var iy = -4; iy <= 4; iy++) {
+          final candidate = Rect.fromCenter(
+            center: window.center.translate(
+              ix * 0.04 * window.width,
+              iy * 0.04 * window.height,
+            ),
+            width: w,
+            height: h,
+          );
+          Rect zone(Rect z) => Rect.fromLTRB(
+            candidate.left + z.left * w,
+            candidate.top + z.top * h,
+            candidate.left + z.right * w,
+            candidate.top + z.bottom * h,
+          );
+          final soc = zone(template.soc), odo = zone(template.odo);
+          final temp = zone(template.temp), speed = zone(template.ignore);
+          var socHit = false, odoHit = false, tempHit = false;
+          var speedHit = false, cHit = false, percentHit = false;
+          var misplaced = 0;
+          for (final t in tokens) {
+            final c = t.box.center;
+            final share = t.box.height / h;
+            final small = share >= minDigitHeight && share <= maxDigitHeight;
+            final isDigit = digit.hasMatch(t.text);
+            final hasC = t.text.contains('C');
+            if (t.text == '%') {
+              // Just right of the % zone, on its row.
+              if (c.dx > soc.center.dx &&
+                  c.dx < soc.right + 0.10 * w &&
+                  c.dy > soc.top &&
+                  c.dy < soc.bottom + 0.03 * h) {
+                percentHit = true;
+              }
+              continue;
+            }
+            if (!isDigit) continue;
+            if (speed.contains(c)) {
+              if (share > 0.17 && share < 0.30) speedHit = true;
+              continue;
+            }
+            if (share >= 0.17) {
+              // Speed-sized digits outside the speed zone.
+              if (soc.contains(c) || odo.contains(c) || temp.contains(c)) {
+                misplaced++;
+              }
+              continue;
+            }
+            if (!small) continue;
+            if (temp.contains(c)) {
+              tempHit = true;
+              if (hasC) cHit = true;
+            } else if (soc.contains(c)) {
+              socHit = true;
+              if (hasC) misplaced++;
+            } else if (odo.contains(c)) {
+              odoHit = true;
+              if (hasC) misplaced++;
+            }
+          }
+          final score =
+              (socHit ? 1.0 : 0) +
+              (odoHit ? 1.0 : 0) +
+              (tempHit ? 1.0 : 0) +
+              (speedHit ? 1.5 : 0) +
+              (cHit ? 1.5 : 0) +
+              (percentHit ? 1.0 : 0) -
+              2.0 * misplaced -
+              // Nearest the guide on a tie.
+              0.02 * (ix.abs() + iy.abs()) -
+              0.3 * (scale - 1).abs();
+          if (score > bestScore) {
+            bestScore = score;
+            best = candidate;
+          }
+        }
+      }
+    }
+    return best;
+  }
+
   /// Reads the numbers by zone when the owner lined the cluster up with
   /// [template] (QA 142). [window] is the template's glass inside the
   /// image the [tokens] come from. Each zone's digits are joined left to
@@ -270,6 +384,9 @@ abstract final class DashboardLayoutParser {
     bool digitSized(Rect box) =>
         box.height >= minDigitHeight * window.height &&
         box.height <= maxDigitHeight * window.height;
+    // QA 156: a zone with an unread digit in line with its number has
+    // lost a digit ("68" → "8"). No number beats a wrong one.
+    final broken = <Rect>{};
     ({String digits, Rect box})? read(Rect area) {
       final inside = [
         for (final t in tokens)
@@ -280,6 +397,36 @@ abstract final class DashboardLayoutParser {
             t,
       ]..sort((a, b) => a.box.left.compareTo(b.box.left));
       if (inside.isEmpty) return null;
+      // QA 156: one number is one row. Two rows in a zone (the ODO and
+      // the temperature under it) were joined into "481831": keep the
+      // row with the most digits.
+      final rows = <List<OcrToken>>[];
+      for (final t in inside) {
+        final row = rows.where(
+          (r) =>
+              (r.first.box.center.dy - t.box.center.dy).abs() <
+              0.5 * math.max(r.first.box.height, t.box.height),
+        );
+        row.isEmpty ? rows.add([t]) : row.first.add(t);
+      }
+      if (rows.length > 1) {
+        int count(List<OcrToken> r) => r
+            .map((t) => t.text.replaceAll(RegExp(r'\D'), '').length)
+            .reduce((a, b) => a + b);
+        rows.sort((a, b) => count(b).compareTo(count(a)));
+        if (count(rows[0]) == count(rows[1])) return null;
+        inside
+          ..clear()
+          ..addAll(rows.first);
+      }
+      // QA 156: the digits of one number stand equally tall. A piece much
+      // taller than the rest is two glyphs run together by glare ("18"
+      // with the label under it decoded as a "9": ODO 4818 read 489).
+      final tall = [for (final t in inside) t.box.height]..sort();
+      if (tall.last > 1.3 * tall[(tall.length - 1) ~/ 2]) {
+        broken.add(area);
+        return null;
+      }
       final digits = inside
           .map((t) => t.text.replaceAll(RegExp(r'\D'), ''))
           .join();
@@ -288,12 +435,33 @@ abstract final class DashboardLayoutParser {
       for (final t in inside.skip(1)) {
         box = box.expandToInclude(t.box);
       }
+      final digitH =
+          inside.map((t) => t.box.height).reduce((a, b) => a + b) /
+          inside.length;
+      for (final t in tokens) {
+        if (t.text != unreadGlyph || ignore.contains(t.box.center)) continue;
+        final overlap =
+            math.min(t.box.bottom, box.bottom) - math.max(t.box.top, box.top);
+        if (area.inflate(0.03 * window.width).contains(t.box.center) &&
+            t.box.height >= 0.6 * digitH &&
+            t.box.height <= 1.5 * digitH &&
+            overlap >= 0.5 * math.min(t.box.height, box.height) &&
+            // Beside the number, within about two digits of it.
+            t.box.right >= box.left - 1.6 * digitH &&
+            t.box.left <= box.right + 1.6 * digitH) {
+          broken.add(area);
+          return null;
+        }
+      }
       return (digits: digits, box: box);
     }
 
-    final socRead = read(zone(template.soc));
-    final odoRead = read(zone(template.odo));
-    final tempRead = read(zone(template.temp));
+    final socZone = zone(template.soc);
+    final odoZone = zone(template.odo);
+    final tempZone = zone(template.temp);
+    final socRead = read(socZone);
+    final odoRead = read(odoZone);
+    final tempRead = read(tempZone);
 
     int? percent(String? digits) {
       if (digits == null || digits.isEmpty || digits.length > 3) return null;
@@ -337,9 +505,16 @@ abstract final class DashboardLayoutParser {
         box != null &&
         zone(z).inflate(slack).contains(box.center) &&
         digitSized(box);
-    final layoutSoc = near(layout.socBox, template.soc) ? layout.soc : null;
-    final layoutOdo = near(layout.odoBox, template.odo) ? layout.odoKm : null;
-    final layoutTemp = near(layout.tempBox, template.temp)
+    final layoutSoc =
+        !broken.contains(socZone) && near(layout.socBox, template.soc)
+        ? layout.soc
+        : null;
+    final layoutOdo =
+        !broken.contains(odoZone) && near(layout.odoBox, template.odo)
+        ? layout.odoKm
+        : null;
+    final layoutTemp =
+        !broken.contains(tempZone) && near(layout.tempBox, template.temp)
         ? layout.tempC
         : null;
     return DashboardLayoutReading(
@@ -432,6 +607,18 @@ abstract final class DashboardLayoutParser {
     }
     final best = score.entries.reduce((a, b) => a.value >= b.value ? a : b);
     if (best.value <= 0) return null;
+    // QA 156: passes that disagree on a digit ("68" at one threshold,
+    // "63" at another) mean a segment is on the edge. A number with as
+    // many digits and at least half the winner's votes voids the frame;
+    // the next one is a fifth of a second away.
+    for (final other in score.entries) {
+      if (other.key == best.key || other.value <= 0) continue;
+      // (A shorter number inside the winner has already given it its
+      // votes; what is left here really is another number.)
+      if (other.value * 2 >= best.value) {
+        return null;
+      }
+    }
     // Two or more passes agreeing is as good as a % / label next to it.
     final sure = confident[best.key]! || best.value >= 3;
     return (value: best.key, box: boxes[best.key], confident: sure);

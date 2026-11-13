@@ -57,8 +57,9 @@ void main() {
 
     test('the kilometre mark still decides on its own', () {
       expect(_task().urgency(6000, now: now), MaintenanceUrgency.overdue);
-      expect(_task().urgency(5950, now: now), MaintenanceUrgency.dueSoon);
-      expect(_task().urgency(5949, now: now), MaintenanceUrgency.upcoming);
+      // QA 155: due soon from 200 km out.
+      expect(_task().urgency(5800, now: now), MaintenanceUrgency.dueSoon);
+      expect(_task().urgency(5799, now: now), MaintenanceUrgency.upcoming);
       expect(
         _task(
           done: true,
@@ -80,16 +81,16 @@ void main() {
       expect(map['costVnd'], 150000);
     });
 
-    test('the next milestone is counted from where the work was done', () {
-      // Due at 5 000, done at 5 398: next at 10 398, not 10 000 or 10 398+.
+    test('the next milestone is the visit after the one that was done', () {
+      // QA 155: due at 5 000, done at 5 398: the book's next is 10 000.
       final done = _task(target: 5000, done: true, completedOdo: 5398);
       final next = VinFastServiceCatalog.nextAfter(
         done,
         currentOdo: 5600,
         all: [done],
       );
-      expect(next!.targetOdo, 5398 + 5000);
-      // An older task without a record keeps the old rule.
+      expect(next!.targetOdo, 10000);
+      // An older task without a record counts from the odometer.
       final old = _task(target: 5000, done: true);
       expect(
         VinFastServiceCatalog.nextAfter(
@@ -97,7 +98,7 @@ void main() {
           currentOdo: 5600,
           all: [old],
         )!.targetOdo,
-        5600 + 5000,
+        10000,
       );
     });
 

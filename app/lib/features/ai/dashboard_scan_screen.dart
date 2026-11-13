@@ -741,6 +741,11 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                           scanning: ready && !_done && !_capturing,
                           socLocked: _vote.socLocked != null,
                           odoLocked: _vote.odoLocked != null,
+                          hint: scanHint(
+                            socLocked: _vote.socLocked != null,
+                            odoLocked: _vote.odoLocked != null,
+                            blindFrames: _noSegments,
+                          ),
                         )
                       : _CameraProblemView(
                           denied: _problem == _CameraProblem.denied,
@@ -780,6 +785,22 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       ),
     );
   }
+}
+
+/// QA 156: the line under the window says what to do next. Null keeps
+/// the default (get the cluster inside the window).
+String? scanHint({
+  required bool socLocked,
+  required bool odoLocked,
+  required int blindFrames,
+}) {
+  if (socLocked && odoLocked) return 'Đã đọc xong';
+  if (socLocked) return 'Đã có % pin. Giữ yên để đọc ODO.';
+  if (odoLocked) return 'Đã có ODO. Giữ yên để đọc % pin.';
+  if (blindFrames >= 8) {
+    return 'Chưa thấy chữ số. Đưa điện thoại gần màn hình xe hơn.';
+  }
+  return null;
 }
 
 class _CameraProblemView extends StatelessWidget {
@@ -1012,17 +1033,18 @@ class _ScanTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // QA 156: a number being confirmed is not a caution (champagne).
     final color = locked
         ? LuxeColors.emerald
         : value != null
-        ? LuxeColors.champagne
+        ? context.planAccent
         : LuxeColors.platinumMid;
     final status = locked
         ? 'Đã khớp'
         : value != null
-        ? 'Đang xác nhận…'
+        ? 'Đang xác nhận'
         : scanning
-        ? 'Đang tìm…'
+        ? 'Đang tìm'
         : 'Chưa có';
     return Semantics(
       container: true,
@@ -1179,10 +1201,14 @@ class DashboardScanGuide extends StatefulWidget {
     this.scanning = false,
     this.socLocked = false,
     this.odoLocked = false,
+    this.hint,
   });
 
   final bool ready;
   final DashboardTemplate? template;
+
+  /// What to do next, under the window (QA 156); null = the default.
+  final String? hint;
 
   /// Frames are being read: the reading light runs.
   final bool scanning;
@@ -1259,6 +1285,7 @@ class _DashboardScanGuideState extends State<DashboardScanGuide>
         socLocked: widget.socLocked,
         odoLocked: widget.odoLocked,
         accent: context.planAccent,
+        hint: widget.hint,
       ),
       child: const SizedBox.expand(),
     ),
@@ -1273,10 +1300,12 @@ class _GuidePainter extends CustomPainter {
     this.light,
     this.socLocked = false,
     this.odoLocked = false,
+    this.hint,
   });
 
   final bool ready;
   final DashboardTemplate? template;
+  final String? hint;
 
   /// 0..1 of the reading light's pass, null when it is not running.
   final double? light;
@@ -1415,9 +1444,13 @@ class _GuidePainter extends CustomPainter {
 
     final hint = TextPainter(
       text: TextSpan(
-        text: t == null
-            ? 'Đưa số % pin và ODO vào khung'
-            : 'Căn viền màn hình xe trùng khung · ${t.label}',
+        // QA 156: the reader finds the glass itself; the owner only has
+        // to get the whole cluster inside the window.
+        text:
+            this.hint ??
+            (t == null
+                ? 'Đưa số % pin và ODO vào khung'
+                : 'Đưa cả màn hình xe vào trong khung · ${t.label}'),
         style: const TextStyle(color: LuxeColors.platinumHi, fontSize: 14),
       ),
       textAlign: TextAlign.center,
@@ -1455,17 +1488,17 @@ class _GuidePainter extends CustomPainter {
       (t.temp, '°C PIN', false),
     ]) {
       final box = RRect.fromRectAndRadius(zone(z), const Radius.circular(12));
-      final color = locked ? LuxeColors.emerald : LuxeColors.champagne;
+      final color = locked ? LuxeColors.emerald : LuxeColors.platinumHi;
       canvas.drawRRect(
         box,
-        Paint()..color = color.withValues(alpha: locked ? 0.16 : 0.07),
+        Paint()..color = color.withValues(alpha: locked ? 0.16 : 0.05),
       );
       canvas.drawRRect(
         box,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = locked ? 1.8 : 1.3
-          ..color = color.withValues(alpha: locked ? 0.95 : 0.75),
+          ..color = color.withValues(alpha: locked ? 0.95 : 0.5),
       );
       // The zone's name on a small pill above it.
       final text = TextPainter(
@@ -1501,6 +1534,7 @@ class _GuidePainter extends CustomPainter {
       old.light != light ||
       old.socLocked != socLocked ||
       old.odoLocked != odoLocked ||
+      old.hint != hint ||
       old.accent != accent;
 }
 
@@ -1671,7 +1705,8 @@ class _FrameJob {
   final Rect? window;
   final String? templateId;
 
-  GrayCrop _crop({int maxSide = 720}) => GrayImage.crop(
+  GrayCrop _crop({int maxSide = SevenSegmentReader.frameSide}) =>
+      GrayImage.crop(
     bytes,
     width: width,
     height: height,
@@ -1691,10 +1726,6 @@ class _FrameJob {
     try {
       return await Isolate.run(() {
         final crop = job._crop();
-        final passes = SevenSegmentReader.readPasses(crop.image);
-        final hasDigits = passes.any(
-          (p) => p.any((t) => RegExp(r'\d').hasMatch(t.text)),
-        );
         final template = DashboardTemplate.byId(job.templateId);
         final w = job.window;
         final window = w == null
@@ -1705,17 +1736,14 @@ class _FrameJob {
                 w.right * crop.image.width,
                 w.bottom * crop.image.height,
               );
-        final r = DashboardLayoutParser.combine([
-          for (final p in passes)
-            template != null && window != null
-                ? DashboardLayoutParser.parseTemplate(
-                    p,
-                    template: template,
-                    window: window,
-                    lastOdoKm: lastOdoKm,
-                  )
-                : DashboardLayoutParser.parse(p, lastOdoKm: lastOdoKm),
-        ]);
+        final scan = SevenSegmentReader.scanFrame(
+          crop.image,
+          template: template,
+          window: window,
+          lastOdoKm: lastOdoKm,
+        );
+        final r = scan.reading;
+        final hasDigits = scan.hasDigits;
         return (
           reading: DashboardLayoutReading(
             soc: r.soc,

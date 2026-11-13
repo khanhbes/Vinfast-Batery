@@ -158,8 +158,8 @@ class _MaintenanceCompleteSheetState extends State<MaintenanceCompleteSheet> {
               eyebrow: 'Đã làm xong',
               title: widget.task.title,
               caption:
-                  'Ghi lại để mốc kế tiếp được tính từ đúng chỗ và xe có sổ '
-                  'bảo dưỡng.',
+                  'Ghi lại để xe có sổ bảo dưỡng và mốc kế tiếp được đề xuất '
+                  'đúng.',
             ),
             const SizedBox(height: 14),
             TextField(
@@ -226,7 +226,9 @@ class _MaintenanceCompleteSheetState extends State<MaintenanceCompleteSheet> {
               maxLength: 200,
               style: const TextStyle(color: LuxeColors.text, fontSize: 14),
               decoration: const InputDecoration(
-                labelText: 'Ghi chú (nơi làm, phụ tùng; không bắt buộc)',
+                // QA 155: the long label was cut off at 360 dp.
+                labelText: 'Ghi chú (không bắt buộc)',
+                hintText: 'Nơi làm, phụ tùng đã thay',
                 prefixIcon: Icon(Icons.notes_rounded, size: 20),
               ),
             ),

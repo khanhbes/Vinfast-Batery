@@ -1,299 +1,450 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
-import '../../../core/utils/number_text.dart';
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/theme/plan_style.dart';
+import '../../../core/utils/number_text.dart';
+import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/widgets/luxe_submit_button.dart';
 import '../../../data/models/maintenance_task_model.dart';
 import '../vinfast_service_catalog.dart';
-import '../../../core/widgets/luxe_kit.dart';
-import '../../../core/theme/plan_style.dart';
 
-/// One proposed milestone from the VinFast service book.
-class ScheduleProposal {
-  const ScheduleProposal(this.preset, this.targetOdo, this.alreadyOpen);
-  final VinFastServicePreset preset;
-  final int targetOdo;
+/// The periodic visit the service book asks for next (QA 155).
+class VisitProposal {
+  const VisitProposal({
+    required this.milestones,
+    required this.currentOdo,
+    this.open,
+    this.suggestedDate,
+  });
 
-  /// An open task of this type exists: proposed but unticked by default.
-  final bool alreadyOpen;
+  /// One milestone, or two when the first is already behind the odometer
+  /// (the owner says which one they are planning).
+  final List<int> milestones;
+  final int currentOdo;
+
+  /// An open periodic visit already exists: nothing to create.
+  final MaintenanceTaskModel? open;
+
+  /// The date the book pairs with the first milestone, known only from a
+  /// recorded earlier visit.
+  final DateTime? suggestedDate;
 }
 
-/// Next multiple of each preset's interval above [currentOdo].
-List<ScheduleProposal> proposeSchedule(
-  int currentOdo,
-  List<MaintenanceTaskModel> existing,
-) {
-  final openTypes = {
-    for (final t in existing)
-      if (!t.isCompleted) t.serviceType,
-  };
-  return [
-    for (final p in VinFastServiceCatalog.presets)
-      ScheduleProposal(
-        p,
-        ((currentOdo ~/ p.suggestedOdoInterval) + 1) * p.suggestedOdoInterval,
-        openTypes.contains(p.type),
-      ),
-  ];
+/// QA 155: the book plans visits (1 000 km, then every 5 000 km or 6
+/// months), not twenty separate items. This used to create one milestone
+/// per item at intervals the book does not have.
+VisitProposal proposeVisit(int currentOdo, List<MaintenanceTaskModel> existing) {
+  MaintenanceTaskModel? open;
+  MaintenanceTaskModel? last;
+  for (final t in existing) {
+    if (!VinFastSchedule.isVisit(t)) continue;
+    if (!t.isCompleted) {
+      if (open == null || t.targetOdo < open.targetOdo) open = t;
+    } else if (last == null || _doneOdo(t) > _doneOdo(last)) {
+      last = t;
+    }
+  }
+  final first = VinFastSchedule.proposed(
+    currentOdo: currentOdo,
+    lastDoneOdo: last == null ? null : _doneOdo(last),
+  );
+  final lastDate = last?.completedDate?.toLocal();
+  return VisitProposal(
+    milestones: [
+      first,
+      if (first <= currentOdo) VinFastSchedule.after(first),
+    ],
+    currentOdo: currentOdo,
+    open: open,
+    suggestedDate: last == null || lastDate == null
+        ? null
+        : VinFastSchedule.addMonths(
+            lastDate,
+            VinFastSchedule.monthsToNext(
+              VinFastSchedule.nearest(_doneOdo(last)),
+            ),
+          ),
+  );
 }
 
-/// Preview → tick → create. Nothing is written until the user confirms.
+int _doneOdo(MaintenanceTaskModel t) => t.completedOdo ?? t.targetOdo;
+
+/// What the sheet hands back to be saved.
+typedef VisitDraft = ({int milestone, DateTime? date});
+
 abstract final class VinFastScheduleSheet {
+  /// Preview, then create one milestone. Nothing is written until the
+  /// owner confirms. Returns the created milestone, or null.
   static Future<int?> show(
     BuildContext context, {
     required int currentOdo,
     required List<MaintenanceTaskModel> existing,
-    required Future<void> Function(List<ScheduleProposal> picked) onCreate,
-  }) => showModalBottomSheet<int>(
-    context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: luxeSheetBarrier,
-    builder: (context) => Theme(
-      data: LuxeTheme.of(context),
-      child: _Sheet(
-        proposals: proposeSchedule(currentOdo, existing),
-        currentOdo: currentOdo,
-        onCreate: onCreate,
-      ),
+    required Future<String?> Function(VisitDraft draft) onCreate,
+    DateTime Function()? now,
+  }) => showLuxeSheet<int>(
+    context,
+    builder: (_) => VisitSheet(
+      proposal: proposeVisit(currentOdo, existing),
+      onCreate: onCreate,
+      now: now,
+    ),
+  );
+
+  /// The list of work of one visit, read only (at the garage).
+  static Future<void> showChecklist(
+    BuildContext context, {
+    required int milestone,
+  }) => showLuxeSheet<void>(
+    context,
+    builder: (_) => VisitSheet(
+      proposal: VisitProposal(milestones: [milestone], currentOdo: 0),
+      readOnly: true,
     ),
   );
 }
 
-class _Sheet extends StatefulWidget {
-  const _Sheet({
-    required this.proposals,
-    required this.currentOdo,
-    required this.onCreate,
+class VisitSheet extends StatefulWidget {
+  const VisitSheet({
+    super.key,
+    required this.proposal,
+    this.onCreate,
+    this.readOnly = false,
+    this.now,
   });
-  final List<ScheduleProposal> proposals;
-  final int currentOdo;
-  final Future<void> Function(List<ScheduleProposal>) onCreate;
+
+  final VisitProposal proposal;
+  final bool readOnly;
+  final DateTime Function()? now;
+
+  /// Saves; returns the reason when it failed (the sheet stays open).
+  final Future<String?> Function(VisitDraft draft)? onCreate;
 
   @override
-  State<_Sheet> createState() => _SheetState();
+  State<VisitSheet> createState() => _VisitSheetState();
 }
 
-class _SheetState extends State<_Sheet> {
-  late final Set<int> _picked = {
-    for (var i = 0; i < widget.proposals.length; i++)
-      if (!widget.proposals[i].alreadyOpen) i,
-  };
-  bool _busy = false;
+class _VisitSheetState extends State<VisitSheet> {
+  late int _milestone = widget.proposal.milestones.first;
+  late DateTime? _date = widget.proposal.suggestedDate;
   String? _error;
 
-  Future<void> _create() async {
-    if (_picked.isEmpty || _busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    HapticFeedback.mediumImpact();
-    try {
-      final picked = [
-        for (final i in _picked.toList()..sort()) widget.proposals[i],
-      ];
-      await widget.onCreate(picked);
-      if (mounted) Navigator.of(context).pop(picked.length);
-    } on Object {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = 'Chưa tạo được lịch. Kiểm tra kết nối rồi thử lại.';
-        });
-      }
+  DateTime get _today {
+    final now = (widget.now ?? DateTime.now)();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  Future<void> _pickDate() async {
+    final first = _today.subtract(const Duration(days: 30));
+    final last = _today.add(const Duration(days: 365 * 2));
+    final initial = _date ?? _today;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(first)
+          ? first
+          : initial.isAfter(last)
+          ? last
+          : initial,
+      firstDate: first,
+      lastDate: last,
+      helpText: 'Ngày hẹn',
+    );
+    if (picked != null && mounted) setState(() => _date = picked);
+  }
+
+  Future<bool> _create() async {
+    setState(() => _error = null);
+    final error = await widget.onCreate!((milestone: _milestone, date: _date));
+    if (!mounted) return error == null;
+    if (error != null) {
+      setState(() => _error = error);
+      return false;
     }
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) Navigator.of(context).pop(_milestone);
+    });
+    return true;
   }
 
   @override
   Widget build(BuildContext context) {
-    final groups = <String, List<int>>{};
-    for (var i = 0; i < widget.proposals.length; i++) {
-      groups.putIfAbsent(widget.proposals[i].preset.group, () => []).add(i);
+    final p = widget.proposal;
+    final open = widget.readOnly ? null : p.open;
+    final canCreate = !widget.readOnly && open == null;
+    final work = VinFastSchedule.workAt(_milestone);
+    final groups = <String, List<VisitWork>>{};
+    for (final w in work) {
+      groups.putIfAbsent(w.preset.group, () => []).add(w);
     }
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.86,
-      maxChildSize: 0.95,
-      minChildSize: 0.5,
-      builder: (context, scroll) => Container(
-        decoration: const BoxDecoration(
-          color: LuxeColors.sheet,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border(top: BorderSide(color: LuxeColors.hairline)),
-        ),
+    final behind = p.currentOdo - _milestone;
+    final first = _milestone < VinFastSchedule.intervalKm;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        4,
+        20,
+        20 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: SingleChildScrollView(
         child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: 10),
-            Container(
-              width: 38,
-              height: 4,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(2),
-                color: LuxeColors.hairlineStrong,
-              ),
+            LuxeSheetHeader(
+              eyebrow: 'Sổ tay VinFast',
+              title: VinFastSchedule.visitTitle(_milestone),
+              caption:
+                  'Mốc ${groupThousands(_milestone)} km hoặc tháng thứ '
+                  '${VinFastSchedule.monthOf(_milestone)} kể từ khi mua xe, '
+                  'điều kiện nào đến trước.',
             ),
-            Expanded(
-              child: ListView(
-                controller: scroll,
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-                children: [
-                  const Text('SỔ TAY VINFAST', style: LuxeText.eyebrow),
-                  const SizedBox(height: 6),
-                  const Text('Tạo lịch chuẩn', style: LuxeText.title),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Mốc kế tiếp của từng hạng mục, tính từ ODO hiện tại ${groupThousands(widget.currentOdo)} km. Bỏ chọn mục bạn không muốn tạo.',
-                    style: LuxeText.body,
+            if (canCreate && p.milestones.length > 1) ...[
+              const SizedBox(height: 14),
+              Text(
+                'Xe đang ở ${groupThousands(p.currentOdo)} km, đã qua mốc '
+                '${groupThousands(p.milestones.first)} km. Bạn lên lịch cho '
+                'lần nào?',
+                style: LuxeText.body,
+              ),
+              const SizedBox(height: 10),
+              for (final m in p.milestones)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _MilestoneChoice(
+                    key: ValueKey('visit-choice-$m'),
+                    selected: m == _milestone,
+                    title: 'Mốc ${groupThousands(m)} km',
+                    caption: m <= p.currentOdo
+                        ? 'Chưa làm, đã qua ${groupThousands(p.currentOdo - m)} km'
+                        : 'Đã làm mốc trước, còn ${groupThousands(m - p.currentOdo)} km',
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() => _milestone = m);
+                    },
                   ),
-                  if (widget.currentOdo == 0) ...[
-                    const SizedBox(height: 10),
-                    const Text(
-                      'ODO đang là 0 km. Nếu xe đã chạy, hãy cập nhật ODO trước để mốc không bị sớm.',
+                ),
+            ] else if (canCreate && p.currentOdo > 0 && behind < 0) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Xe đang ở ${groupThousands(p.currentOdo)} km, còn '
+                '${groupThousands(-behind)} km.',
+                style: LuxeText.body,
+              ),
+            ],
+            if (!widget.readOnly && p.currentOdo == 0) ...[
+              const SizedBox(height: 10),
+              const LuxeNotice(
+                icon: Icons.speed_rounded,
+                color: LuxeColors.champagne,
+                message:
+                    'Chưa có số ODO của xe. Nếu xe đã chạy, hãy cập nhật ODO '
+                    'trước để chọn đúng mốc.',
+              ),
+            ],
+            if (open != null) ...[
+              const SizedBox(height: 12),
+              LuxeNotice(
+                key: const ValueKey('visit-open'),
+                message:
+                    'Đã có "${open.title}" đang mở. Đánh dấu đã làm xong thì '
+                    'app đề xuất mốc kế tiếp.',
+              ),
+            ],
+            if (canCreate) ...[
+              const SizedBox(height: 14),
+              Semantics(
+                button: true,
+                label: _date == null
+                    ? 'Ngày hẹn, chưa chọn'
+                    : 'Ngày hẹn ${DateFormat('dd/MM/yyyy').format(_date!)}',
+                excludeSemantics: true,
+                child: InkWell(
+                  key: const ValueKey('visit-date'),
+                  borderRadius: BorderRadius.circular(14),
+                  onTap: _pickDate,
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Ngày hẹn (không bắt buộc)',
+                      prefixIcon: const Icon(Icons.event_rounded, size: 20),
+                      helperText: p.suggestedDate != null
+                          ? '${VinFastSchedule.intervalMonths} tháng sau lần '
+                                'bảo dưỡng trước. Bạn đổi được.'
+                          : 'Chọn ngày nếu bạn muốn được nhắc cả theo ngày.',
+                      helperMaxLines: 3,
+                    ),
+                    child: Text(
+                      _date == null
+                          ? 'Chưa chọn'
+                          : DateFormat('dd/MM/yyyy').format(_date!),
                       style: TextStyle(
-                        color: LuxeColors.champagne,
-                        fontSize: 13,
-                        height: 1.4,
+                        color: _date == null
+                            ? LuxeColors.muted
+                            : LuxeColors.text,
+                        fontSize: 15.5,
                       ),
                     ),
-                  ],
-                  for (final entry in groups.entries) ...[
-                    const SizedBox(height: 18),
-                    Text(
-                      entry.key.toUpperCase(),
-                      style: LuxeText.label.copyWith(letterSpacing: 1.4),
-                    ),
-                    const SizedBox(height: 8),
-                    for (final i in entry.value) _row(i),
-                  ],
-                ],
-              ),
-            ),
-            DecoratedBox(
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: LuxeColors.glass)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_error != null)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            _error!,
-                            style: const TextStyle(
-                              color: LuxeColors.danger,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: _picked.isEmpty || _busy ? null : _create,
-                          child: _busy
-                              ? const SizedBox.square(
-                                  dimension: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFF2A2C30),
-                                  ),
-                                )
-                              : Text(
-                                  _picked.isEmpty
-                                      ? 'Chọn ít nhất một hạng mục'
-                                      : 'Tạo ${_picked.length} mốc bảo dưỡng',
-                                ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
+            ],
+            const SizedBox(height: 18),
+            Text(
+              first
+                  ? 'LẦN ĐẦU · ${work.length} HẠNG MỤC'
+                  : '${work.length} HẠNG MỤC Ở LẦN NÀY',
+              style: LuxeText.label.copyWith(letterSpacing: 1.4),
             ),
+            for (final entry in groups.entries) ...[
+              const SizedBox(height: 14),
+              Text(entry.key, style: LuxeText.caption),
+              const SizedBox(height: 2),
+              for (final w in entry.value) _WorkRow(work: w, first: first),
+            ],
+            const SizedBox(height: 14),
+            const Text(
+              'Theo ${VinFastSchedule.source}. Dòng xe khác có thể khác đôi '
+              'chút, hãy đối chiếu sổ của xe bạn. Sổ tay khuyên làm sớm hơn '
+              'khi thường đi đường ẩm ướt, bụi, ngập nước, dốc hoặc đường xấu.',
+              style: LuxeText.caption,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              LuxeNotice(
+                icon: Icons.error_outline_rounded,
+                color: LuxeColors.danger,
+                message: _error!,
+              ),
+            ],
+            if (canCreate) ...[
+              const SizedBox(height: 14),
+              LuxeSubmitButton(
+                key: const ValueKey('visit-create'),
+                label: 'Tạo mốc ${groupThousands(_milestone)} km',
+                busyLabel: 'Đang tạo',
+                icon: Icons.add_rounded,
+                onPressed: _create,
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _row(int i) {
-    final p = widget.proposals[i];
-    final on = _picked.contains(i);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Semantics(
-        checked: on,
-        label: '${p.preset.title}, mốc ${groupThousands(p.targetOdo)} km',
-        excludeSemantics: true,
-        child: Material(
-          type: MaterialType.transparency,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: _busy
-                ? null
-                : () {
-                    HapticFeedback.selectionClick();
-                    setState(() => on ? _picked.remove(i) : _picked.add(i));
-                  },
-            child: LuxeGlass(
-              selected: on,
-              radius: 16,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          p.preset.title,
-                          style: const TextStyle(
-                            color: LuxeColors.text,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          [
-                            if (p.preset.subtitle != null) p.preset.subtitle!,
-                            'mỗi ${groupThousands(p.preset.suggestedOdoInterval)} km',
-                            if (p.alreadyOpen) 'đã có mốc đang mở',
-                          ].join(' · '),
-                          style: LuxeText.caption,
-                        ),
-                      ],
+class _MilestoneChoice extends StatelessWidget {
+  const _MilestoneChoice({
+    super.key,
+    required this.selected,
+    required this.title,
+    required this.caption,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String title;
+  final String caption;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: '$title. $caption',
+    excludeSemantics: true,
+    child: Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: LuxeGlass(
+          selected: selected,
+          radius: 16,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: LuxeColors.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
+                    const SizedBox(height: 2),
+                    Text(caption, style: LuxeText.caption),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Icon(
+                selected
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: selected ? context.planAccent : LuxeColors.dim,
+                size: 22,
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _WorkRow extends StatelessWidget {
+  const _WorkRow({required this.work, required this.first});
+  final VisitWork work;
+  final bool first;
+
+  @override
+  Widget build(BuildContext context) {
+    final note = work.preset.from5kNote;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: LuxeColors.glass)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  work.preset.title,
+                  style: const TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 14,
+                    height: 1.3,
                   ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '${groupThousands(p.targetOdo)} km',
-                    style: TextStyle(
-                      color: on ? context.planAccent : LuxeColors.muted,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Icon(
-                    on
-                        ? Icons.check_circle_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: on ? context.planAccent : LuxeColors.dim,
-                    size: 22,
-                  ),
-                ],
+                ),
+                if (note != null && !first)
+                  Text('Gồm cả $note', style: LuxeText.caption),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: Text(
+              work.action,
+              textAlign: TextAlign.end,
+              style: const TextStyle(
+                color: LuxeColors.muted,
+                fontSize: 13,
+                height: 1.3,
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

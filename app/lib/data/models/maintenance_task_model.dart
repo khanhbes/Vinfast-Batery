@@ -85,8 +85,10 @@ class MaintenanceTaskModel {
   /// An appointment this close counts as due soon.
   static const dueSoonDays = 7;
 
-  /// A milestone this close counts as due soon.
-  static const dueSoonKm = 50;
+  /// A milestone this close counts as due soon. QA 155: 200 km, about
+  /// a week of riding, like [dueSoonDays]; 50 km was a day's notice
+  /// for a visit that comes every 5 000 km.
+  static const dueSoonKm = 200;
 
   MaintenanceTaskModel({
     this.taskId,
@@ -114,7 +116,7 @@ class MaintenanceTaskModel {
     return DateTime(date.year, date.month, date.day).difference(today).inDays;
   }
 
-  /// Sắp đến hạn: còn ≤ 50 km, hoặc (khi truyền [now]) ngày hẹn trong
+  /// Sắp đến hạn: còn ≤ [dueSoonKm], hoặc (khi truyền [now]) ngày hẹn trong
   /// vòng 7 ngày. Đã quá hạn cũng tính là sắp đến hạn, như trước.
   bool isDueSoon(int currentOdo, {DateTime? now}) {
     if (isCompleted) return false;

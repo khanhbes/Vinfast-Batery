@@ -83,7 +83,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(tester.takeException(), isNull);
       expect(find.text('Đã khớp'), findsOneWidget);
-      expect(find.text('Đang xác nhận…'), findsOneWidget);
+      expect(find.text('Đang xác nhận'), findsOneWidget);
       // Thousands use the narrow space of the whole app.
       expect(find.textContaining('4 818'), findsOneWidget);
       expect(find.byKey(const ValueKey('scan-note')), findsOneWidget);

@@ -14,7 +14,6 @@ import '../../data/services/account_reminder_service.dart';
 import 'widgets/odo_widgets.dart';
 import 'widgets/vinfast_schedule_sheet.dart';
 import '../../core/providers/app_providers.dart';
-import '../../core/theme/app_motion.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/error_state.dart';
 import '../../data/models/maintenance_task_model.dart';
@@ -359,6 +358,12 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
               onTap: () => _showAddEditDialog(context, task: task),
               onComplete: () => _completeTask(task),
               onDelete: () => _confirmDelete(task),
+              onChecklist: VinFastSchedule.isVisit(task)
+                  ? () => VinFastScheduleSheet.showChecklist(
+                      context,
+                      milestone: task.targetOdo,
+                    )
+                  : null,
             ),
           ),
         ),
@@ -395,7 +400,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
           if (noTasks) ...[
             const SizedBox(height: 6),
             const Text(
-              'Tạo nhanh toàn bộ lịch theo sổ tay VinFast, hoặc thêm từng mốc.',
+              'Tạo mốc bảo dưỡng định kỳ kế tiếp theo sổ tay VinFast, hoặc tự thêm mốc riêng.',
               textAlign: TextAlign.center,
               style: LuxeText.body,
             ),
@@ -500,21 +505,25 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       context,
       currentOdo: _currentOdo,
       existing: tasks,
-      onCreate: (picked) async {
-        for (final p in picked) {
+      onCreate: (draft) async {
+        try {
           await MaintenanceRepository.createMaintenanceTask(
             vehicleId: vehicleId,
-            title: p.preset.title,
-            description: p.preset.subtitle ?? '',
-            targetOdo: p.targetOdo,
-            serviceType: p.preset.type,
+            title: VinFastSchedule.visitTitle(draft.milestone),
+            description: VinFastSchedule.visitDescription(draft.milestone),
+            targetOdo: draft.milestone,
+            serviceType: ServiceType.inspection,
+            scheduledDate: draft.date,
           );
+          return null;
+        } catch (e) {
+          return AppErrorFormatter.format(e);
         }
       },
     );
-    if (created != null && created > 0 && mounted) {
+    if (created != null && mounted) {
       AppPopup.showMessage(
-        'Đã tạo $created mốc theo sổ tay VinFast',
+        'Đã tạo mốc bảo dưỡng định kỳ ${groupThousands(created)} km',
         kind: AppNoticeKind.success,
       );
     }
@@ -601,7 +610,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       actionLabel: 'Hoàn tác',
       action: () => _undoComplete(task),
     );
-    await _offerNext(task.copyWith(completedOdo: record.odo));
+    await _offerNext(
+      task.copyWith(completedOdo: record.odo, completedDate: record.date),
+    );
   }
 
   /// QA 150: a periodic service used to end with its one milestone. The
@@ -617,8 +628,10 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       context,
       title: 'Tạo mốc kế tiếp?',
       message:
-          '${done.title}: lần tới ở khoảng ${groupThousands(next.targetOdo)} km. '
-          'Bạn sửa được số km trước khi lưu.',
+          '${done.title}: theo sổ tay, lần tới ở mốc '
+          '${groupThousands(next.targetOdo)} km'
+          '${next.scheduledDate == null ? '' : ' hoặc ngày ${DateFormat('dd/MM/yyyy').format(next.scheduledDate!)}, điều kiện nào đến trước'}. '
+          'Bạn sửa được trước khi lưu.',
       confirmLabel: 'Tạo mốc',
       danger: false,
     );
@@ -665,15 +678,11 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
   }
 
   void _showAddEditDialog(BuildContext context, {MaintenanceTaskModel? task}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      // QA 150: the list scrolled under the status bar clock.
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => Theme(
-        data: LuxeTheme.of(context),
-        child: _MaintenanceDialog(
+    // QA 155: the same sheet frame as the rest of the app.
+    showLuxeSheet<void>(
+      context,
+      builder: (_) => Builder(
+        builder: (_) => _MaintenanceDialog(
           task: task,
           currentOdo: _currentOdo,
           onSave: (newTask) async {
@@ -738,7 +747,6 @@ extension on _UrgencyFilter {
 /// Luxe palette for the add/edit sheet and helpers (was AppColors).
 abstract final class _Lx {
   static const background = Color(0xFF0C0D0F);
-  static const card = LuxeColors.sheet;
   static const surfaceVariant = LuxeColors.raised;
   static const glassBorder = LuxeColors.hairline;
   static const success = LuxeColors.emerald;
@@ -827,6 +835,7 @@ class _TaskCard extends StatelessWidget {
     required this.onTap,
     required this.onComplete,
     required this.onDelete,
+    this.onChecklist,
   });
 
   final MaintenanceTaskModel task;
@@ -834,6 +843,9 @@ class _TaskCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onComplete;
   final VoidCallback onDelete;
+
+  /// The work of a periodic visit, for the garage (QA 155).
+  final VoidCallback? onChecklist;
 
   @override
   Widget build(BuildContext context) {
@@ -843,12 +855,10 @@ class _TaskCard extends StatelessWidget {
     final color = urgencyColor(urgency);
     final meta = _ServiceTypeMeta.of(task.serviceType);
     final remain = task.remainingKm(currentOdo);
-    final interval =
-        VinFastServiceCatalog.presets
-            .where((p) => p.type == task.serviceType)
-            .map((p) => p.suggestedOdoInterval)
-            .firstOrNull ??
-        1000;
+    // The first visit is 1 000 km from new; the rest are 5 000 apart.
+    final interval = task.targetOdo < VinFastSchedule.intervalKm
+        ? VinFastSchedule.firstVisitKm
+        : VinFastSchedule.intervalKm;
     final progress = task.isCompleted
         ? 1.0
         : (1 - remain / interval).clamp(0.0, 1.0);
@@ -955,10 +965,19 @@ class _TaskCard extends StatelessWidget {
                       Icons.more_vert_rounded,
                       color: LuxeColors.platinumMid,
                     ),
-                    onSelected: (v) => v == 'edit' ? onTap() : onDelete(),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Sửa')),
-                      PopupMenuItem(value: 'delete', child: Text('Xóa')),
+                    onSelected: (v) => switch (v) {
+                      'list' => onChecklist?.call(),
+                      'edit' => onTap(),
+                      _ => onDelete(),
+                    },
+                    itemBuilder: (_) => [
+                      if (onChecklist != null)
+                        const PopupMenuItem(
+                          value: 'list',
+                          child: Text('Xem hạng mục'),
+                        ),
+                      const PopupMenuItem(value: 'edit', child: Text('Sửa')),
+                      const PopupMenuItem(value: 'delete', child: Text('Xóa')),
                     ],
                   ),
                 ],
@@ -1161,7 +1180,7 @@ class _ServiceTypeMeta {
       case ServiceType.lightsHornDash:
         return const _ServiceTypeMeta(
           Icons.dashboard_rounded,
-          'Đèn / Còi / Đồng hồ',
+          'Đèn, còi, đồng hồ',
         );
 
       // ── Khung & khoá ──
@@ -1244,7 +1263,10 @@ class _ServiceTypeMeta {
       case ServiceType.transmissionService:
         return const _ServiceTypeMeta(Icons.settings_suggest_rounded, 'Hộp số');
       case ServiceType.inspection:
-        return const _ServiceTypeMeta(Icons.fact_check_rounded, 'Kiểm tra');
+        return const _ServiceTypeMeta(
+          Icons.fact_check_rounded,
+          'Bảo dưỡng định kỳ',
+        );
       case ServiceType.other:
         return const _ServiceTypeMeta(Icons.build_rounded, 'Khác');
     }
@@ -1347,17 +1369,12 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final preset = VinFastServiceCatalog.presetOf(_selectedType);
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
-      child: Container(
-        margin: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: _Lx.card,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: _Lx.glassBorder),
-        ),
+      child: SizedBox(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1393,13 +1410,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              if (widget.task?.taskId == null) ...[
-                _sectionLabel('Mẫu VinFast — chạm để tự điền'),
-                const SizedBox(height: 8),
-                _buildPresetSections(),
-                const SizedBox(height: 16),
-              ],
+              const SizedBox(height: 12),
               _buildSelectedTypeBadge(),
               const SizedBox(height: 14),
               _sectionLabel('Tên dịch vụ'),
@@ -1414,23 +1425,39 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               const SizedBox(height: 6),
               _buildField(
                 _odoCtrl,
-                hint: 'VD: 5000',
+                hint: 'VD: 10000',
                 icon: Icons.speed_rounded,
                 keyboardType: TextInputType.number,
+                fieldKey: const ValueKey('maintenance-form-odo'),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                [
+                  if (widget.currentOdo > 0)
+                    'Xe đang ở ${groupThousands(widget.currentOdo)} km.',
+                  if (preset != null || _selectedType == ServiceType.inspection)
+                    'Sổ tay VinFast: lần đầu 1 000 km, sau đó mỗi 5 000 km hoặc 6 tháng.',
+                ].join(' '),
+                style: LuxeText.caption,
               ),
               const SizedBox(height: 14),
-              _sectionLabel('Mô tả (tuỳ chọn)'),
+              _sectionLabel('Ngày hẹn (không bắt buộc)'),
+              const SizedBox(height: 6),
+              _buildDatePicker(),
+              const SizedBox(height: 6),
+              const Text(
+                'Có ngày hẹn thì mốc đến hạn theo km hoặc theo ngày, điều kiện nào đến trước.',
+                style: LuxeText.caption,
+              ),
+              const SizedBox(height: 14),
+              _sectionLabel('Ghi chú (không bắt buộc)'),
               const SizedBox(height: 6),
               _buildField(
                 _descCtrl,
-                hint: 'Ghi chú cho mốc bảo dưỡng',
+                hint: 'Việc cần làm, nơi làm',
                 icon: Icons.notes_rounded,
                 maxLines: 2,
               ),
-              const SizedBox(height: 14),
-              _sectionLabel('Ngày hẹn (tuỳ chọn)'),
-              const SizedBox(height: 6),
-              _buildDatePicker(),
               const SizedBox(height: 20),
               FilledButton(
                 onPressed: _saving ? null : _save,
@@ -1475,8 +1502,10 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
     required IconData icon,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
+    Key? fieldKey,
   }) {
     return TextField(
+      key: fieldKey,
       controller: controller,
       maxLines: maxLines,
       keyboardType: keyboardType,
@@ -1558,67 +1587,39 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
       context,
       builder: (ctx) => _TypePickerSheet(currentType: _selectedType),
     );
-    if (picked != null) {
-      setState(() => _selectedType = picked);
-    }
+    if (picked != null) _applyType(picked);
   }
 
-  /// Các section preset VinFast — nhóm theo hạng mục, scroll ngang.
-  Widget _buildPresetSections() {
-    final groups = VinFastServiceCatalog.grouped();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final entry in groups.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6, top: 6),
-            child: Text(
-              entry.key.toUpperCase(),
-              style: TextStyle(
-                color: _Lx.textTertiary,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ),
-          SizedBox(
-            height: 86,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: entry.value.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 8),
-              itemBuilder: (_, i) {
-                final preset = entry.value[i];
-                final meta = _ServiceTypeMeta.of(preset.type);
-                final selected =
-                    _selectedType == preset.type &&
-                    _titleCtrl.text.trim() == preset.title;
-                return _PresetCard(
-                  preset: preset,
-                  meta: meta,
-                  selected: selected,
-                  onTap: () => _applyPreset(preset),
-                ).appFadeSlideIn(index: i, duration: AppMotion.fast);
-              },
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
-      ],
-    );
-  }
+  String? _autoTitle;
+  String? _autoOdo;
 
-  void _applyPreset(VinFastServicePreset preset) {
+  /// QA 155: choosing an item of the service book fills the name and the
+  /// book's next milestone, unless the owner already typed their own.
+  /// (This replaces a strip of twenty preset cards above the fields.)
+  void _applyType(ServiceType type) {
     HapticFeedback.selectionClick();
+    final preset = VinFastServiceCatalog.presetOf(type);
     setState(() {
-      _selectedType = preset.type;
-      _titleCtrl.text = preset.title;
-      _descCtrl.text = preset.subtitle ?? _descCtrl.text;
-      // Gợi ý mốc ODO tiếp theo = ODO hiện tại + chu kỳ (làm tròn 100m).
-      final base = widget.currentOdo;
-      final next = ((base + preset.suggestedOdoInterval) / 100).round() * 100;
-      _odoCtrl.text = '$next';
+      _selectedType = type;
+      if (widget.task?.taskId != null) return;
+      final here = VinFastSchedule.proposed(currentOdo: widget.currentOdo);
+      final next = here <= widget.currentOdo
+          ? VinFastSchedule.after(here)
+          : here;
+      final title = type == ServiceType.inspection
+          ? VinFastSchedule.visitTitle(next)
+          : preset?.title;
+      if (title == null) return;
+      final typedTitle = _titleCtrl.text.trim();
+      if (typedTitle.isEmpty || typedTitle == _autoTitle) {
+        _titleCtrl.text = title;
+        _autoTitle = title;
+      }
+      final typedOdo = _odoCtrl.text.trim();
+      if (typedOdo.isEmpty || typedOdo == _autoOdo) {
+        _odoCtrl.text = '$next';
+        _autoOdo = '$next';
+      }
     });
   }
 
@@ -1630,14 +1631,19 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
           initialDate: _scheduledDate ?? DateTime.now(),
           firstDate: DateTime.now().subtract(const Duration(days: 30)),
           lastDate: DateTime.now().add(const Duration(days: 365 * 2)),
+          helpText: 'Ngày hẹn',
         );
         if (date != null) setState(() => _scheduledDate = date);
       },
       child: Container(
-        padding: const EdgeInsets.all(14),
+        // QA 155: 48 dp tall like the fields above; the clear button
+        // was a 16 dp target.
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.only(left: 14),
         decoration: BoxDecoration(
           color: _Lx.surfaceVariant,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _Lx.glassBorder),
         ),
         child: Row(
           children: [
@@ -1651,24 +1657,27 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               child: Text(
                 _scheduledDate != null
                     ? DateFormat('dd/MM/yyyy').format(_scheduledDate!)
-                    : 'Chọn ngày hẹn (tuỳ chọn)',
+                    : 'Chọn ngày',
                 style: TextStyle(
                   color: _scheduledDate != null
                       ? _Lx.textPrimary
-                      : _Lx.textTertiary,
-                  fontSize: 13,
+                      : _Lx.textHint,
+                  fontSize: 14,
                 ),
               ),
             ),
             if (_scheduledDate != null)
-              GestureDetector(
-                onTap: () => setState(() => _scheduledDate = null),
-                child: const Icon(
+              IconButton(
+                tooltip: 'Bỏ ngày hẹn',
+                onPressed: () => setState(() => _scheduledDate = null),
+                icon: const Icon(
                   Icons.close_rounded,
-                  color: _Lx.textTertiary,
-                  size: 16,
+                  color: _Lx.textSecondary,
+                  size: 18,
                 ),
-              ),
+              )
+            else
+              const SizedBox(width: 14),
           ],
         ),
       ),
@@ -1709,105 +1718,6 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-}
-
-// =============================================================================
-// Preset card (VinFast quick-fill)
-// =============================================================================
-
-class _PresetCard extends StatelessWidget {
-  final VinFastServicePreset preset;
-  final _ServiceTypeMeta meta;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PresetCard({
-    required this.preset,
-    required this.meta,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: AppMotion.fast,
-        curve: AppMotion.emphasized,
-        width: 150,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: selected ? meta.color.withAlpha(40) : _Lx.surfaceVariant,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? meta.color : Colors.transparent,
-            width: 1.4,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: meta.color.withAlpha(50),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(meta.icon, color: meta.color, size: 16),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _Lx.card,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '${(preset.suggestedOdoInterval / 1000).toStringAsFixed(preset.suggestedOdoInterval >= 1000 ? 0 : 1)}k',
-                    style: TextStyle(
-                      color: meta.color,
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              preset.title,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? meta.color : _Lx.textPrimary,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 2),
-            if (preset.subtitle != null)
-              Text(
-                preset.subtitle!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: _Lx.textSecondary,
-                  fontSize: 11.5,
-                  height: 1.25,
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -1886,7 +1796,9 @@ class _TypePickerSheet extends StatelessWidget {
     return GestureDetector(
       onTap: () => Navigator.pop(context, type),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        // QA 155: the chips were 36 dp tall.
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? meta.color.withAlpha(40) : _Lx.surfaceVariant,
           borderRadius: BorderRadius.circular(10),
@@ -1921,6 +1833,8 @@ class _TypePickerSheet extends StatelessWidget {
   /// Map ServiceType → group label cho picker.
   Map<String, List<ServiceType>> _groupedTypes() {
     return {
+      // QA 155: the visit the service book plans comes first.
+      'Theo sổ tay': [ServiceType.inspection],
       'Hệ điều khiển': [
         ServiceType.brakeLever,
         ServiceType.throttleGrip,
@@ -1946,11 +1860,14 @@ class _TypePickerSheet extends StatelessWidget {
         ServiceType.suspensionFront,
         ServiceType.suspensionRear,
       ],
-      'Động cơ': [ServiceType.motor, ServiceType.motorSeal],
+      'Động cơ': [
+        ServiceType.motor,
+        // Not an item of the published schedule.
+        if (currentType == ServiceType.motorSeal) ServiceType.motorSeal,
+      ],
       // QA 154: engine oil, air filter, coolant and gearbox are not parts
       // of an electric scooter; a task that already has one keeps it.
       'Khác': [
-        ServiceType.inspection,
         ServiceType.other,
         if (const {
           ServiceType.oilChange,
