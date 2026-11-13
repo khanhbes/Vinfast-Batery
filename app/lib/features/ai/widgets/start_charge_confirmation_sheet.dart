@@ -298,7 +298,7 @@ class LuxeInfoRow extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: valueColor ?? LuxeColors.platinumHi,
-            fontSize: 15,
+            fontSize: 15.5,
             fontWeight: FontWeight.w500,
             fontFeatures: const [ui.FontFeature.tabularFigures()],
           ),

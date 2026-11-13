@@ -72,6 +72,9 @@ def _vn_clock(instant: datetime) -> str:
 # half-interval + Cloud OFF latency) counts as already delivered, so the
 # outlet switches off within a fraction of 1 % of the target.
 TARGET_LEAD_SECONDS = 20
+# Owner's choice (13/11/2026): one timed charge runs at most 7 hours. A charge
+# to a target keeps the 10-hour ceiling (it stops on energy, not on the clock).
+TIMED_MAX_MINUTES = 420
 GAUGE_SETTLE_MIN_WH = 30.0  # the same line as a junk session (history_quality)
 # Ride-through (Task 126): a failed READ while a verified charge runs is a
 # connection gap, not an unknown relay. The Shelly keeps its own ceiling timer,
@@ -1575,7 +1578,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if stop_at > session.absolute_safety_stop_at:
             raise SmartChargeError(
                 "safetyLimitReached",
-                "Một phiên sạc tối đa 10 giờ; giờ ngắt muộn nhất là "
+                "Một phiên sạc theo giờ tối đa 7 giờ; giờ ngắt muộn nhất là "
                 f"{_vn_clock(session.absolute_safety_stop_at)}.", 409)
         if abs((stop_at - session.effective_stop_at).total_seconds()) < 30:
             return session
@@ -2188,8 +2191,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if stop_at is not None:
             duration_seconds = self._seconds_until(stop_at)
         duration_seconds = int(duration_seconds)
-        if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:
-            raise SmartChargeError("unsafeDuration", "Safety timer phải từ 5 giây đến 10 giờ")
+        timed_max = min(self.max_minutes, TIMED_MAX_MINUTES)
+        if duration_seconds < 5 or duration_seconds > timed_max * 60:
+            raise SmartChargeError("unsafeDuration", "Một phiên sạc theo giờ dài tối đa 7 giờ.")
         if not idempotency_key or len(idempotency_key) > 160:
             raise SmartChargeError("invalidIdempotencyKey", "Thiếu Idempotency-Key")
         # Independent reads (Firestore nam5 is ~0.2 s away) run together; the
@@ -2225,8 +2229,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         now = self.clock()
         if stop_at is not None:
             duration_seconds = self._seconds_until(stop_at)
-            if duration_seconds < 5 or duration_seconds > self.max_minutes * 60:
-                raise SmartChargeError("unsafeDuration", "Giờ ngắt phải sau bây giờ và trong vòng 10 giờ")
+            if duration_seconds < 5 or duration_seconds > timed_max * 60:
+                raise SmartChargeError("unsafeDuration", "Giờ ngắt phải sau bây giờ và trong vòng 7 giờ")
         session = ChargingSession(
             session_id=str(uuid.uuid4()),
             device_id=binding.device_id,
@@ -2246,7 +2250,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             updated_at=now,
             ai_stop_at=now + timedelta(seconds=duration_seconds),
             effective_stop_at=now + timedelta(seconds=duration_seconds),
-            absolute_safety_stop_at=now + timedelta(minutes=self.max_minutes),
+            absolute_safety_stop_at=now + timedelta(minutes=timed_max),
             idempotency_key=idempotency_key,
             estimated_soc=max(0, min(100, float(current_soc))),
             baseline_energy_wh=before.energy_wh,
@@ -2388,6 +2392,21 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             self._ingest_energy(session, status.energy_wh)
             session.updated_at = now
             if now >= session.absolute_safety_stop_at or now >= session.effective_stop_at:
+                # The backup OFF is always sent at once. A timed charge read
+                # just after its planned end (the Shelly timer's own OFF had
+                # not reached Cloud status yet, or the two clocks differ by a
+                # second or two) ran its whole plan: that is a completed
+                # charge, not an interrupted one. Later than the tolerance the
+                # device timer really failed and the old label stays.
+                on_time = (session.stop_mode != "target"
+                           and now < session.absolute_safety_stop_at
+                           and (now - session.effective_stop_at).total_seconds()
+                           <= PLANNED_STOP_TOLERANCE_SECONDS)
+                if on_time:
+                    self.repository.append_audit(uid, "planned_stop_backup_off",
+                                                 session_id=session.session_id)
+                    return self._backup_stop_session(uid, session, state="completed",
+                                                     stop_reason="planned_timer")
                 return self._backup_stop_session(uid, session, state="interrupted", stop_reason="deadline_cutoff")
             if session.state == "stopping" and session.last_error == OFF_PENDING_READBACK:
                 if pending_off_age < OFF_READBACK_GRACE_SECONDS:

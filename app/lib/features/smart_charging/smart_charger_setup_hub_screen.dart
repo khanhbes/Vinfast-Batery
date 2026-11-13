@@ -1106,7 +1106,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                     Text(
                       vehicleName,
                       style: CockpitTypography.heading(
-                        fontSize: 15,
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w700,
                         color: LuxeColors.text,
                       ),
@@ -1600,7 +1600,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                       Text(
                         'Tự động ngắt an toàn',
                         style: CockpitTypography.heading(
-                          fontSize: 15,
+                          fontSize: 15.5,
                           fontWeight: FontWeight.w700,
                           color: LuxeColors.text,
                         ),
@@ -1656,7 +1656,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               const SizedBox(height: 8),
               _protectionMetricRow(
                 'Thời gian tối đa',
-                '10 giờ',
+                'Theo giờ 7 giờ · Sạc AI 10 giờ',
                 icon: Icons.timer_rounded,
                 isMuted: true,
               ),
@@ -1728,7 +1728,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
                   Text(
                     'An toàn phần cứng',
                     style: CockpitTypography.heading(
-                      fontSize: 15,
+                      fontSize: 15.5,
                       fontWeight: FontWeight.w700,
                       color: LuxeColors.text,
                     ),
@@ -2809,7 +2809,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           controller: chargePower,
           keyboardType: TextInputType.number,
           style: CockpitTypography.numbers(
-            fontSize: 15,
+            fontSize: 15.5,
             color: LuxeColors.text,
           ),
           decoration: InputDecoration(
@@ -2893,7 +2893,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
           controller: tariff,
           keyboardType: TextInputType.number,
           style: CockpitTypography.numbers(
-            fontSize: 15,
+            fontSize: 15.5,
             color: LuxeColors.text,
           ),
           decoration: InputDecoration(

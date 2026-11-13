@@ -47,7 +47,8 @@ class TimedChargingSectionV2 extends StatefulWidget {
 
   /// Shortest and longest charge the outlet's timer accepts here.
   static const minLength = Duration(minutes: 5);
-  static const maxLength = Duration(hours: 10);
+  // Owner's choice 13/11/2026: 7 hours (was 10); the server enforces it too.
+  static const maxLength = Duration(hours: 7);
 
   /// Steps of the − / + buttons.
   static const step = Duration(minutes: 15);
@@ -65,6 +66,20 @@ class TimedChargingSectionV2 extends StatefulWidget {
     if (at.second > 0 || at.millisecond > 0 || at.microsecond > 0) minutes++;
     minutes = (minutes + 4) ~/ 5 * 5 % (24 * 60);
     return TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
+  }
+
+  /// The end offered when the section opens: the remembered [minutes] from
+  /// [now], never past [maxLength]. A length remembered under the old
+  /// 10-hour limit, or one that rounding up to 5 minutes pushed over the
+  /// limit, used to open the section with its button already refused.
+  static TimeOfDay defaultEnd(int minutes, DateTime now) {
+    final capped = minutes.clamp(minLength.inMinutes, maxLength.inMinutes);
+    var end = endAfter(Duration(minutes: capped), now);
+    if (stopAtFor(end, now).difference(now) > maxLength) {
+      final total = (end.hour * 60 + end.minute - 5) % (24 * 60);
+      end = TimeOfDay(hour: total ~/ 60, minute: total % 60);
+    }
+    return end;
   }
 
   @override
@@ -107,8 +122,8 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   /// same length from now.
   static int? _lastMinutes;
   static const _prefsKey = 'timed_charge_minutes';
-  late TimeOfDay _end = TimedChargingSectionV2.endAfter(
-    Duration(minutes: _lastMinutes ?? 120),
+  late TimeOfDay _end = TimedChargingSectionV2.defaultEnd(
+    _lastMinutes ?? 120,
     widget.clock(),
   );
   bool _pressed = false;
@@ -134,10 +149,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
       _lastMinutes = saved;
       if (mounted) {
         setState(
-          () => _end = TimedChargingSectionV2.endAfter(
-            Duration(minutes: saved),
-            widget.clock(),
-          ),
+          () => _end = TimedChargingSectionV2.defaultEnd(saved, widget.clock()),
         );
       }
     } on Object {
@@ -157,14 +169,16 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
   void _setEnd(TimeOfDay end) {
     setState(() => _end = end);
     final minutes = (_length.inSeconds / 60).round();
-    if (minutes < 5 || minutes > 600) return;
+    if (minutes < 5 || minutes > TimedChargingSectionV2.maxLength.inMinutes) {
+      return;
+    }
     _lastMinutes = minutes;
     SharedPreferences.getInstance()
         .then((prefs) => prefs.setInt(_prefsKey, minutes))
         .ignore();
   }
 
-  /// − / +: moves the end by [delta], kept within 5 minutes – 10 hours.
+  /// − / +: moves the end by [delta], kept within 5 minutes – 7 hours.
   void _shift(Duration delta) {
     final now = widget.clock();
     var at = _stopAt.add(delta);
@@ -260,7 +274,7 @@ class _TimedChargingSectionV2State extends State<TimedChargingSectionV2>
       return 'Giờ ngắt phải sau bây giờ ít nhất 5 phút';
     }
     if (length > TimedChargingSectionV2.maxLength) {
-      return 'Một phiên sạc tối đa 10 giờ';
+      return 'Một phiên sạc theo giờ tối đa 7 giờ';
     }
     return 'Sạc ${formatChargeDuration(length)}';
   }

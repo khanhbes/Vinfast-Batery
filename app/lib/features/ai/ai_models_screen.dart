@@ -572,7 +572,7 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                   _loading
                       ? 'Đang tải…'
                       : '$loadedCount/$total mô hình đang hoạt động',
-                  style: LuxeText.item.copyWith(fontSize: 15),
+                  style: LuxeText.item.copyWith(fontSize: 15.5),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -654,13 +654,13 @@ class _AiModelsScreenState extends ConsumerState<AiModelsScreen>
                       children: [
                         Text(
                           model.label,
-                          style: LuxeText.item.copyWith(fontSize: 15),
+                          style: LuxeText.item.copyWith(fontSize: 15.5),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           model.shortName.toUpperCase(),
                           style: LuxeText.label.copyWith(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             letterSpacing: 1.2,
                           ),
                         ),

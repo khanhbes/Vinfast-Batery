@@ -1573,7 +1573,7 @@ class _InteractiveAssistantSheetState
                                       maxLines: 4,
                                       style: const TextStyle(
                                         color: LuxeColors.text,
-                                        fontSize: 15,
+                                        fontSize: 15.5,
                                       ),
                                       decoration: const InputDecoration(
                                         hintText: 'Hỏi về pin, sạc, xe',

@@ -77,7 +77,7 @@ abstract final class LuxeText {
   /// one of these steps. Text 11–26; numbers on dials and heroes 28–60.
   /// `test/widget/qa139_ui_fixes_test.dart` checks the sources.
   static const scale = <double>[
-    11, 11.5, 12.5, 13, 14, 15, 15.5, 17, 19, 22, 24, 26, //
+    11.5, 12.5, 13, 14, 15.5, 17, 19, 22, 24, 26, //
     28, 30, 34, 36, 40, 44, 46, 48, 52, 56, 60,
   ];
 
@@ -209,7 +209,7 @@ abstract final class LuxeTheme {
           elevation: const WidgetStatePropertyAll(0),
           textStyle: const WidgetStatePropertyAll(
             TextStyle(
-              fontSize: 15,
+              fontSize: 15.5,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.3,
             ),
@@ -236,7 +236,7 @@ abstract final class LuxeTheme {
           side: const BorderSide(color: LuxeColors.hairlineStrong),
           shape: const StadiumBorder(),
           textStyle: const TextStyle(
-            fontSize: 15,
+            fontSize: 15.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
           ),
@@ -415,7 +415,7 @@ abstract final class LuxeTheme {
             side: BorderSide(color: LuxeColors.hairlineStrong),
           ),
           textStyle: const TextStyle(
-            fontSize: 15,
+            fontSize: 15.5,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.2,
           ),
@@ -746,21 +746,54 @@ class _LuxeThumbShape extends SliderComponentShape {
 /// QA 136: the light takes the plan's colour (Pro steel; Ultra a violet and
 /// cyan aurora that drifts with the Ultra clock).
 class LuxeBackdrop extends StatelessWidget {
-  const LuxeBackdrop({super.key, this.drift = 0, this.accent = 1});
+  const LuxeBackdrop({
+    super.key,
+    this.drift = 0,
+    this.accent = 1,
+    this.mood = LuxeBackdropMood.neutral,
+  });
 
   final double drift;
   final double accent;
 
+  /// QA 152: the corner light follows a real state of the vehicle.
+  final LuxeBackdropMood mood;
+
   @override
   Widget build(BuildContext context) {
     final plan = PlanStyle.of(context);
-    if (!plan.isUltra) return _layers(plan, drift);
-    return PlanFlow(builder: (context, phase) => _layers(plan, drift + phase));
+    final target = switch (mood) {
+      LuxeBackdropMood.neutral => plan.glow,
+      LuxeBackdropMood.charging => LuxeColors.emerald,
+      LuxeBackdropMood.low => LuxeColors.champagne,
+    };
+    // One cross-fade when the state changes; nothing loops.
+    return TweenAnimationBuilder<Color?>(
+      tween: ColorTween(end: target),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 900),
+      curve: LuxeMotion.enter,
+      builder: (context, color, _) {
+        final light = color ?? target;
+        if (!plan.isUltra) return _layers(plan, drift, light);
+        return PlanFlow(
+          builder: (context, phase) => _layers(plan, drift + phase, light),
+        );
+      },
+    );
   }
 
-  Widget _layers(PlanStyle plan, double t) {
+  Widget _layers(PlanStyle plan, double t, Color light) {
     final a = t * 2 * math.pi;
-    final glow = plan.isUltra ? 0.16 : (plan.isPro ? 0.09 : 0.07);
+    final base = plan.isUltra ? 0.16 : (plan.isPro ? 0.09 : 0.07);
+    final glow = switch (mood) {
+      LuxeBackdropMood.neutral => base,
+      LuxeBackdropMood.charging => base + 0.04,
+      LuxeBackdropMood.low => base * 0.8,
+    };
+    // A low battery dims the pool of light at the top a little.
+    final pool = mood == LuxeBackdropMood.low ? 0.6 : 1.0;
     return IgnorePointer(
       child: Stack(
         fit: StackFit.expand,
@@ -774,7 +807,10 @@ class LuxeBackdrop extends StatelessWidget {
                   -0.55 + 0.05 * math.cos(a),
                 ),
                 radius: 1.0,
-                colors: [plan.ambient, plan.ambient.withValues(alpha: 0)],
+                colors: [
+                  plan.ambient.withValues(alpha: pool),
+                  plan.ambient.withValues(alpha: 0),
+                ],
               ),
             ),
           ),
@@ -784,8 +820,8 @@ class LuxeBackdrop extends StatelessWidget {
                 center: Alignment(0.9 - 0.2 * math.cos(a), 1.1),
                 radius: plan.isUltra ? 1.05 : 0.9,
                 colors: [
-                  plan.glow.withValues(alpha: glow * accent),
-                  plan.glow.withValues(alpha: 0),
+                  light.withValues(alpha: glow * accent),
+                  light.withValues(alpha: 0),
                 ],
               ),
             ),
@@ -821,6 +857,11 @@ class LuxeBackdrop extends StatelessWidget {
   }
 }
 
+/// What the backdrop's corner light says (QA 152). Only real states:
+/// [charging] is a session that is charging now (emerald), [low] a
+/// battery at or under 20% (champagne, dimmer).
+enum LuxeBackdropMood { neutral, charging, low }
+
 /// Glass surface with a hairline border; [selected] lights the edge in the
 /// plan accent.
 class LuxeGlass extends StatelessWidget {
@@ -830,6 +871,7 @@ class LuxeGlass extends StatelessWidget {
     this.selected = false,
     this.quiet = false,
     this.raised = false,
+    this.signature = false,
     this.padding = const EdgeInsets.all(16),
     this.radius = 20,
   });
@@ -846,6 +888,11 @@ class LuxeGlass extends StatelessWidget {
   /// tiers: quiet, plain, raised; they differ in brightness, not in
   /// border weight.
   final bool raised;
+
+  /// The plan's signature edge (QA 152): on Ultra the border is the
+  /// pink-violet-blue gradient. One card only, the vehicle on Tổng
+  /// quan; other plans draw the usual edge. Still, never animated.
+  final bool signature;
   final EdgeInsetsGeometry padding;
   final double radius;
 
@@ -856,7 +903,8 @@ class LuxeGlass extends StatelessWidget {
         : const Duration(milliseconds: 260);
     // QA 136: Pro glass has a steel edge, Ultra a violet/cyan tint.
     final plan = PlanStyle.of(context);
-    return AnimatedContainer(
+    final edge = signature && plan.isUltra && !selected;
+    final glass = AnimatedContainer(
       duration: duration,
       curve: LuxeMotion.enter,
       padding: padding,
@@ -908,7 +956,39 @@ class LuxeGlass extends StatelessWidget {
       ),
       child: child,
     );
+    if (!edge) return glass;
+    return CustomPaint(
+      foregroundPainter: _PlanEdgePainter(plan.accentColors, radius),
+      child: glass,
+    );
   }
+}
+
+class _PlanEdgePainter extends CustomPainter {
+  const _PlanEdgePainter(this.colors, this.radius);
+
+  final List<Color> colors;
+  final double radius;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = (Offset.zero & size).deflate(0.65);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(radius - 0.65)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.3
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [for (final c in colors) c.withValues(alpha: 0.8)],
+        ).createShader(rect),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_PlanEdgePainter old) =>
+      old.radius != radius || old.colors != colors;
 }
 
 /// One-shot entrance: fade + rise, delayed by [index] × stagger. Uses the

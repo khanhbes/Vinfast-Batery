@@ -131,7 +131,7 @@ class SmartChargeReportService {
           children: [
             pw.Text(
               'SMART CHARGE',
-              style: pw.TextStyle(font: bold, fontSize: 11),
+              style: pw.TextStyle(font: bold, fontSize: 11.5),
             ),
             pw.Text(DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now())),
           ],

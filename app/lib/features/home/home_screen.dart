@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../settings/vehicle_garage_screen.dart';
+import '../smart_charging/night_nudge.dart';
 import '../../core/constants/beta_capabilities.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/services/dashboard_preferences_service.dart';
@@ -128,7 +129,23 @@ class HomeScreen extends ConsumerWidget {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            const LuxeBackdrop(),
+            // QA 152: the corner light follows the vehicle's real state.
+            Consumer(
+              builder: (context, ref, _) {
+                final charging =
+                    ref.watch(chargingEstimateProvider(vehicleId)) != null;
+                final v = ref.watch(vehicleProvider(vehicleId)).valueOrNull;
+                final low =
+                    v != null && v.hasBatteryData && v.currentBattery <= 20;
+                return LuxeBackdrop(
+                  mood: charging
+                      ? LuxeBackdropMood.charging
+                      : low
+                      ? LuxeBackdropMood.low
+                      : LuxeBackdropMood.neutral,
+                );
+              },
+            ),
             SafeArea(
               child: Center(
                 child: ConstrainedBox(
@@ -262,6 +279,11 @@ class HomeScreen extends ConsumerWidget {
                               ),
                             ),
                           ),
+                        ),
+
+                        // QA 152: in the evening, offer the night charge.
+                        SliverToBoxAdapter(
+                          child: NightNudgeCard(vehicleId: vehicleId),
                         ),
 
                         // QA 150: a new account saw "—%" and, first, a card

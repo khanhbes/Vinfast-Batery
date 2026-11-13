@@ -259,7 +259,7 @@ class _TrackPainter extends CustomPainter {
           text: text,
           style: TextStyle(
             color: color,
-            fontSize: 11,
+            fontSize: 11.5,
             fontWeight: FontWeight.w500,
           ),
         ),

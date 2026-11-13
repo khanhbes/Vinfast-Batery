@@ -103,7 +103,7 @@ class ChargeEditProgress extends StatelessWidget {
         Flexible(
           child: Text(
             done ? doneLabel : busyLabel,
-            style: const TextStyle(color: LuxeColors.text, fontSize: 15),
+            style: const TextStyle(color: LuxeColors.text, fontSize: 15.5),
           ),
         ),
       ],

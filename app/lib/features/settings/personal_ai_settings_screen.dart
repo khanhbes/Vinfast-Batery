@@ -654,7 +654,7 @@ class _ModelCard extends StatelessWidget {
                             status.pending >= status.required
                                 ? 'đủ'
                                 : 'trên ${status.required}',
-                            style: LuxeText.label.copyWith(fontSize: 11),
+                            style: LuxeText.label.copyWith(fontSize: 11.5),
                           ),
                         ],
                       ),
@@ -697,7 +697,7 @@ class _ModelCard extends StatelessWidget {
                           : status.pending == 0
                           ? 'Đang thu thập dữ liệu'
                           : '${status.pending} $unit mới đang chờ',
-                      style: LuxeText.item.copyWith(fontSize: 15),
+                      style: LuxeText.item.copyWith(fontSize: 15.5),
                     ),
                     const SizedBox(height: 4),
                     Text(

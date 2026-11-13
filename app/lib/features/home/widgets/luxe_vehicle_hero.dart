@@ -125,6 +125,7 @@ class _LuxeVehicleHeroState extends State<LuxeVehicleHero>
               : ', pin $percent phần trăm'}',
       child: LuxeGlass(
         raised: true,
+        signature: true,
         padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

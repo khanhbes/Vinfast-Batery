@@ -71,12 +71,15 @@ class PlanStyle extends ThemeExtension<PlanStyle> {
     accentColors: [
       LuxeColors.platinumHi,
       LuxeColors.platinum,
-      Color(0xFFB9BCC1),
+      Color(0xFFC4BDB0),
     ],
-    glassColors: [Color(0x12FFFFFF), Color(0x06FFFFFF)],
+    // QA 152: a faint warm silver, so Free reads as its own look
+    // (Pro is the cool steel one) and the backdrop no longer carries
+    // an emerald hint that verifies nothing.
+    glassColors: [Color(0x12FFFFFF), Color(0x07FFF4E6)],
     glassBorder: LuxeColors.hairline,
-    ambient: LuxeColors.ambient,
-    glow: LuxeColors.emerald,
+    ambient: Color(0xFF1A1917),
+    glow: Color(0xFFCFC4B4),
   );
 
   static const pro = PlanStyle._(

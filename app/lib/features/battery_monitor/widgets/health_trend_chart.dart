@@ -12,11 +12,36 @@ import '../../../core/widgets/luxe_kit.dart';
 /// error of a few %, and the owner's phone showed "120 %" for a battery
 /// that cannot hold more than new: such a charge sits on the 100 % line as
 /// a hollow dot, and a line under the chart says why the dots move.
+/// QA 152: the dots are no longer joined. One charge is a noisy reading, and
+/// a line from dot to dot drew every gauge error as if the battery had lost
+/// and regained 10% in a week (on the owner's phone the newest, lowest dot
+/// was the highlighted one, next to a headline of 99%). The line is now the
+/// running median of five charges, and a dashed line marks the estimate the
+/// screen reports.
 class HealthTrendChart extends StatelessWidget {
-  const HealthTrendChart({super.key, required this.points});
+  const HealthTrendChart({super.key, required this.points, this.estimate});
 
   /// (when, % of rated capacity), oldest first.
   final List<(DateTime?, double)> points;
+
+  /// The reported estimate (% of rated capacity), drawn as a dashed line.
+  final double? estimate;
+
+  /// Median of each charge with its two neighbours on either side.
+  static List<double> runningMedian(List<double> values) => [
+    for (var i = 0; i < values.length; i++)
+      _median(
+        values.sublist(math.max(0, i - 2), math.min(values.length, i + 3)),
+      ),
+  ];
+
+  static double _median(List<double> window) {
+    final sorted = [...window]..sort();
+    final mid = sorted.length ~/ 2;
+    return sorted.length.isOdd
+        ? sorted[mid]
+        : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +78,7 @@ class HealthTrendChart extends StatelessWidget {
                   low: low,
                   high: high,
                   textScale: scaler.scale(10) / 10,
+                  estimate: estimate,
                   reveal: t,
                 ),
               ),
@@ -81,11 +107,10 @@ class HealthTrendChart extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            over
-                ? 'Mỗi điểm là một lần sạc. Đồng hồ xe lệch vài % nên các '
-                      'điểm dao động; điểm rỗng là lần đo vượt 100%.'
-                : 'Mỗi điểm là một lần sạc. Đồng hồ xe lệch vài % nên các '
-                      'điểm dao động.',
+            'Mỗi điểm là một lần sạc. Đồng hồ xe chỉ hiện số tròn nên từng '
+            'điểm lệch vài %; hãy nhìn đường liền (trung vị 5 lần sạc)'
+            '${estimate == null ? '' : ', nét đứt là ước tính hiện tại'}'
+            '${over ? '. Điểm rỗng là lần đo vượt 100%' : ''}.',
             key: const ValueKey('health-trend-note'),
             style: LuxeText.caption,
           ),
@@ -101,8 +126,11 @@ class _TrendPainter extends CustomPainter {
     required this.low,
     required this.high,
     required this.textScale,
+    this.estimate,
     this.reveal = 1,
   });
+
+  final double? estimate;
 
   /// 0–1: how much of the line is drawn.
   final double reveal;
@@ -127,7 +155,7 @@ class _TrendPainter extends CustomPainter {
       final label = TextPainter(
         text: TextSpan(
           text: '${mark.round()}%',
-          style: TextStyle(color: LuxeColors.dim, fontSize: 11 * textScale),
+          style: TextStyle(color: LuxeColors.dim, fontSize: 11.5 * textScale),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
@@ -141,11 +169,50 @@ class _TrendPainter extends CustomPainter {
       for (var i = 0; i < values.length; i++)
         Offset(chart.left + step * i, y(math.min(values[i], high))),
     ];
+    // The reported estimate: a dashed line across the chart.
+    final reported = estimate;
+    if (reported != null && reported.isFinite) {
+      final at = y(reported.clamp(low, high));
+      final dash = Paint()
+        ..color = LuxeColors.platinumHi.withValues(alpha: 0.45)
+        ..strokeWidth = 1;
+      for (var x = chart.left; x < chart.right; x += 8) {
+        canvas.drawLine(
+          Offset(x, at),
+          Offset(math.min(x + 4, chart.right), at),
+          dash,
+        );
+      }
+    }
+    // Each charge: a quiet dot (hollow when above what a battery can hold).
+    final reached = chart.left + chart.width * reveal;
+    for (var i = 0; i < dots.length; i++) {
+      if (dots[i].dx > reached + 0.5) break;
+      final clipped = values[i] > high;
+      canvas.drawCircle(
+        dots[i],
+        3,
+        Paint()
+          ..color = LuxeColors.platinumMid.withValues(alpha: 0.6)
+          ..style = clipped ? PaintingStyle.stroke : PaintingStyle.fill
+          ..strokeWidth = 1.4,
+      );
+    }
+    // The trend: the running median, which one odd reading cannot move.
+    final smooth = HealthTrendChart.runningMedian([
+      for (final v in values) math.min(v, high),
+    ]);
+    final trend = [
+      for (var i = 0; i < smooth.length; i++)
+        Offset(chart.left + step * i, y(smooth[i])),
+    ];
     final line = Paint()
-      ..color = LuxeColors.platinum.withValues(alpha: 0.7)
-      ..strokeWidth = 1.6
+      ..color = LuxeColors.platinum
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
       ..style = PaintingStyle.stroke;
-    final whole = Path()..addPolygon(dots, false);
+    final whole = Path()..addPolygon(trend, false);
     if (reveal >= 1) {
       canvas.drawPath(whole, line);
     } else {
@@ -153,31 +220,14 @@ class _TrendPainter extends CustomPainter {
         canvas.drawPath(metric.extractPath(0, metric.length * reveal), line);
       }
     }
-    final reached = chart.left + chart.width * reveal;
-    for (var i = 0; i < dots.length; i++) {
-      if (dots[i].dx > reached + 0.5) break;
-      final last = i == dots.length - 1;
-      final clipped = values[i] > high;
-      if (clipped) {
-        // Above what a battery can hold: the gauge's error, drawn hollow.
-        canvas.drawCircle(dots[i], 3.4, Paint()..color = LuxeColors.background);
-      }
-      if (last) {
-        // QA 152: the latest charge is the one the eye should land on.
-        canvas.drawCircle(
-          dots[i],
-          9,
-          Paint()..color = LuxeColors.platinumHi.withValues(alpha: 0.16),
-        );
-      }
+    if (reveal >= 1) {
+      // Where the trend stands now.
       canvas.drawCircle(
-        dots[i],
-        last ? 4.5 : 3.4,
-        Paint()
-          ..color = last ? LuxeColors.platinumHi : LuxeColors.platinumMid
-          ..style = clipped ? PaintingStyle.stroke : PaintingStyle.fill
-          ..strokeWidth = 1.6,
+        trend.last,
+        8,
+        Paint()..color = LuxeColors.platinumHi.withValues(alpha: 0.16),
       );
+      canvas.drawCircle(trend.last, 4, Paint()..color = LuxeColors.platinumHi);
     }
   }
 
@@ -186,5 +236,6 @@ class _TrendPainter extends CustomPainter {
       old.values != values ||
       old.low != low ||
       old.high != high ||
+      old.estimate != estimate ||
       old.reveal != reveal;
 }

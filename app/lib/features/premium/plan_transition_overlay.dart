@@ -422,7 +422,7 @@ class _Benefit extends StatelessWidget {
                 text,
                 style: const TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 15,
+                  fontSize: 15.5,
                   height: 1.35,
                 ),
               ),

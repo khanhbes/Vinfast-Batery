@@ -38,7 +38,7 @@ void main() {
     await tester.pumpWidget(app(controller));
 
     // Phase 8, 9 & 10 assertions
-    expect(find.text('Mức pin hiện tại'), findsOneWidget);
+    expect(find.text('PIN HIỆN TẠI'), findsOneWidget);
     expect(find.text('MỤC TIÊU SẠC'), findsOneWidget);
     expect(
       find.byKey(const ValueKey('target-battery-selector')),

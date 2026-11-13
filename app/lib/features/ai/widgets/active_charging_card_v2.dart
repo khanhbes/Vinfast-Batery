@@ -535,7 +535,7 @@ class _ActiveChargingCardV2State extends State<ActiveChargingCardV2>
                     'MỤC TIÊU',
                     style: TextStyle(
                       color: LuxeColors.platinumMid,
-                      fontSize: 11,
+                      fontSize: 11.5,
                       letterSpacing: 1.2,
                     ),
                   ),
@@ -760,7 +760,7 @@ class _Metric extends StatelessWidget {
             value,
             style: const TextStyle(
               color: LuxeColors.text,
-              fontSize: 15,
+              fontSize: 15.5,
               fontWeight: FontWeight.w600,
               fontFeatures: [ui.FontFeature.tabularFigures()],
             ),

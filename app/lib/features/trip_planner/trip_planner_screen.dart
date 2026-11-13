@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/providers/app_providers.dart';
 import '../../core/theme/luxe_theme.dart';
+import '../../core/theme/plan_style.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/vehicle_model.dart';
@@ -115,6 +116,23 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
   }
 
   double? get _distanceKm => _route?.distanceKm ?? _manualKm;
+
+  /// QA 152: how far this battery goes under the chosen conditions (km by
+  /// road), or null while the % or the km per 1% is unknown.
+  double? get _reachKm {
+    final base = _personalKmPerPct ?? _catalogKmPerPct;
+    if (!_socKnown || (base == null && _trainedModel == null)) return null;
+    final km = TripEnergyModel.reachKm(
+      currentSoc: _soc,
+      kmPerPct: base,
+      source: _personalKmPerPct != null
+          ? TripKmSource.personal
+          : TripKmSource.catalog,
+      model: _trainedModel,
+      conditions: _conditions,
+    );
+    return km > 0 ? km : null;
+  }
 
   @override
   void didUpdateWidget(TripPlannerScreen oldWidget) {
@@ -437,7 +455,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
             Text(
               'Xuất phát $started ở ${trip.startSoc.round()}%'
               '${trip.to.isEmpty ? '' : ' · tới ${trip.to.split(',').first}'}',
-              style: LuxeText.item.copyWith(fontSize: 15),
+              style: LuxeText.item.copyWith(fontSize: 15.5),
             ),
             const SizedBox(height: 12),
             if (_savingTrip)
@@ -846,6 +864,24 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                         errorTileCallback: _onTileError,
                         tileBuilder: darkModeTileBuilder,
                       ),
+                    // QA 152: the answer to "Đi được tới đâu?" on the
+                    // map itself, around the start point.
+                    if (_origin != null && _reachKm != null)
+                      CircleLayer(
+                        circles: [
+                          CircleMarker(
+                            point: _origin!,
+                            radius:
+                                _reachKm! * 1000 / TripEnergyModel.roadDetour,
+                            useRadiusInMeter: true,
+                            color: context.planAccent.withValues(alpha: 0.07),
+                            borderColor: context.planAccent.withValues(
+                              alpha: 0.7,
+                            ),
+                            borderStrokeWidth: 1.5,
+                          ),
+                        ],
+                      ),
                     if (_route != null)
                       PolylineLayer(
                         polylines: [
@@ -892,6 +928,22 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                   ),
                 ),
               const Positioned(left: 12, top: 12, child: _MapHint()),
+              if (_origin != null && _reachKm != null)
+                Positioned(
+                  left: 12,
+                  bottom: 8,
+                  right: 130,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: _MapHint(
+                      key: const ValueKey('trip-reach'),
+                      text:
+                          'Vòng sáng: đi được khoảng '
+                          '${_reachKm!.round()} km'
+                          '${_conditions.roundTrip ? ' rồi quay về' : ''}',
+                    ),
+                  ),
+                ),
               if (_tilesFailed)
                 const Positioned(
                   left: 16,
@@ -919,7 +971,7 @@ class _TripPlannerScreenState extends ConsumerState<TripPlannerScreen> {
                   child: const Text(
                     '© OpenStreetMap',
                     textScaler: TextScaler.noScaling,
-                    style: TextStyle(color: LuxeColors.muted, fontSize: 11),
+                    style: TextStyle(color: LuxeColors.muted, fontSize: 11.5),
                   ),
                 ),
               ),
@@ -1955,7 +2007,8 @@ class _MapPin extends StatelessWidget {
 }
 
 class _MapHint extends StatelessWidget {
-  const _MapHint();
+  const _MapHint({super.key, this.text = 'Nhấn giữ để chọn điểm đến'});
+  final String text;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -1964,11 +2017,12 @@ class _MapHint extends StatelessWidget {
       borderRadius: BorderRadius.circular(99),
       border: Border.all(color: LuxeColors.hairline),
     ),
-    child: const Text(
-      'Nhấn giữ để chọn điểm đến',
-      style: TextStyle(
+    child: Text(
+      text,
+      maxLines: 2,
+      style: const TextStyle(
         color: LuxeColors.muted,
-        fontSize: 11,
+        fontSize: 11.5,
         fontWeight: FontWeight.w500,
       ),
     ),

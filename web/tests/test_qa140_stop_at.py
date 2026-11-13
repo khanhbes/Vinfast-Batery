@@ -40,9 +40,9 @@ def test_on_with_a_clock_time_arms_the_timer_up_to_that_time():
     assert abs((session.effective_stop_at - stop_at).total_seconds()) <= 1
 
 
-def test_a_clock_time_in_the_past_or_past_ten_hours_is_refused():
+def test_a_clock_time_in_the_past_or_past_seven_hours_is_refused():
     service, _repo, provider, clock = _service()
-    for minutes in (-5, 10 * 60 + 5):
+    for minutes in (-5, 7 * 60 + 5, 10 * 60 + 5):
         with pytest.raises(SmartChargeError) as caught:
             _timed(service, clock, minutes=minutes, key=f"bad{minutes}")
         assert caught.value.code == "unsafeDuration"
@@ -75,7 +75,7 @@ def test_moving_the_end_later_or_sooner_rearms_the_outlet(delta_minutes):
     assert repo.get_session("owner", session.session_id).effective_stop_at == updated.effective_stop_at
 
 
-def test_ending_within_a_minute_or_past_ten_hours_is_refused():
+def test_ending_within_a_minute_or_past_seven_hours_is_refused():
     service, _repo, provider, clock = _service()
     session, _stop = _timed(service, clock)
     before = provider.status.timer_remaining
@@ -83,7 +83,7 @@ def test_ending_within_a_minute_or_past_ten_hours_is_refused():
         service.update_stop_at("owner", session.session_id, clock() + timedelta(seconds=30))
     assert soon.value.code == "stopAtTooSoon"
     with pytest.raises(SmartChargeError) as late:
-        service.update_stop_at("owner", session.session_id, clock() + timedelta(hours=10, minutes=5))
+        service.update_stop_at("owner", session.session_id, clock() + timedelta(hours=7, minutes=5))
     assert late.value.code == "safetyLimitReached"
     assert provider.status.timer_remaining == before
 
@@ -126,3 +126,13 @@ def test_an_unverified_rearm_keeps_the_old_end():
         service.update_stop_at("owner", session.session_id, stop_at + timedelta(hours=1))
     assert caught.value.code == "timerNotExtended"
     assert repo.get_session("owner", session.session_id).effective_stop_at == session.effective_stop_at
+
+
+def test_a_timed_charge_runs_seven_hours_at_most():
+    """Owner's choice 13/11/2026: 7 hours for a timed charge (a target
+    charge keeps the 10-hour ceiling)."""
+    service, _repo, provider, clock = _service()
+    session, _stop = _timed(service, clock, minutes=7 * 60 - 1, key="edge")
+    assert session.state == "active"
+    limit = session.absolute_safety_stop_at - session.created_at
+    assert limit == timedelta(hours=7)

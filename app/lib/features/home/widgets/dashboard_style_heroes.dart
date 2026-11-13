@@ -473,7 +473,7 @@ class MinimalHero extends StatelessWidget {
           textAlign: TextAlign.center,
           style: TextStyle(
             color: f.rangeKm == null ? LuxeColors.muted : LuxeColors.platinum,
-            fontSize: 15,
+            fontSize: 15.5,
           ),
         ),
         const SizedBox(height: 18),

@@ -131,7 +131,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
             'Nhập email để nhận hướng dẫn đặt lại mật khẩu.',
             style: TextStyle(
               color: LuxeColors.muted,
-              fontSize: 15,
+              fontSize: 15.5,
               height: 1.45,
             ),
           ),
@@ -145,7 +145,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
               keyboardType: TextInputType.emailAddress,
               textInputAction: TextInputAction.done,
               autofillHints: const [AutofillHints.email],
-              style: const TextStyle(color: LuxeColors.text, fontSize: 15),
+              style: const TextStyle(color: LuxeColors.text, fontSize: 15.5),
               decoration: const InputDecoration(
                 labelText: 'Email',
                 prefixIcon: Icon(Icons.alternate_email_rounded, size: 20),

@@ -24,6 +24,8 @@ class BatteryHealth {
     this.vehicleSohPct,
     this.testMaxStartPct = 30,
     this.full = true,
+    this.uncertaintyPct,
+    this.baseline,
   });
 
   final double? nominalCapacityWh;
@@ -35,6 +37,13 @@ class BatteryHealth {
 
   /// Trend and guided test included (Pro/Ultra; QA 140).
   final bool full;
+
+  /// QA 152: how far the estimate itself may be off, in points (from how
+  /// much the single charges scatter). Null from an older server.
+  final double? uncertaintyPct;
+
+  /// QA 152: the first charges against the latest ones.
+  final HealthBaseline? baseline;
 
   static BatteryHealth fromMap(Map<String, dynamic> map) => BatteryHealth(
     nominalCapacityWh: (map['nominalCapacityWh'] as num?)?.toDouble(),
@@ -51,7 +60,51 @@ class BatteryHealth {
     vehicleSohPct: (map['vehicleSohPct'] as num?)?.toDouble(),
     testMaxStartPct: (map['testMaxStartPct'] as num?)?.toDouble() ?? 30,
     full: map['full'] != false,
+    uncertaintyPct: switch (map['spread']) {
+      {'uncertaintyPct': final num u} => u.toDouble(),
+      _ => null,
+    },
+    baseline: HealthBaseline.fromMap(map['baseline']),
   );
+}
+
+/// How the estimate moved since the app started following this battery.
+class HealthBaseline {
+  const HealthBaseline({
+    required this.changePct,
+    required this.charges,
+    this.since,
+  });
+
+  final double changePct;
+  final int charges;
+  final DateTime? since;
+
+  static HealthBaseline? fromMap(Object? raw) {
+    if (raw is! Map || raw['changePct'] is! num) return null;
+    return HealthBaseline(
+      changePct: (raw['changePct'] as num).toDouble(),
+      charges: (raw['charges'] as num?)?.toInt() ?? 0,
+      since: DateTime.tryParse(raw['since']?.toString() ?? '')?.toLocal(),
+    );
+  }
+
+  /// One honest sentence. A difference inside the measurement's own error
+  /// is reported as no clear change, and a rise is never called recovery.
+  String sentence(double? uncertaintyPct) {
+    final from = since == null
+        ? 'lúc bắt đầu theo dõi'
+        : 'lúc bắt đầu theo dõi (${since!.day}/${since!.month}/${since!.year})';
+    final noise = ((uncertaintyPct ?? 1) * 2).clamp(1.5, 6.0);
+    if (changePct.abs() <= noise) {
+      return 'Chưa thấy thay đổi rõ so với $from, qua $charges lần sạc.';
+    }
+    final by = changePct.abs().toStringAsFixed(1);
+    return changePct < 0
+        ? 'Giảm khoảng $by% so với $from, qua $charges lần sạc.'
+        : 'Cao hơn khoảng $by% so với $from, qua $charges lần sạc. Pin '
+              'không tự hồi phục; chênh lệch này đến từ sai số đo.';
+  }
 }
 
 class HealthValue {
@@ -168,9 +221,20 @@ class _Body extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Hero(health: health, value: best),
+        if (health.baseline case final baseline?) ...[
+          const SizedBox(height: 10),
+          LuxeNotice(
+            key: const ValueKey('health-baseline'),
+            icon: Icons.timeline_rounded,
+            message: baseline.sentence(health.uncertaintyPct),
+          ),
+        ],
         if (health.trend.length >= 2) ...[
           const LuxeSectionLabel('Theo từng lần sạc'),
-          HealthTrendChart(points: health.trend),
+          HealthTrendChart(
+            points: health.trend,
+            estimate: health.estimate?.sohPct,
+          ),
         ],
         const LuxeSectionLabel('Bài kiểm tra pin'),
         if (health.full)
@@ -239,13 +303,12 @@ class _Hero extends StatelessWidget {
       );
     }
     final fade = (100 - v.sohPct).clamp(0, 100);
-    return Container(
+    // QA 152: the same glass as every other card (it was a flat dark box),
+    // raised because it is what this screen is about.
+    return LuxeGlass(
+      raised: true,
+      radius: 26,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        color: LuxeColors.raised,
-        border: Border.all(color: LuxeColors.hairlineStrong),
-      ),
       child: Row(
         children: [
           LuxeRing(
@@ -283,7 +346,13 @@ class _Hero extends StatelessWidget {
                 LuxeTag(
                   health.test != null
                       ? 'Từ bài kiểm tra'
-                      : '${v.confidenceLabel} · ${v.samples ?? 0} lần sạc',
+                      // QA 152: the count and how far the number may be
+                      // off. "Tin cậy cao" stood next to charges that
+                      // differed by 15%.
+                      : health.uncertaintyPct == null
+                      ? '${v.confidenceLabel} · ${v.samples ?? 0} lần sạc'
+                      : '${v.samples ?? 0} lần sạc · sai số khoảng '
+                            '±${health.uncertaintyPct!.round().clamp(1, 99)}%',
                   color: LuxeColors.platinumMid,
                 ),
               ],

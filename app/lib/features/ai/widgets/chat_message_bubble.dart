@@ -136,7 +136,7 @@ class ChatMessageBubble extends StatelessWidget {
                 message.content,
                 style: TextStyle(
                   color: message.isQueued ? LuxeColors.text : LuxeColors.shell,
-                  fontSize: 15,
+                  fontSize: 15.5,
                   height: 1.4,
                 ),
               ),
@@ -155,7 +155,7 @@ class ChatMessageBubble extends StatelessWidget {
                 ],
                 Text(
                   message.isQueued ? 'Chờ mạng' : timeStr,
-                  style: const TextStyle(fontSize: 11, color: LuxeColors.dim),
+                  style: const TextStyle(fontSize: 11.5, color: LuxeColors.dim),
                 ),
               ],
             ),
@@ -195,7 +195,10 @@ class ChatMessageBubble extends StatelessWidget {
                       : BatteryBotMood.happy,
                 ),
                 const SizedBox(width: 10),
-                Text(timeStr, style: const TextStyle(fontSize: 11, color: dim)),
+                Text(
+                  timeStr,
+                  style: const TextStyle(fontSize: 11.5, color: dim),
+                ),
               ],
             ),
             const SizedBox(height: 6),

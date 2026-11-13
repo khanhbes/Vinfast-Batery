@@ -410,7 +410,8 @@ class _LuxeSocDialState extends State<LuxeSocDial>
                   child: ExcludeSemantics(
                     child: _reading(
                       value: current,
-                      label: 'Mức pin hiện tại',
+                      // Same small caps as the target beside it.
+                      label: 'PIN HIỆN TẠI',
                       accent: false,
                       editable: widget.onEditCurrent != null,
                     ),
@@ -541,10 +542,10 @@ class _LuxeSocDialState extends State<LuxeSocDial>
               label,
               // Labels stay platinum: colour belongs to the numbers (Task 125).
               style: TextStyle(
-                color: accent ? LuxeColors.platinumMid : LuxeColors.muted,
-                fontSize: 11,
+                color: LuxeColors.platinumMid,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w600,
-                letterSpacing: accent ? 1.4 : 0.3,
+                letterSpacing: 1.4,
               ),
             ),
             if (editable) ...[

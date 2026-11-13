@@ -231,7 +231,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                 padding: EdgeInsets.only(bottom: 8),
                 child: Text(
                   'km',
-                  style: TextStyle(color: LuxeColors.muted, fontSize: 15),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 15.5),
                 ),
               ),
             ],
@@ -874,7 +874,7 @@ class _TaskCard extends StatelessWidget {
                             color: task.isCompleted
                                 ? LuxeColors.muted
                                 : LuxeColors.text,
-                            fontSize: 15,
+                            fontSize: 15.5,
                             fontWeight: FontWeight.w600,
                             decoration: task.isCompleted
                                 ? TextDecoration.lineThrough
@@ -1480,7 +1480,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                     'Loại dịch vụ',
                     style: TextStyle(
                       color: _Lx.textTertiary,
-                      fontSize: 11,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w700,
                       letterSpacing: 0.4,
                     ),
@@ -1526,7 +1526,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               entry.key.toUpperCase(),
               style: TextStyle(
                 color: _Lx.textTertiary,
-                fontSize: 11,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 0.6,
               ),
@@ -1713,7 +1713,7 @@ class _PresetCard extends StatelessWidget {
                     '${(preset.suggestedOdoInterval / 1000).toStringAsFixed(preset.suggestedOdoInterval >= 1000 ? 0 : 1)}k',
                     style: TextStyle(
                       color: meta.color,
-                      fontSize: 11,
+                      fontSize: 11.5,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
@@ -1739,7 +1739,7 @@ class _PresetCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: _Lx.textSecondary,
-                  fontSize: 11,
+                  fontSize: 11.5,
                   height: 1.25,
                 ),
               ),
@@ -1794,7 +1794,7 @@ class _TypePickerSheet extends StatelessWidget {
                           entry.key.toUpperCase(),
                           style: TextStyle(
                             color: _Lx.textTertiary,
-                            fontSize: 11,
+                            fontSize: 11.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.6,
                           ),

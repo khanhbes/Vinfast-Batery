@@ -385,7 +385,12 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
         body: Stack(
           fit: StackFit.expand,
           children: [
-            const LuxeBackdrop(),
+            LuxeBackdrop(
+              // Emerald only once the session is really charging.
+              mood: state.session?.state == ChargingSessionState.active
+                  ? LuxeBackdropMood.charging
+                  : LuxeBackdropMood.neutral,
+            ),
             SafeArea(
               child: RefreshIndicator(
                 color: context.planAccent,
@@ -1902,7 +1907,7 @@ class _TargetPresets extends StatelessWidget {
                         'Khuyên dùng',
                         style: TextStyle(
                           color: LuxeColors.platinum,
-                          fontSize: 11,
+                          fontSize: 11.5,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.4,
                         ),

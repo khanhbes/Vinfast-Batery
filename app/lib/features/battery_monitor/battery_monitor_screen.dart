@@ -232,7 +232,7 @@ class _CurrentBatteryCard extends StatelessWidget {
             children: [
               Text(
                 'Mức pin đã ghi nhận',
-                style: LuxeText.item.copyWith(fontSize: 15),
+                style: LuxeText.item.copyWith(fontSize: 15.5),
               ),
               if (has && updated != null) LuxeTag('Lúc ${_when(updated)}'),
             ],
@@ -437,7 +437,7 @@ class _EstimateCard extends StatelessWidget {
           child: Text(
             value,
             textAlign: TextAlign.end,
-            style: LuxeText.item.copyWith(fontSize: 15),
+            style: LuxeText.item.copyWith(fontSize: 15.5),
           ),
         ),
       ],

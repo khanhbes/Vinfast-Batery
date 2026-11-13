@@ -267,10 +267,24 @@ def test_planned_stop_follows_the_verified_device_timer(clocked):
 def test_expired_plan_with_relay_still_on_is_still_forced_off(clocked):
     repo, provider, service, clock = clocked
     session = service.manual_on("user-a", 60, "qa-expired", "manual", 40)
-    clock[0] = session.effective_stop_at + timedelta(seconds=1)
+    # Well past the plan with the relay still ON: the device timer failed.
+    clock[0] = session.effective_stop_at + timedelta(seconds=45)
     service.current("user-a")
     stored = repo.get_session("user-a", session.session_id)
     assert (stored.state, stored.stop_reason) == ("interrupted", "deadline_cutoff")
+    assert provider.off_commands == 1 and provider.status.relay is False
+
+
+def test_timed_charge_read_just_after_its_end_is_completed(clocked):
+    """Cloud status can still say ON a second or two after the Shelly timer
+    ended: the backup OFF is sent at once, and the charge that ran its whole
+    plan is recorded as completed, not interrupted."""
+    repo, provider, service, clock = clocked
+    session = service.manual_on("user-a", 60, "qa-on-time", "manual", 40)
+    clock[0] = session.effective_stop_at + timedelta(seconds=2)
+    service.current("user-a")
+    stored = repo.get_session("user-a", session.session_id)
+    assert (stored.state, stored.stop_reason) == ("completed", "planned_timer")
     assert provider.off_commands == 1 and provider.status.relay is False
 
 

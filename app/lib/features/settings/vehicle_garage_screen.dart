@@ -972,7 +972,7 @@ class _SpecCard extends StatelessWidget {
                           children: [
                             Text(
                               spec.modelName,
-                              style: LuxeText.item.copyWith(fontSize: 15),
+                              style: LuxeText.item.copyWith(fontSize: 15.5),
                             ),
                             if (spec.releaseYear != null)
                               LuxeTag('${spec.releaseYear}'),
@@ -984,7 +984,7 @@ class _SpecCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: LuxeText.eyebrow.copyWith(
-                            fontSize: 11,
+                            fontSize: 11.5,
                             letterSpacing: 1.2,
                           ),
                         ),

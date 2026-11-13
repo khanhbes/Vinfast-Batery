@@ -61,7 +61,7 @@ class PredictionCardV2 extends StatelessWidget {
                   'Kế hoạch sạc',
                   style: TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 15,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

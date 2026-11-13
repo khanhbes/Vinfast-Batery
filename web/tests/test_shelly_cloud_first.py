@@ -223,11 +223,12 @@ class SmartChargeServiceTests(unittest.TestCase):
 
     def test_manual_on_rejects_unsafe_duration(self):
         with self.assertRaises(SmartChargeError) as caught:
-            self.service.manual_on("user-a", 10 * 60 * 60 + 1, "unsafe")
+            self.service.manual_on("user-a", 7 * 60 * 60 + 1, "unsafe")
         self.assertEqual(caught.exception.code, "unsafeDuration")
 
-    def test_manual_on_accepts_exactly_ten_hours(self):
-        session = self.service.manual_on("user-a", 10 * 60 * 60, "ten-hours")
+    def test_manual_on_accepts_exactly_seven_hours(self):
+        # 13/11/2026: a timed charge is 7 hours at most (was 10).
+        session = self.service.manual_on("user-a", 7 * 60 * 60, "seven-hours")
         self.assertEqual(session.strategy, "manual_timed")
         self.assertTrue(session.timer_verified)
 

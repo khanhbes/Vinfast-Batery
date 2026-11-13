@@ -117,7 +117,7 @@ class AppChatToolGateway implements ChatToolGateway {
     if (matches.length != 1) return null;
     final match = matches.single;
     final seconds = int.parse(match[1]!) * (match[2] == 'gio' ? 3600 : 60);
-    return seconds >= 60 && seconds <= 36000 ? seconds : null;
+    return seconds >= 60 && seconds <= 25200 ? seconds : null;
   }
 
   /// QA 140: "bật sạc 150 phút đến 09:30" — the clock time Pinova Bot was
@@ -479,11 +479,11 @@ class AppChatToolGateway implements ChatToolGateway {
     }
     final seconds = duration;
     final target = parseTimedTarget(question, vehicle.currentBattery);
-    if (seconds < 60 || seconds > 36000 || !vehicle.hasBatteryData) {
+    if (seconds < 60 || seconds > 25200 || !vehicle.hasBatteryData) {
       return {
         'allowed': false,
         'userMessage':
-            'Chọn thời lượng từ 1 phút đến 10 giờ và cập nhật mức pin trước khi bật sạc.',
+            'Chọn thời lượng từ 1 phút đến 7 giờ và cập nhật mức pin trước khi bật sạc.',
       };
     }
     final caps =

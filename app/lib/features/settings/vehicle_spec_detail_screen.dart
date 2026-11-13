@@ -395,7 +395,7 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                       ),
                       Text(
                         'Sức khỏe pin',
-                        style: LuxeText.label.copyWith(fontSize: 11),
+                        style: LuxeText.label.copyWith(fontSize: 11.5),
                       ),
                     ],
                   ),

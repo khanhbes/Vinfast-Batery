@@ -210,7 +210,7 @@ class _EditStopAtSheetState extends State<EditStopAtSheet> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Muộn nhất ${formatClock(_latest)} (một phiên tối đa 10 giờ).',
+              'Muộn nhất ${formatClock(_latest)} (giới hạn an toàn của phiên này).',
               textAlign: TextAlign.center,
               style: LuxeText.caption,
             ),

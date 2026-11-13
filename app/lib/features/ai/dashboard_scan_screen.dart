@@ -1085,7 +1085,7 @@ class _ScanTile extends StatelessWidget {
                             TextSpan(
                               text: ' $unit',
                               style: const TextStyle(
-                                fontSize: 15,
+                                fontSize: 15.5,
                                 fontWeight: FontWeight.w500,
                                 color: LuxeColors.muted,
                               ),
@@ -1473,7 +1473,7 @@ class _GuidePainter extends CustomPainter {
           text: locked ? '$label ✓' : label,
           style: TextStyle(
             color: locked ? PlanColors.ink : LuxeColors.background,
-            fontSize: 11,
+            fontSize: 11.5,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.6,
           ),

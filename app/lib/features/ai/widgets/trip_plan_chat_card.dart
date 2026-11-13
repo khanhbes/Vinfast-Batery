@@ -50,7 +50,7 @@ class TripPlanChatCard extends StatelessWidget {
               title.isEmpty ? 'Ước tính chuyến đi' : title,
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 15,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w600,
               ),
             ),

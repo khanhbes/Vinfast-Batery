@@ -345,6 +345,11 @@ def queue_sample(
 
 HEALTH_TEST_MAX_START_PCT = 30.0
 HEALTH_RECENT_SAMPLES = 10
+# QA 152: how the estimate moved over the months, from the long ledger.
+HEALTH_TREND_POINTS = 40
+HEALTH_BASELINE_CHARGES = 6
+HEALTH_BASELINE_MIN_CHARGES = 12
+HEALTH_BASELINE_MIN_DAYS = 60
 
 
 def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
@@ -353,7 +358,8 @@ def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
 
 
 def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
-                   efficiency: float = DEFAULT_EFFICIENCY) -> dict:
+                   efficiency: float = DEFAULT_EFFICIENCY, *,
+                   history: list[dict] | None = None) -> dict:
     """% of the nominal capacity the battery still holds (QA 135).
 
     ``estimate``: from every charge with a confirmed end % (median of the
@@ -361,10 +367,19 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
     guided test, a charge started at ≤ 30 % that ran until the server saw
     the full-battery power tail, so it measures most of the capacity at once.
     Always an estimate: the scooter reports no cell data.
+
+    QA 152, all additions beside ``estimate`` (which is computed as before):
+    ``spread`` says how far single charges sit from each other (the gauge is
+    read in whole %, so one charge alone can be several % off) and how sure
+    the median therefore is. ``baseline`` compares the latest charges with
+    the first ones in ``history`` (the long ledger): a change over months
+    does not depend on the assumed charger efficiency, which the absolute
+    number does. ``trend`` uses ``history`` too when it reaches further back.
     """
     nominal = _positive(nominal_capacity_wh)
     result: dict = {"nominalCapacityWh": nominal, "efficiency": efficiency,
-                    "estimate": None, "test": None, "trend": []}
+                    "estimate": None, "test": None, "trend": [],
+                    "spread": None, "baseline": None}
     if nominal is None:
         return result
 
@@ -384,10 +399,27 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
             "sohPct": soh(capacity), "capacityWh": round(capacity),
             "samples": n, "confidence": "high" if n >= 6 else "medium" if n >= 3 else "low",
         }
+        values = [soh(_implied_capacity(float(item["whPerPct"]), efficiency)) for item in recent]
+        middle = _median(values)
+        scatter = 1.4826 * _median([abs(value - middle) for value in values])
+        result["spread"] = {
+            # Typical distance of one charge from the middle, in SoH points.
+            "perChargePct": round(scatter, 1),
+            # How far the median itself may be off (standard error).
+            "uncertaintyPct": round(1.2533 * scatter / math.sqrt(n), 1),
+            "lowPct": min(values), "highPct": max(values),
+        }
+        seen = {str(item.get("sessionId") or "") for item in exact}
+        long = sorted(
+            [*exact, *[item for item in (history or [])
+                       if not item.get("censored") and _positive(item.get("whPerPct"))
+                       and str(item.get("sessionId") or "") not in seen]],
+            key=lambda item: str(item.get("at") or ""))
         result["trend"] = [
             {"at": item.get("at"), "sohPct": soh(_implied_capacity(float(item["whPerPct"]), efficiency))}
-            for item in exact[-12:]
+            for item in long[-(HEALTH_TREND_POINTS if history else 12):]
         ]
+        result["baseline"] = _health_baseline(long, soh, efficiency)
     tests = [item for item in exact
              if item.get("labelSource") == "taper_full"
              and float(item.get("startPct") or 100) <= HEALTH_TEST_MAX_START_PCT
@@ -400,6 +432,35 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
                           "startPct": start, "energyWh": round(float(last["energyWh"])),
                           "at": last.get("at"), "sessionId": last.get("sessionId")}
     return result
+
+
+def _health_baseline(charges: list[dict], soh, efficiency: float) -> dict | None:
+    """First charges against the latest ones; ``None`` until there are enough
+    charges over enough days for the difference to mean anything."""
+    if len(charges) < HEALTH_BASELINE_MIN_CHARGES:
+        return None
+
+    def when(item):
+        try:
+            parsed = datetime.fromisoformat(str(item.get("at")).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+
+    first_at, last_at = when(charges[0]), when(charges[-1])
+    if first_at is None or last_at is None:
+        return None
+    days = (last_at - first_at).total_seconds() / 86400
+    if days < HEALTH_BASELINE_MIN_DAYS:
+        return None
+    k = HEALTH_BASELINE_CHARGES
+
+    def middle(items):
+        return soh(_implied_capacity(_median([float(item["whPerPct"]) for item in items]), efficiency))
+
+    first, latest = middle(charges[:k]), middle(charges[-k:])
+    return {"firstPct": first, "latestPct": latest, "changePct": round(latest - first, 1),
+            "since": charges[0].get("at"), "days": int(round(days)), "charges": len(charges)}
 
 
 def training_status(profile: LearnedProfile) -> dict:

@@ -165,7 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       textInputAction: TextInputAction.next,
                       style: const TextStyle(
                         color: LuxeColors.text,
-                        fontSize: 15,
+                        fontSize: 15.5,
                       ),
                       autofillHints: _autofillEnabled
                           ? const [AutofillHints.username, AutofillHints.email]
@@ -201,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       textInputAction: TextInputAction.done,
                       style: const TextStyle(
                         color: LuxeColors.text,
-                        fontSize: 15,
+                        fontSize: 15.5,
                       ),
                       autofillHints: _autofillEnabled
                           ? const [AutofillHints.password]

@@ -211,7 +211,7 @@ class _TourBanner extends StatelessWidget {
                     : 'Làm quen 4 bước với các màn hình chính.',
                 style: const TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 15,
+                  fontSize: 15.5,
                   height: 1.35,
                   fontWeight: FontWeight.w500,
                 ),
@@ -459,7 +459,7 @@ class _BotEntry extends StatelessWidget {
                     style: const TextStyle(
                       color: LuxeColors.text,
                       fontWeight: FontWeight.w500,
-                      fontSize: 15,
+                      fontSize: 15.5,
                     ),
                   ),
                   const SizedBox(height: 3),

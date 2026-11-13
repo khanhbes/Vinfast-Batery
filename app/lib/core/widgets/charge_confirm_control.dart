@@ -276,7 +276,7 @@ class _LuxeHoldToConfirmState extends State<LuxeHoldToConfirm>
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: enabled ? LuxeColors.text : LuxeColors.dim,
-                        fontSize: 15,
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

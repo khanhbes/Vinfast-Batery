@@ -448,7 +448,7 @@ class _Faq extends StatelessWidget {
               q,
               style: const TextStyle(
                 color: LuxeColors.text,
-                fontSize: 15,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w500,
               ),
             ),

@@ -326,7 +326,7 @@ def test_failed_off_recovery_never_retries_on(setup):
 
 def test_expired_deadline_with_relay_on_forces_off_and_readback(setup):
     repo, provider, service, _, session = start(setup)
-    session.effective_stop_at = utcnow() - timedelta(seconds=1)
+    session.effective_stop_at = utcnow() - timedelta(seconds=45)  # past the on-time tolerance
     result = reconcile_once(service, "qa-owner")
     assert result.state == "interrupted" and result.stop_reason == "deadline_cutoff"
     assert result.relay_verified and provider.status.relay is False

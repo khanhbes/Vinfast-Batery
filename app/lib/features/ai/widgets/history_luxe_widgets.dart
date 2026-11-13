@@ -423,7 +423,7 @@ class _BarsPainter extends CustomPainter {
         text: text,
         style: TextStyle(
           color: color,
-          fontSize: 11,
+          fontSize: 11.5,
           fontFeatures: const [ui.FontFeature.tabularFigures()],
         ),
       ),

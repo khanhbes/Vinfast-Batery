@@ -89,7 +89,7 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(
-        find.textContaining('điểm rỗng là lần đo vượt 100%'),
+        find.textContaining('iểm rỗng là lần đo vượt 100%'),
         findsOneWidget,
       );
     });

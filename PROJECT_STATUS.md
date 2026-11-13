@@ -12,6 +12,55 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 153. Task Completion Log — Tự rà trên Xiaomi, sạc theo giờ tối đa 7 giờ, Sạc đêm, Sức khỏe pin, Lộ trình (13/11/2026, chủ app: "tự cài lên xiaomi và tự kiểm tra… làm liên tục theo đề xuất của bạn", "sạc theo giờ tối đa 7h thay vì 10h", "tự nhận biết thời gian đêm và hỏi người dùng kích hoạt sạc đêm không") — Code + test xong, APK đã cài, đã commit, **máy chủ chưa deploy**
+
+**Màu và thiết kế (mục 8, 9, 5, 6 của 10 đề xuất ở mục 152, chủ app: "ổn, làm tiếp"):**
+- **Mục 8, gói Free:** ánh nền và kính ngả bạc ấm rất nhẹ; bỏ quầng emerald ở góc nền (emerald không xác minh điều gì ở đó). Màu nhấn vẫn bạch kim. File: `plan_style.dart`.
+- **Mục 9, Ultra:** thẻ xe ở Tổng quan có viền dải hồng–tím–xanh tím (`LuxeGlass(signature: true)`), đứng yên, chỉ một thẻ này.
+- **Mục 5, nền theo trạng thái thật:** `LuxeBackdrop(mood:)`: đang sạc thật thì quầng góc chuyển emerald, pin từ 20% trở xuống thì champagne và dịu hơn; đổi một lần 900 ms, không lặp. Dùng ở Tổng quan (theo `chargingEstimateProvider` và % pin) và tab Sạc (chỉ khi phiên `active`).
+- **Mục 6, thang chữ:** gộp hai cặp bậc sát nhau (11 → 11.5, 15 → 15.5), 88 chỗ; `LuxeText.scale` còn 10 bậc chữ. Đây là bản rút gọn của đề xuất: chưa nới khoảng cách tiêu đề và chú thích theo từng màn.
+- Mục 10 (icon vẽ riêng) chưa làm.
+
+**Tự rà trên Xiaomi (bản 2.1.1+234, chỉ xem, không ghi dữ liệu, không bật ổ):** Tổng quan, Sạc AI, Theo giờ, Lịch sử, Tiện ích, Sức khỏe pin, Thói quen sạc, Sạc đêm, Lộ trình. Lỗi thấy trên máy và đã sửa trong mã:
+- **Sạc theo giờ, nút bật bị khóa ngay khi mở:** thời lượng nhớ từ lần trước (600 phút) cộng làm tròn lên 5 phút cho ra 10 giờ 05, vượt giới hạn; màn hiện "Một phiên sạc tối đa 10 giờ" và không bấm được. Nay `TimedChargingSectionV2.defaultEnd` kẹp theo giới hạn và lùi 5 phút khi làm tròn vượt.
+- **Sạc đêm, số pin sai:** xe đang 88% nhưng màn mở ra 75% (bị kẹp về 75) và sẵn sàng hẹn một lần sạc không cần. Chọn mục tiêu cũng tự hạ % hiện tại. Nay hiện đúng số của xe; pin cao hơn mục tiêu trừ 5% thì hiện giải thích và không có nút hẹn.
+- **Sức khỏe pin:** "99% · Tin cậy cao" đứng cạnh biểu đồ nối từng lần sạc dao động 85–100%, điểm mới nhất (thấp nhất) lại là điểm được làm nổi. Xem phần Sức khỏe pin bên dưới.
+- **Vòng chọn %:** hai nhãn cạnh nhau viết hai kiểu ("Mức pin hiện tại", "MỤC TIÊU SẠC"); nay cùng kiểu ("PIN HIỆN TẠI").
+- Thấy nhưng chưa sửa: nút bot nép mép có thể che núm vòng chọn % ở một vị trí cuộn; cột biểu đồ Tổng quan (bạch kim) khác kiểu cột Lịch sử (dải màu gói).
+
+**Logic sạc (máy chủ `web/shelly/`):**
+- **Sạc theo giờ tối đa 7 giờ** (`TIMED_MAX_MINUTES = 420`): `manual_on` từ chối quá 7 giờ, giới hạn tuyệt đối của phiên theo giờ là 7 giờ nên đổi giờ ngắt cũng không vượt. Sạc AI (ngắt theo năng lượng) giữ trần 10 giờ. App: bộ chọn giờ, Pinova Bot (`parseDuration`, câu trả lời), kiến thức bot, màn thiết lập ổ ("Theo giờ 7 giờ · Sạc AI 10 giờ").
+- **Phiên theo giờ đọc ngay sau giờ ngắt không còn bị ghi "gián đoạn":** khi trạng thái Cloud còn báo BẬT trong 20 giây sau giờ ngắt (hẹn giờ của ổ vừa tắt, hoặc hai đồng hồ lệch một hai giây), máy chủ vẫn gửi lệnh TẮT dự phòng ngay như cũ, nhưng ghi phiên là `completed/planned_timer` kèm audit `planned_stop_backup_off`. Quá 20 giây (hẹn giờ của ổ thật sự hỏng) vẫn là `interrupted/deadline_cutoff`. Chưa có số liệu production cho biết lỗi nhãn này xảy ra thường xuyên tới đâu.
+- **Đã xem lại, không đổi:** điểm ngắt theo năng lượng (lệch do nhịp đọc và độ trễ Cloud ước tính dưới 0,3%), trần hẹn giờ, ngắt khi đầy, đổi mục tiêu, đổi giờ ngắt. Bù theo tuổi của ảnh chụp trạng thái Cloud (`sys.unixtime`) có thể bớt thêm khoảng 0,2% nhưng chưa có số đo độ trễ thật nên chưa làm.
+
+**Sạc đêm:**
+- **Kế hoạch đã chạy xong được đóng lại** (`_settle_night_plan`): trước đây kế hoạch ở trạng thái `started` mãi mãi, hôm sau app vẫn hiện "Đang sạc đêm" và không có đường hẹn lần mới. Nay khi đọc kế hoạch, phiên đã kết thúc thì kế hoạch thành `done` kèm kết quả (% đạt được, lý do dừng); app hiện "Lần sạc đêm gần nhất đã xong, pin khoảng X%" và mở lại form.
+- **Tự hỏi vào buổi tối** (`features/smart_charging/night_nudge.dart`): từ 21:00 đến 02:00, Tổng quan hiện thẻ "Hẹn sạc đêm nay?" khi gói có Sạc đêm, xe đã liên kết ổ Shelly, có số pin, pin từ 75% trở xuống, không đang sạc và chưa có kế hoạch đang hẹn. "Để sau" ẩn hết đêm đó. Công tắc "Gợi ý vào buổi tối" ở màn Sạc đêm (lưu trên máy). Thẻ chỉ mở màn Sạc đêm; người dùng vẫn tự xác nhận số pin và vuốt.
+- Chưa làm: lặp lại hằng đêm tự động (cần số pin mới mỗi tối nên không an toàn nếu tự hẹn), thông báo đẩy nhắc buổi tối.
+
+**Sức khỏe pin:**
+- Máy chủ (`charge_model.battery_health`): con số ước tính tính như cũ (test khóa 99,4% / 2385 Wh vẫn đạt). Thêm `spread` (từng lần sạc lệch nhau bao nhiêu, sai số của chính con số), `baseline` (6 lần sạc đầu so với 6 lần gần nhất, chỉ khi có từ 12 lần sạc trải trên 60 ngày) và xu hướng lấy từ sổ dài 200 lần sạc (tối đa 40 điểm) thay cho 12 mẫu gần nhất.
+- App: biểu đồ không còn nối từng điểm; đường liền là trung vị 5 lần sạc, nét đứt là ước tính đang báo, từng lần sạc là chấm mờ. Nhãn đổi từ "Tin cậy cao · 10 lần sạc" thành "10 lần sạc · sai số khoảng ±X%". Có dòng so với lúc bắt đầu theo dõi: chênh lệch nằm trong sai số thì ghi "chưa thấy thay đổi rõ", tăng thì ghi rõ là do sai số đo. Thẻ đầu dùng kính `raised` như các màn khác.
+- Giới hạn còn nguyên: con số tuyệt đối dựa trên giả định hiệu suất sạc 90%; phần đáng tin lâu dài là mức thay đổi theo thời gian.
+
+**Quét đồng hồ:** đã đọc lại luồng quét, bỏ phiếu và sheet lưu; **không đổi gì**. Chỉ có 6 ảnh thật của một lần chụp Feliz để kiểm, nên mọi chỉnh sửa bộ đọc lúc này không đo được là tốt hơn hay kém đi. Muốn nâng độ chính xác cần thêm ảnh thật ở nhiều điều kiện (đêm, nắng chói, nghiêng, dòng xe khác).
+
+**Lộ trình:** vòng "đi được tới đâu" trên bản đồ quanh điểm đi (`TripEnergyModel.reachKm`: quãng xa nhất vẫn về tới với 5% dự phòng, cùng công thức với kết quả lộ trình; vòng vẽ lùi 1,3 lần vì đường đi dài hơn đường thẳng), đổi theo tốc độ, thời tiết, tải và khứ hồi; nhãn "Vòng sáng: đi được khoảng X km".
+
+**Bỏ hiệu ứng xe bay:** gỡ nốt `Hero` thẻ xe từ Xe của tôi sang Thông số chi tiết (đã ghi ở mục 152, nằm trong commit `829d841`).
+
+**Kiểm thử:**
+- Backend: `pytest tests`: 957 đạt, 15 bỏ qua (thêm test nhãn giờ ngắt, giới hạn 7 giờ, đóng kế hoạch đêm, `test_qa152_battery_health.py`).
+- Flutter: `flutter analyze lib` sạch; toàn bộ 1469 đạt, 216 bỏ qua, 0 trượt. Test mới: `qa152_timed_default_test.dart`, `qa152_night_nudge_test.dart`, `qa152_health_trend_test.dart`, `qa152_trip_reach_test.dart`, 2 test màn Sạc đêm, 4 test trong `qa151_motion_test.dart`.
+- APK: `2.1.2+235` profile, `app/build/app/outputs/flutter-apk/app-profile.apk`, 174 328 189 byte, SHA-256 `a8dec9a588e3e12179597bbd978dd3d5643ef0731df888a4103390a77979fef5`; `adb install -r` trên Xiaomi báo Success, đọc lại `versionName=2.1.2`. Đã xem lại trên máy: Sạc theo giờ mở ra 7 giờ và nút bấm được, Sạc đêm hiện 88% kèm giải thích, Sức khỏe pin có đường trung vị và nét đứt (nhãn sai số chờ máy chủ mới). Sau bản này còn sửa một câu chữ ở màn Sạc đêm (chưa có trong APK đã cài). Bản 2.1.1+234 (SHA-256 `1528c909c91baebce2244c45a34fbbb4324129443d59c524b5d81ada817eadca`) đã cài trước đó để rà.
+- **Chưa kiểm:** các thay đổi sau bản 2.1.1 chưa được xem lại từng màn trên máy ngoài phần ghi ở cuối mục này; thẻ gợi ý sạc đêm chỉ hiện từ 21:00; cảnh sạc thật vẫn cần một lần sạc có chủ app giám sát.
+
+**Cần chủ app:**
+- **Deploy máy chủ** (API và worker): giới hạn 7 giờ phía máy chủ, nhãn giờ ngắt, đóng kế hoạch đêm, số liệu Sức khỏe pin mới. Chưa deploy thì app mới vẫn chạy với máy chủ cũ: giới hạn 7 giờ chỉ có ở app, Sức khỏe pin hiện nhãn cũ và xu hướng 12 điểm, kế hoạch đêm đã chạy vẫn kẹt ở "đang sạc đêm".
+- Push.
+
+---
+
 ## 152. Task Completion Log — Màu sắc: Pinova Bot về bảng màu LUXE, một thang màu cho mức pin thấp (12/11/2026, chủ app: "tiếp tục thực hiện" sau 10 đề xuất về thiết kế và màu) — Code + test xong, APK 2.1.0+233 đã cài lên Xiaomi 13/11, chưa commit
 
 **Phạm vi đã làm:** mục 1, 2, 3, 4 và 7 trong 10 đề xuất. Mục 3, 4, 7 làm sau khi chủ app trả lời "1. ok 2. ok Làm theo đề xuất, tăng lên thành phiên bản 2.1.0". Mục 5, 6, 8, 9, 10 chưa làm, xem cuối mục.

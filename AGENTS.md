@@ -312,6 +312,14 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Biểu đồ: giá trị mới nhất (hôm nay, lần sạc gần nhất) sáng nhất, phần còn lại lùi một bậc.
   - Dòng phiên bản là 2.1.x từ 12/11/2026.
   - Ảnh xe ở Tổng quan không bay sang Xe của tôi (chủ app bỏ 13/11); chạm vẫn mở Xe của tôi. Đừng thêm lại `Hero` ở đó.
+- **QA 153 (13/11/2026, chủ app chọn):**
+  - Sạc theo giờ tối đa **7 giờ** (`TIMED_MAX_MINUTES` máy chủ, `TimedChargingSectionV2.maxLength` app, Pinova Bot); Sạc AI giữ trần 10 giờ. Giờ ngắt mặc định lấy qua `TimedChargingSectionV2.defaultEnd` (không bao giờ vượt giới hạn).
+  - Phiên theo giờ còn BẬT trong 20 giây sau giờ ngắt: vẫn gửi TẮT dự phòng ngay, ghi `completed/planned_timer`; quá 20 giây mới là `interrupted/deadline_cutoff`.
+  - Sạc đêm: kế hoạch `started` mà phiên đã kết thúc thì thành `done` khi đọc (`_settle_night_plan`). Màn Sạc đêm hiện đúng % của xe, không kẹp và không tự đổi % hiện tại; pin cao hơn mục tiêu − 5% thì không có nút hẹn. Thẻ gợi ý buổi tối (`NightNudge`, 21:00–02:00) chỉ mở màn Sạc đêm, không tự hẹn; có công tắc tắt.
+  - Sức khỏe pin: `estimate` giữ cách tính; `spread`, `baseline` và xu hướng dài là phần thêm. Biểu đồ xu hướng không nối từng lần sạc (đường liền là trung vị 5 lần); nhãn ghi sai số, không ghi "tin cậy cao" khi chỉ dựa vào số lần sạc. Thay đổi nằm trong sai số thì nói là chưa thấy thay đổi rõ.
+  - Nền `LuxeBackdrop(mood:)` chỉ theo trạng thái thật (đang sạc `active`, pin ≤ 20%). `LuxeGlass(signature: true)` chỉ cho thẻ xe ở Tổng quan. Gói Free không còn quầng emerald ở nền. Thang chữ không còn bậc 11 và 15.
+  - Lộ trình: tầm đi lấy từ `TripEnergyModel.reachKm` (cùng công thức với `plan`), vòng trên bản đồ lùi `roadDetour`.
+  - File trong OneDrive có lúc bị khóa khi đang đồng bộ (`OSError 22` lúc ghi): thử lại sau vài trăm ms, file không bị hỏng.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

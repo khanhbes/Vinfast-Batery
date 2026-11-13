@@ -13,6 +13,7 @@ import '../../data/models/entitlement.dart';
 import '../../data/models/vehicle_model.dart';
 import '../../data/services/charge_estimator.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
+import 'night_nudge.dart';
 import 'smart_charger_setup_hub_screen.dart';
 import '../ai/dashboard_scan_screen.dart';
 import '../ai/widgets/edit_current_battery_sheet.dart';
@@ -29,9 +30,12 @@ class NightPlan {
     this.finishBy,
     this.endsLate = false,
     this.error,
+    this.resultSoc,
   });
 
-  /// armed | started | cancelled | missed | failed.
+  /// armed | started | done | cancelled | skipped | missed | failed.
+  /// `done` (QA 152): the night charge has ended; [resultSoc] is what it
+  /// reached (the owner's reading, else the estimate).
   final String state;
   final int targetSoc;
   final String wakeAt;
@@ -39,6 +43,7 @@ class NightPlan {
   final DateTime? finishBy;
   final bool endsLate;
   final String? error;
+  final int? resultSoc;
 
   bool get armed => state == 'armed';
 
@@ -52,6 +57,10 @@ class NightPlan {
       finishBy: DateTime.tryParse(map['finishBy']?.toString() ?? '')?.toLocal(),
       endsLate: map['endsLate'] == true,
       error: map['error']?.toString(),
+      resultSoc: switch (map['result']) {
+        {'endSoc': final num soc} => soc.round(),
+        _ => null,
+      },
     );
   }
 }
@@ -149,7 +158,12 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
-  late double _current = (widget.currentSoc ?? 40).clamp(0, 75).toDouble();
+  // QA 152: the vehicle's real number. It was clamped to 75, so a scooter
+  // at 88% opened this screen as 75% and offered a charge it did not need.
+  late double _current = (widget.currentSoc ?? 40).clamp(0, 100).toDouble();
+
+  /// The server takes a plan only from 5% under the target.
+  bool get _tooHigh => _current > _target - 5;
 
   /// QA 148: the plan runs hours from now on this number, so the owner sets it.
   bool _currentConfirmed = false;
@@ -168,7 +182,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
         .valueOrNull;
     final whPerPct = learned?.whPerPct;
     final powerW = learned?.powerW;
-    if (whPerPct == null || powerW == null || _target <= _current) return null;
+    if (whPerPct == null || powerW == null || _tooHigh) return null;
     final minutes = ((_target - _current) * whPerPct / powerW * 60).ceil();
     final now = DateTime.now();
     var wake = DateTime(now.year, now.month, now.day, _wake.hour, _wake.minute);
@@ -179,10 +193,23 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
         'đạt $_target% khoảng ${formatClock(finish)}';
   }
 
+  /// QA 152: the evening offer on Tổng quan, the owner's switch.
+  bool _nudge = true;
+
+  void _setNudge(bool on) {
+    setState(() => _nudge = on);
+    NightNudge.setEnabled(on).catchError((Object _) {});
+  }
+
   @override
   void initState() {
     super.initState();
     _load();
+    NightNudge.isEnabled()
+        .then((on) {
+          if (mounted) setState(() => _nudge = on);
+        })
+        .catchError((Object _) {});
   }
 
   Future<void> _load() async {
@@ -230,7 +257,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
         confirmed = true;
         setState(() {
           _currentConfirmed = true;
-          _current = value.clamp(0, _target - 5).toDouble();
+          _current = value.clamp(0, 100).toDouble();
         });
       },
     );
@@ -244,7 +271,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
 
   Future<void> _arm() async {
     if (!_currentConfirmed && !await _confirmCurrent()) return;
-    if (!mounted) return;
+    if (!mounted || _tooHigh) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -294,7 +321,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
     if (soc != null && mounted) {
       setState(() {
         _currentConfirmed = true;
-        _current = soc.toDouble().clamp(0, _target - 5);
+        _current = soc.toDouble().clamp(0, 100);
       });
     }
   }
@@ -335,16 +362,30 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
             if (plan != null && (plan.armed || plan.state == 'started'))
               _PlanCard(plan: plan, busy: _busy, onCancel: _cancel)
             else ...[
-              if (plan != null && plan.state != 'cancelled')
+              if (plan != null && plan.state == 'done')
+                LuxeNotice(
+                  key: const ValueKey('night-last-done'),
+                  icon: Icons.check_circle_rounded,
+                  color: LuxeColors.emerald,
+                  message: plan.resultSoc == null
+                      ? 'Lần sạc đêm gần nhất đã xong.'
+                      : 'Lần sạc đêm gần nhất đã xong, pin khoảng '
+                            '${plan.resultSoc}%.',
+                )
+              else if (plan != null && plan.state != 'cancelled')
                 LuxeNotice(
                   key: const ValueKey('night-last-state'),
                   icon: Icons.history_rounded,
                   color: LuxeColors.champagne,
-                  message: plan.state == 'missed'
-                      ? 'Lần hẹn trước chưa bật kịp (máy chủ bận). Hãy hẹn lại.'
-                      : plan.state == 'failed'
-                      ? 'Lần hẹn trước không bật được sạc. Kiểm tra ổ Shelly.'
-                      : 'Lần hẹn trước: ${plan.state}.',
+                  message: switch (plan.state) {
+                    'missed' =>
+                      'Lần hẹn trước chưa bật kịp (máy chủ bận). Hãy hẹn lại.',
+                    'failed' =>
+                      'Lần hẹn trước không bật được sạc. Kiểm tra ổ Shelly.',
+                    'skipped' =>
+                      'Lần hẹn trước không bật vì lúc đó đang có phiên sạc khác.',
+                    _ => 'Lần hẹn trước chưa chạy được. Hãy hẹn lại.',
+                  },
                 ),
               const LuxeSectionLabel('Pin hiện tại'),
               Row(
@@ -352,7 +393,7 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                   Expanded(
                     child: Slider(
                       key: const ValueKey('night-current'),
-                      value: _current,
+                      value: _current.clamp(0, _target - 5).toDouble(),
                       min: 0,
                       max: (_target - 5).toDouble(),
                       divisions: _target - 5,
@@ -411,10 +452,9 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                 key: const ValueKey('night-target'),
                 segments: const [(80, '80%'), (85, '85%'), (90, '90%')],
                 selected: _target,
-                onChanged: (v) => setState(() {
-                  _target = v;
-                  _current = _current.clamp(0, v - 5).toDouble();
-                }),
+                // The current % is the owner's number: a target never
+                // changes it (it was silently lowered to target − 5).
+                onChanged: (v) => setState(() => _target = v),
               ),
               const LuxeSectionLabel('Giờ thức dậy'),
               LuxeSettingsGroup(
@@ -436,6 +476,25 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                             );
                             if (picked != null) setState(() => _wake = picked);
                           },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              LuxeSettingsGroup(
+                children: [
+                  LuxeSettingsRow(
+                    key: const ValueKey('night-nudge-switch'),
+                    icon: Icons.nightlight_round,
+                    title: 'Gợi ý vào buổi tối',
+                    subtitle:
+                        'Từ 21 giờ, Tổng quan hỏi có hẹn sạc đêm không khi pin '
+                        'từ 75% trở xuống',
+                    trailing: LuxeSwitch(
+                      value: _nudge,
+                      semanticLabel: 'Gợi ý sạc đêm vào buổi tối',
+                      onChanged: _setNudge,
+                    ),
+                    onTap: () => _setNudge(!_nudge),
                   ),
                 ],
               ),
@@ -506,12 +565,24 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                   ),
                   const SizedBox(height: 6),
                 ],
-                // QA 141: short enough to fit (the % was cut off).
-                ChargeConfirmControl(
-                  key: const ValueKey('night-confirm'),
-                  label: 'Vuốt để hẹn sạc $_target%',
-                  onConfirmed: _arm,
-                ),
+                if (_tooHigh)
+                  LuxeNotice(
+                    key: const ValueKey('night-too-high'),
+                    icon: Icons.battery_charging_full_rounded,
+                    color: LuxeColors.steel,
+                    message:
+                        'Pin đang ${_current.round()}%, đã gần mức sạc đêm '
+                        '$_target%. Sạc đêm cần pin thấp hơn mục tiêu ít nhất 5%'
+                        '${_target < 90 && _current <= 85 ? ', hãy chọn mục tiêu cao hơn hoặc để hôm khác' : ', đêm nay chưa cần sạc'}'
+                        '. Nếu số pin chưa đúng, kéo thanh hoặc quét đồng hồ xe.',
+                  )
+                else
+                  // QA 141: short enough to fit (the % was cut off).
+                  ChargeConfirmControl(
+                    key: const ValueKey('night-confirm'),
+                    label: 'Vuốt để hẹn sạc $_target%',
+                    onConfirmed: _arm,
+                  ),
               ],
             ],
           ],

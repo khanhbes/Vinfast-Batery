@@ -320,7 +320,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Text(
                 '${BetaCapabilities.enabled ? 'BẢN BETA' : 'BẢN CHÍNH THỨC'} · $_appVersion',
                 style: LuxeText.label.copyWith(
-                  fontSize: 11,
+                  fontSize: 11.5,
                   letterSpacing: 1.8,
                   color: LuxeColors.dim,
                 ),

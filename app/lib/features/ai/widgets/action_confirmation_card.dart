@@ -127,7 +127,7 @@ class ActionConfirmationCard extends StatelessWidget {
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w600,
                         color: LuxeColors.text,
                       ),

@@ -241,6 +241,45 @@ abstract final class TripEnergyModel {
     );
   }
 
+  /// Roads are longer than the straight line between two points; the
+  /// reach ring on the map is drawn this much inside the road distance.
+  static const double roadDetour = 1.3;
+
+  /// QA 152: the longest trip (km by road, one way; there and back when
+  /// the conditions say round trip) that still arrives with the reserve,
+  /// counting the model's own spread. Same maths as [plan], solved for
+  /// the distance. 0 when the battery is at or under the reserve.
+  static double reachKm({
+    required double currentSoc,
+    double? kmPerPct,
+    TripKmSource source = TripKmSource.catalog,
+    TripModelParams? model,
+    TripConditions conditions = const TripConditions(),
+  }) {
+    bool arrives(double km) =>
+        plan(
+          distanceKm: km,
+          currentSoc: currentSoc,
+          kmPerPct: kmPerPct,
+          source: source,
+          model: model,
+          conditions: conditions,
+        ).arrivalLowSoc >=
+        reservePct;
+    if (!arrives(0.5)) return 0;
+    var low = 0.5, high = 600.0;
+    if (arrives(high)) return high;
+    for (var i = 0; i < 24; i++) {
+      final mid = (low + high) / 2;
+      if (arrives(mid)) {
+        low = mid;
+      } else {
+        high = mid;
+      }
+    }
+    return _round1(low);
+  }
+
   static double _round1(double value) => (value * 10).roundToDouble() / 10;
 }
 

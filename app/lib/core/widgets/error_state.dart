@@ -76,7 +76,7 @@ class ErrorState extends StatelessWidget {
             child: Text(
               message,
               textAlign: TextAlign.center,
-              style: LuxeText.body.copyWith(fontSize: 15),
+              style: LuxeText.body.copyWith(fontSize: 15.5),
             ),
           ),
           if (kDebugMode && rawError != null) ...[

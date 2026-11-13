@@ -648,7 +648,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                     'Kết nối từ xa qua Shelly Cloud',
                     style: TextStyle(
                       color: LuxeColors.text,
-                      fontSize: 15,
+                      fontSize: 15.5,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -951,7 +951,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                 label: Text(
                   _redeemingCode ? 'Đang kích hoạt mã…' : 'Xác nhận mã kết nối',
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1079,7 +1079,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           icon: const Icon(Icons.search_rounded),
           label: const Text(
             'Tìm và kết nối Shelly',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
           ),
         ),
       ),
@@ -1277,7 +1277,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
                   'Cần xác thực an toàn phần cứng',
                   style: TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 15,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1303,7 +1303,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           icon: const Icon(Icons.play_arrow_rounded),
           label: const Text(
             'Chạy kiểm tra an toàn',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
           ),
         ),
       ),
@@ -1328,7 +1328,7 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
           icon: const Icon(Icons.link_rounded),
           label: const Text(
             'Kết nối thiết bị này',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
           ),
         ),
       ),

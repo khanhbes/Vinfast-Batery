@@ -71,7 +71,7 @@ class RecentSessionsSectionV2 extends StatelessWidget {
                   'Chưa có phiên sạc',
                   style: TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 15,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -167,7 +167,7 @@ class _SessionTile extends StatelessWidget {
                           '${session.startSoc.toStringAsFixed(0)}%',
                           style: const TextStyle(
                             color: LuxeColors.platinum,
-                            fontSize: 15,
+                            fontSize: 15.5,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -184,7 +184,7 @@ class _SessionTile extends StatelessWidget {
                           '${confirmed == null ? ' ước tính' : ''}',
                           style: TextStyle(
                             color: context.planAccent,
-                            fontSize: 15,
+                            fontSize: 15.5,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

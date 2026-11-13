@@ -695,7 +695,7 @@ class LuxeEfficiencyNote extends StatelessWidget {
                       : 'Thông số quãng đường cơ sở',
                   style: TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 15,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w600,
                   ),
                 ),

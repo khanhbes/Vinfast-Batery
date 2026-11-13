@@ -135,7 +135,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const fieldStyle = TextStyle(color: LuxeColors.text, fontSize: 15);
+    const fieldStyle = TextStyle(color: LuxeColors.text, fontSize: 15.5);
     return LuxeAuthScaffold(
       leading: LuxeCircleButton(
         icon: Icons.arrow_back_rounded,

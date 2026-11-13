@@ -210,3 +210,19 @@ def test_safety_cutoff_pushes_ring_on_the_urgent_channel():
                        messaging=Messaging, local_tokens=tokens)
     assert "urgent" not in sent[-1]["data"] and sent[-1]["android"] is None
     assert "Sạc đêm đã ngắt" in terminal_message("interrupted", stop_reason="night_safety_cutoff")
+
+
+def test_a_finished_night_charge_closes_its_plan():
+    """The plan used to stay "started" for ever, so the app said "Đang sạc
+    đêm" the next day and a new plan could not be made from that card."""
+    service, repo, provider, clock = _service()
+    session_id = _started(service, clock)
+    assert service.night_plan("owner", "car")["state"] == "started"
+    service.stop("owner", session_id)
+    assert repo.get_session("owner", session_id).state == "cancelled"
+    plan = service.night_plan("owner", "car")
+    assert plan["state"] == "done"
+    assert plan["result"]["state"] == "cancelled" and plan["result"]["stopReason"] == "manual"
+    assert provider.status.relay is False
+    # Stored: the next read does not need the session again.
+    assert service.night_plans.get("owner", "car")["state"] == "done"

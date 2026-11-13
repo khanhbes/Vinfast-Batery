@@ -567,7 +567,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                     children: [
                       Text(
                         _customRange == null ? 'TỔNG KẾT THÁNG' : 'TỔNG KẾT',
-                        style: LuxeText.eyebrow.copyWith(fontSize: 11),
+                        style: LuxeText.eyebrow.copyWith(fontSize: 11.5),
                       ),
                       const SizedBox(height: 3),
                       AnimatedSwitcher(
@@ -581,7 +581,7 @@ class _HistoryScreenState extends State<SmartChargeHistoryScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: LuxeColors.text,
-                            fontSize: 15,
+                            fontSize: 15.5,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -2072,7 +2072,7 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         rearmMarkers.add(source[index].elapsedSeconds / 60);
       }
     }
-    const axisStyle = TextStyle(fontSize: 11, color: LuxeColors.dim);
+    const axisStyle = TextStyle(fontSize: 11.5, color: LuxeColors.dim);
     return AnimatedSwitcher(
       duration: MediaQuery.disableAnimationsOf(context)
           ? Duration.zero

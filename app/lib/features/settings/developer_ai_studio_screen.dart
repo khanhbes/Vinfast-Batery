@@ -781,7 +781,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       : 'MÁY CHỦ NGOẠI TUYẾN (BỘ ĐỆM CỤC BỘ)',
                   style: TextStyle(
                     color: _isServerOnline ? _ui.primary : LuxeColors.champagne,
-                    fontSize: 11,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
                   ),
@@ -1307,7 +1307,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       'Thực tế',
                       style: TextStyle(
                         color: _ui.primary,
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1324,7 +1324,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                       'Loại trừ',
                       style: TextStyle(
                         color: LuxeColors.champagne,
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -1342,7 +1342,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                   '${startSoc.toStringAsFixed(0)}% ➔ ${endSoc.toStringAsFixed(0)}% (+${delta.toStringAsFixed(0)}%)',
                   style: TextStyle(
                     color: LuxeColors.text,
-                    fontSize: 15,
+                    fontSize: 15.5,
                     fontWeight: FontWeight.w800,
                     fontFamily: 'monospace',
                   ),
@@ -1457,7 +1457,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                         color: _isServerOnline
                             ? _ui.primary
                             : LuxeColors.champagne,
-                        fontSize: 11,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1676,7 +1676,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
                 : Icon(Icons.flash_on_rounded, size: 22),
             label: Text(
               _tuning ? 'Đang Fine-tune Model…' : '⚡ Kích Hoạt Fine-Tune Ngay',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w900),
             ),
           ),
         ),
@@ -1855,7 +1855,7 @@ class _DeveloperAiStudioScreenState extends State<DeveloperAiStudioScreen>
               children: [
                 Text(
                   label,
-                  style: TextStyle(color: LuxeColors.muted, fontSize: 11),
+                  style: TextStyle(color: LuxeColors.muted, fontSize: 11.5),
                 ),
                 Text(
                   value,

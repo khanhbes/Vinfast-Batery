@@ -194,7 +194,7 @@ class _ErrorBars extends StatelessWidget {
                             color: color == LuxeColors.dim
                                 ? LuxeColors.muted
                                 : color,
-                            fontSize: 15,
+                            fontSize: 15.5,
                             fontWeight: FontWeight.w600,
                             fontFeatures: const [FontFeature.tabularFigures()],
                           ),

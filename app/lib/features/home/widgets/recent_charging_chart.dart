@@ -317,7 +317,7 @@ class _BarsPainter extends CustomPainter {
       final label = TextPainter(
         text: TextSpan(
           text: '${formatKwh(maxV)} kWh',
-          style: const TextStyle(color: LuxeColors.dim, fontSize: 11),
+          style: const TextStyle(color: LuxeColors.dim, fontSize: 11.5),
         ),
         textDirection: TextDirection.ltr,
       )..layout();

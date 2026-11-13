@@ -164,4 +164,45 @@ void main() {
       await tester.pump(const Duration(seconds: 3));
     });
   }
+  testWidgets('a battery already near the target is shown as it is', (
+    tester,
+  ) async {
+    // Seen on the owner's phone: the scooter was at 88% and this screen
+    // opened at 75%, ready to plan a charge the battery did not need.
+    final api = _FakeNight();
+    await _pump(
+      tester,
+      const NightChargingScreen(vehicleId: 'v1', currentSoc: 88),
+      1,
+      [nightChargingApiProvider.overrideWithValue(api)],
+      height: 2400,
+    );
+    expect(tester.takeException(), isNull);
+    expect(find.text('88%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('night-too-high')), findsOneWidget);
+    expect(find.byType(ChargeConfirmControl), findsNothing);
+    expect(find.byKey(const ValueKey('night-nudge-switch')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('a finished night charge returns to the form', (tester) async {
+    final api = _FakeNight()
+      ..plan = NightPlan.fromMap({
+        'state': 'done',
+        'targetSoc': 85,
+        'wakeAt': '06:30',
+        'result': {'state': 'completed', 'endSoc': 85},
+      });
+    await _pump(
+      tester,
+      const NightChargingScreen(vehicleId: 'v1', currentSoc: 40),
+      1,
+      [nightChargingApiProvider.overrideWithValue(api)],
+      height: 2400,
+    );
+    expect(find.byKey(const ValueKey('night-plan-card')), findsNothing);
+    expect(find.byKey(const ValueKey('night-last-done')), findsOneWidget);
+    expect(find.byType(ChargeConfirmControl), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
 }

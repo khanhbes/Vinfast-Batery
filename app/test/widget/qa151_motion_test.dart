@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vinfast_battery/core/services/assistant_context_coordinator.dart';
 import 'package:vinfast_battery/core/services/luxe_feedback.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
+import 'package:vinfast_battery/core/theme/plan_style.dart';
+import 'package:vinfast_battery/data/models/entitlement.dart';
 import 'package:vinfast_battery/core/widgets/battery_bot_mascot.dart';
 import 'package:vinfast_battery/core/widgets/luxe_expand_route.dart';
 import 'package:vinfast_battery/core/widgets/luxe_kit.dart';
@@ -459,5 +461,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.bySemanticsLabel('Đang tải lịch sử sạc'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  group('QA 152 round 3', () {
+    Widget host(Widget child, {PlanTier tier = PlanTier.free}) => MaterialApp(
+      theme: LuxeTheme.data(tier: tier),
+      home: MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: Scaffold(body: SizedBox(width: 320, height: 200, child: child)),
+      ),
+    );
+
+    test('Free has a warm silver light, not an emerald one', () {
+      expect(PlanStyle.free.glow, isNot(LuxeColors.emerald));
+      expect(PlanStyle.free.accent, LuxeColors.platinumHi);
+    });
+
+    test('the type scale has no near-duplicate steps', () {
+      expect(LuxeText.scale, isNot(contains(11)));
+      expect(LuxeText.scale, isNot(contains(15)));
+    });
+
+    testWidgets('the backdrop paints every mood and settles', (tester) async {
+      for (final mood in LuxeBackdropMood.values) {
+        await tester.pumpWidget(host(LuxeBackdrop(mood: mood)));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+      }
+    });
+
+    testWidgets('only Ultra draws the signature edge', (tester) async {
+      Finder edge() => find.descendant(
+        of: find.byType(LuxeGlass),
+        matching: find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.foregroundPainter != null,
+        ),
+      );
+      const card = LuxeGlass(signature: true, child: Text('xe'));
+      await tester.pumpWidget(host(card));
+      expect(edge(), findsNothing);
+      await tester.pumpWidget(host(card, tier: PlanTier.ultra));
+      await tester.pumpAndSettle();
+      expect(edge(), findsOneWidget);
+    });
   });
 }

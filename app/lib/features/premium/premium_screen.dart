@@ -532,7 +532,7 @@ class _TierPill extends StatelessWidget {
                   badge!,
                   style: TextStyle(
                     color: selected ? PlanColors.ink : PlanColors.lavender,
-                    fontSize: 11,
+                    fontSize: 11.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.2,
                   ),
@@ -759,7 +759,7 @@ class _BenefitRow extends StatelessWidget {
                 benefit.title,
                 style: const TextStyle(
                   color: LuxeColors.text,
-                  fontSize: 15,
+                  fontSize: 15.5,
                   fontWeight: FontWeight.w600,
                 ),
               ),

@@ -3,7 +3,7 @@
 The owner arms a plan at bedtime (current %, target 80–90 %, wake-up
 time) and confirms it once the way they switch charging ON. The worker
 starts the charge late enough that it ends just before waking (fewer hours
-at a high charge, the cheap night tariff), through the normal ON path:
+at a high charge), through the normal ON path:
 live safety checks, the Shelly auto-off ceiling and readback. A night
 session also has stricter limits than the general 75 °C / 2450 W: the
 outlet cuts at 60 °C, at a power well above what this scooter learned, or
@@ -133,7 +133,7 @@ def public(plan: dict | None) -> dict | None:
     if not plan:
         return None
     out = {k: v for k, v in plan.items() if k != "uid"}
-    for key in ("startAt", "finishBy", "createdAt", "updatedAt"):
+    for key in ("startAt", "finishBy", "createdAt", "updatedAt"):  # result stays as stored
         value = _utc(plan.get(key))
         out[key] = value.isoformat().replace("+00:00", "Z") if value else None
     return out
@@ -157,7 +157,35 @@ class NightChargingMixin:
 
     def night_plan(self, uid: str, vehicle_id: str) -> dict | None:
         self._owned_vehicle(uid, vehicle_id)
-        return public(self.night_plans.get(uid, vehicle_id))
+        return public(self._settle_night_plan(uid, self.night_plans.get(uid, vehicle_id)))
+
+    def _settle_night_plan(self, uid: str, plan: dict | None) -> dict | None:
+        """A started plan whose charge has ended becomes ``done`` with what the
+        charge reached. Before this the plan stayed "started" for ever: the
+        app kept saying "Đang sạc đêm" the next day and offered no way to
+        make a new plan. Read path only; never touches the outlet."""
+        if not plan or plan.get("state") != "started" or not plan.get("sessionId"):
+            return plan
+        try:
+            session = self.repository.get_session(uid, str(plan["sessionId"]))
+        except Exception:
+            return plan
+        if session is None:
+            return plan
+        if session.state in ("arming", "starting", "active", "stopping", "unknown"):
+            return plan
+        end_soc = session.actual_end_soc if getattr(session, "actual_end_soc", None) is not None             else session.estimated_soc
+        plan.update(state="done", updatedAt=self.clock(), result={
+            "state": session.state,
+            "stopReason": session.stop_reason,
+            "endSoc": round(float(end_soc)) if end_soc is not None else None,
+            "energyWh": round(float(session.energy_used_wh or 0)),
+        })
+        try:
+            self.night_plans.put(plan)
+        except Exception:
+            pass  # shown as done now; stored on a later read
+        return plan
 
     def arm_night_plan(self, uid: str, vehicle_id: str, body: dict) -> dict:
         from .service import SmartChargeError
