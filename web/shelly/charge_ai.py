@@ -45,7 +45,14 @@ RIDGE_FINETUNE = 6.0
 FEATURES = ("bias", "start", "gain", "offset", "partial", "gap")
 MAX_CORRECTION_PCT = charge_model.MAX_GAUGE_OFFSET_PCT
 MAX_CORRECTION_SHARE = 0.5
-FULL_SUGGEST_AFTER = 5
+# QA 157 (owner's data, 12 charges): the two charges after a full one were
+# within 1.2 %; from the third on the gauge had drifted (5 to 11 %).
+FULL_SUGGEST_AFTER = 3
+# From the third charge since a full one the cut-off leans toward a little
+# too much (owner's choice 13/11/2026): 1 % per charge, at most this.
+DRIFT_FREE_CHARGES = 2
+DRIFT_MARGIN_MAX_PCT = 3.0
+DRIFT_MARGIN_SHARE = 0.1
 FULL_END_PCT = charge_model.GAUGE_RESET_END_PCT
 
 
@@ -270,6 +277,48 @@ def correction(profile: LearnedProfile | None, start_pct: float, target_pct: flo
     return round(min(limit, max(-limit, value)), 2)
 
 
+def drift_margin(profile: LearnedProfile | None, start_pct: float, target_pct: float) -> float:
+    """Extra % to charge because the gauge has gone several charges without
+    a full one (QA 157). For every plan: it is caution, not a trained layer.
+    0 for a charge to full (the charger ends it) and right after a full one."""
+    if profile is None or target_pct >= FULL_END_PCT:
+        return 0.0
+    rows = charges(profile)
+    if not any(float(item.get("actualEndPct") or 0) >= FULL_END_PCT for item in rows):
+        return 0.0  # never anchored: nothing says how far it has drifted
+    partial = charges_since_full(profile)
+    if partial < DRIFT_FREE_CHARGES:
+        return 0.0
+    gain = max(0.0, target_pct - start_pct)
+    return round(min(DRIFT_MARGIN_MAX_PCT, gain * DRIFT_MARGIN_SHARE,
+                     float(partial - DRIFT_FREE_CHARGES + 1)), 2)
+
+
+def drift_report(profile: LearnedProfile) -> dict:
+    """The error of the stored Wh per 1 % apart for the charges right after a
+    full one and for the later ones. One figure for both hid the pattern."""
+    wh = profile.wh_per_pct
+    near: list[float] = []
+    later: list[float] = []
+    position = None
+    for item in charges(profile):
+        end = float(item.get("actualEndPct") or 0)
+        if end >= FULL_END_PCT:
+            position = 0
+            continue
+        if position is None or not wh or item.get("censored"):
+            continue
+        position += 1
+        error = abs(float(item.get("startPct") or 0) + float(item["energyWh"]) / wh - end)
+        (near if position <= DRIFT_FREE_CHARGES else later).append(error)
+
+    def side(values: list[float]) -> dict:
+        return {"n": len(values),
+                "mae": round(sum(values) / len(values), 2) if values else None}
+
+    return {"afterFull": side(near), "later": side(later), "freeCharges": DRIFT_FREE_CHARGES}
+
+
 def _gap_days(profile: LearnedProfile, now: datetime | None) -> float:
     rows = charges(profile)
     last = _at(rows[-1]) if rows else None
@@ -303,4 +352,5 @@ def status(profile: LearnedProfile) -> dict:
         "aiNeedDays": AI_MIN_DAYS,
         "chargesSinceFull": partial,
         "suggestFull": bool(rows) and partial >= FULL_SUGGEST_AFTER,
+        "drift": drift_report(profile),
     }

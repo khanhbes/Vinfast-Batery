@@ -330,6 +330,10 @@ def queue_sample(
         entry["shadowOffsetPct"] = round(float(sample["shadowOffsetPct"]), 2)
         entry["shadowWhPerPct"] = round(float(sample["shadowWhPerPct"]), 3)
     temperature = _positive(sample.get("batteryTempC"))
+    # QA 157: a one-digit reading is a lost digit ("6" of 26 or 36 was
+    # stored on 08/11/2026), not a battery that just charged at 6 °C.
+    if temperature is not None and temperature < 10:
+        temperature = None
     if temperature is not None:
         entry["batteryTempC"] = temperature
     sid = entry["sessionId"]

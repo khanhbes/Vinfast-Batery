@@ -327,7 +327,9 @@ def test_full_charge_is_suggested_after_several_partial_ones():
     partial = [_charge(i, day=i, start=20, gain=50, actual=70) for i in range(4)]
     assert charge_ai.status(LearnedProfile())["suggestFull"] is False
     assert charge_ai.status(LearnedProfile(ledger=partial))["chargesSinceFull"] == 4
-    assert charge_ai.status(LearnedProfile(ledger=partial))["suggestFull"] is False
+    # QA 157: suggested from the third partial charge (was the fifth).
+    assert charge_ai.status(LearnedProfile(ledger=partial[:2]))["suggestFull"] is False
+    assert charge_ai.status(LearnedProfile(ledger=partial[:3]))["suggestFull"] is True
     five = [*partial, _charge(4, day=4, start=20, gain=50, actual=70)]
     assert charge_ai.status(LearnedProfile(ledger=five))["suggestFull"] is True
     full = [*five, _charge(5, day=5, start=10, gain=90, actual=100, censored=True)]
@@ -343,3 +345,32 @@ def test_ridge_recovers_a_known_answer():
     weights = charge_ai.ridge(rows, targets, strength=1e-6)
     assert weights[0] == pytest.approx(2.0, abs=0.01) and weights[1] == pytest.approx(3.0, abs=0.01)
     assert charge_ai.ridge(rows, targets, prior=weights, strength=1e6) == pytest.approx(weights, abs=1e-3)
+
+
+# ── QA 157: the gauge drifts between full charges ──────────────────────────
+
+def _after_full(partials: int) -> LearnedProfile:
+    rows = [_charge(0, day=0, start=10, gain=90, actual=100, censored=True)]
+    rows += [_charge(i, day=i, start=20, gain=50, actual=70) for i in range(1, partials + 1)]
+    return LearnedProfile(ledger=rows, wh_per_pct=26.0)
+
+
+def test_drift_margin_starts_at_the_third_charge_after_a_full_one():
+    assert charge_ai.drift_margin(None, 20, 80) == 0.0
+    # Never charged to full: nothing says how far the gauge has drifted.
+    never = LearnedProfile(ledger=[_charge(i, day=i, start=20, gain=50, actual=70) for i in range(6)])
+    assert charge_ai.drift_margin(never, 20, 80) == 0.0
+    assert charge_ai.drift_margin(_after_full(0), 20, 80) == 0.0
+    assert charge_ai.drift_margin(_after_full(1), 20, 80) == 0.0
+    assert charge_ai.drift_margin(_after_full(2), 20, 80) == 1.0
+    assert charge_ai.drift_margin(_after_full(3), 20, 80) == 2.0
+    assert charge_ai.drift_margin(_after_full(9), 20, 80) == 3.0
+    # A charge to full is ended by the charger; a small top-up gets a small margin.
+    assert charge_ai.drift_margin(_after_full(9), 20, 100) == 0.0
+    assert charge_ai.drift_margin(_after_full(9), 70, 80) == 1.0
+
+
+def test_drift_report_scores_the_two_groups_apart():
+    report = charge_ai.status(_after_full(4))["drift"]
+    assert report["afterFull"]["n"] == 2 and report["later"]["n"] == 2
+    assert charge_ai.status(LearnedProfile())["drift"]["afterFull"] == {"n": 0, "mae": None}

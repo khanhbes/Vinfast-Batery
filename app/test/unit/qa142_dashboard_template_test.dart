@@ -65,7 +65,9 @@ void main() {
     ]);
     expect([high.soc, high.odoKm, high.tempC], [100, 999999, 100]);
     final low = read([at(t.soc, '0'), at(t.odo, '0'), at(t.temp, '0')]);
-    expect([low.soc, low.odoKm, low.tempC], [0, 0, 0]);
+    // QA 157: a one-digit temperature is a lost digit, not a reading.
+    expect([low.soc, low.odoKm, low.tempC], [0, 0, null]);
+    expect(read([at(t.temp, '10')]).tempC, 10);
   });
 
   test('out of range or lost digits are not readings', () {

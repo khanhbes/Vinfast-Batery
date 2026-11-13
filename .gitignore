@@ -114,3 +114,6 @@ app/qa-evidence/
 .env.*
 !.env*.example
 !*.env.example
+
+# QA 157: the owner's charge profile read from production (tools/read_charge_ledger.ps1)
+charge-ledger.local.json

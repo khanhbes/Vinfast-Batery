@@ -445,7 +445,10 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                                or self.entitlements.allows(uid, "learning_train")))
         correction = (charge_ai.correction(learned, current, target, self.clock())
                       if layers_allowed else 0.0)
-        estimate = charge_model.estimate(params, current + correction, target)
+        # QA 157: several charges since a full one: charge a little more.
+        # A negative correction asks for more energy.
+        correction = round(correction - charge_ai.drift_margin(learned, current, target), 2)
+        estimate = charge_model.estimate(params, max(0.0, current + correction), target)
         seconds = estimate.seconds
         if seconds <= 0 or seconds > self.max_minutes * 60:
             raise SmartChargeError("unsafeDuration",

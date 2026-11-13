@@ -470,7 +470,10 @@ abstract final class DashboardLayoutParser {
     }
 
     final soc = percent(socRead?.digits);
-    final temp = percent(tempRead?.digits);
+    // QA 157: a one-digit temperature is a lost digit ("6" of 26 was
+    // saved with a charge), not a reading.
+    final tempValue = percent(tempRead?.digits);
+    final temp = tempValue != null && tempValue < 10 ? null : tempValue;
     double? odo;
     final odoDigits = odoRead?.digits;
     if (odoDigits != null && odoDigits.length <= 6) {

@@ -333,6 +333,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Khung camera và bài đo đều đọc qua `SevenSegmentReader.scanFrame` (kéo sáng, xoay thẳng, dò lại vị trí kính bằng `fitWindow`, rồi đọc theo vùng). Đổi bộ đọc thì chạy `test/unit/qa156_scan_bench_test.dart` (`SCAN_BENCH_N`, `SCAN_BENCH_SPREAD`, `SCAN_BENCH_VERBOSE=1`) và so số trước sau; ngưỡng test: sai ≤ 1%, đúng ≥ 95%.
   - Thà không có số còn hơn số sai: hình cỡ chữ số không giải mã được (`unreadGlyph`) cạnh một số, mảnh cao lệch, hay hai số tranh phiếu đều làm khung đó bỏ số. Đừng nới các chốt này để tăng tỉ lệ "đọc được".
   - Phép đo hiện chỉ dựa trên một ảnh thật của một xe; số liệu không phải độ chính xác ngoài đời.
+- **QA 157 (13/11/2026, chủ app chọn) — đồng hồ lệch giữa hai lần sạc đầy:**
+  - Trên xe chủ app, 2 lần sau sạc đầy lệch khoảng 0,5%, từ lần thứ 3 khoảng 5%. Nhắc sạc đầy sau 3 lần; từ lần thứ 3 `charge_ai.drift_margin` nạp dư 1–3% (mọi gói, không cho mục tiêu 100%). Khi không chắc thì dư, không thiếu.
+  - Đánh giá mô hình phải tách hai nhóm (`drift_report`); một con số MAE gộp che mất mẫu này. Nhiệt độ pin dưới 10°C coi là đọc sai.
+  - Đọc sổ sạc của chủ app: `tools/read_charge_ledger.ps1` (chỉ đọc, chủ app chạy, kết quả ở `charge-ledger.local.json`, không commit).
 
 ### 3.7. BatteryBot (trợ lý AI)
 

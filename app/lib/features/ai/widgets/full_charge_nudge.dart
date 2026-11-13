@@ -4,7 +4,9 @@ import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../data/models/smart_charging_session.dart';
 
-const fullChargeSuggestAfter = 5;
+/// QA 157: 3, not 5. On the owner's charges the two after a full one were
+/// within about 1 %; from the third on the gauge had drifted.
+const fullChargeSuggestAfter = 3;
 
 /// Real charges since the last one that reached full, newest first (QA 148).
 /// From the history, not from readings: whoever never types a % needs this most.
@@ -41,8 +43,9 @@ class FullChargeNudge extends StatelessWidget {
       icon: Icons.battery_charging_full_rounded,
       color: LuxeColors.champagne,
       message:
-          'Đã $chargesSinceFull lần sạc chưa đầy. Sạc đầy một lần có thể giúp '
-          '% trên đồng hồ chính xác hơn.',
+          'Đã $chargesSinceFull lần sạc chưa đầy. Đồng hồ xe lệch dần giữa hai '
+          'lần sạc đầy, nên dự đoán % lần này có thể lệch nhiều hơn. Sạc đầy '
+          'một lần để đồng hồ chỉnh lại.',
       action: TextButton(
         key: const ValueKey('full-charge-choose'),
         onPressed: onChooseFull,

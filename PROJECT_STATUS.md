@@ -12,6 +12,27 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 157. Task Completion Log — Dự đoán % sạc: đồng hồ xe lệch dần giữa hai lần sạc đầy (13/11/2026, chủ app: "đánh giá phần AI dự đoán… làm như nào để giảm sai số nhất có thể lâu dài"; chọn: dư vài % khi không chắc, mục tiêu dưới 2%, đồng ý sạc đầy mỗi 3 lần sạc) — Code + test xong, **chưa deploy, chưa build APK**
+
+**Dữ liệu (chủ app tự chạy `tools/read_charge_ledger.ps1`, chỉ đọc, một xe):** 12 lần sạc có nhãn từ 06/09 đến 09/11, Wh/1% đang dùng 26,372. Trên 10 lần không tới 100%: sai số trung bình 3,23%, trung vị 1,01%, lớn nhất 11,4%; dùng số của hãng (26,67) cho 3,30%.
+- **Tách theo vị trí kể từ lần sạc đầy:** 2 lần ngay sau sạc đầy: 4 lần, lệch trung bình **0,51%**. Từ lần thứ 3 trở đi: 6 lần, lệch trung bình **5,04%**.
+- Lệch có bù nhau giữa hai lần liền kề (23/10 +4,8% rồi 26/10 −5,1%; 31/10 +11,4% rồi lần đầy 01/11 −13,4%): điện nạp vào nhất quán, số đồng hồ hiện thì không.
+- Chủ app đọc % ngay khi dừng xe và ngay khi ngắt sạc, nhập tay, thường sạc ở 8–9%.
+- **Mẫu nhỏ (12 lần, một xe):** đây là giả thuyết có dữ liệu ủng hộ, chưa phải kết luận chắc.
+
+**Thay đổi:**
+- **Nhắc sạc đầy sau 3 lần** (trước là 5): `FULL_SUGGEST_AFTER` máy chủ, `fullChargeSuggestAfter` app; câu nhắc nói rõ dự đoán có thể lệch nhiều hơn.
+- **Sạc dư một chút từ lần thứ 3 kể từ lần đầy** (`charge_ai.drift_margin`): +1% mỗi lần, tối đa 3% và không quá 10% phần cần sạc; không áp dụng cho mục tiêu 100% và cho xe chưa từng sạc đầy. Mọi gói. Đi qua `soc_correction_pct` (số âm = nạp thêm). Mức 1–3% là chọn thận trọng, chưa đủ dữ liệu để tinh chỉnh; nó không sửa được lần đồng hồ lệch theo chiều ngược lại (lần đó sẽ dư nhiều hơn).
+- **Chấm sai số hai nhóm** (`charge_ai.drift_report`, trả trong `status.drift`): app chưa hiển thị.
+- **Nhiệt độ pin một chữ số bị bỏ** (máy chủ khi lưu mẫu, app khi quét): lần sạc 08/11 đã lưu 6°C, là mất chữ số.
+- Đã kiểm tra: lần tự huấn luyện 10/11 ghi `promoted` với sai số 3,45% so với 3,26% là đúng quy tắc hiện tại (chỉ từ chối khi kém hơn quá 0,5%); không đổi.
+
+**Kiểm thử:** backend `pytest tests`: 959 đạt, 15 bỏ qua (thêm 2 test, sửa 1 test ngưỡng nhắc). Flutter: `analyze lib` sạch; các test liên quan đạt; **chưa chạy lại toàn bộ Flutter**. Chưa có test ở tầng service cho biên an toàn (chỉ test hàm).
+
+**Cần chủ app:** deploy máy chủ (mục 153–157); sạc đầy mỗi 3 lần và tiếp tục nhập %; sau khoảng 10 lần sạc nữa chạy lại script để xem hai nhóm sai số có giữ đúng mẫu không.
+
+---
+
 ## 156. Task Completion Log — Quét đồng hồ xe: độ chính xác khi cầm lệch tay và giao diện màn quét (13/11/2026, chủ app: "tập trung vào chức năng quét camera màn hình xe… cải tiến giao diện và đặc biệt là độ chính xác", kèm một ảnh mẫu màn hình Feliz) — Code + test xong, APK 2.1.5+238 đã cài lên Xiaomi, **chưa xem màn quét trên máy và chưa quét xe thật**
 
 **Cách đo (mới):** `test/unit/qa156_scan_bench_test.dart` lấy ảnh mẫu của chủ app (68%, ODO 4818, 31°C; lưu thành `test/fixtures/dashboard/feliz_photo_full.gray.gz`), cắt đúng như máy quét cắt khung ngắm, rồi làm lệch ngẫu nhiên: lệch tâm tới 8%, xa gần −15% đến +20%, nghiêng tới 7°, tối hơn 45% hoặc sáng hơn 30%, nhòe, nhiễu. Mỗi khung đọc qua cùng một hàm với app (`SevenSegmentReader.scanFrame`).
