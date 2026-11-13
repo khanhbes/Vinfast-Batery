@@ -80,11 +80,14 @@ class MaintenanceReminderService {
       final overdue = <MaintenanceTaskModel>[];
       final dueSoon = <MaintenanceTaskModel>[];
 
+      // QA 154: an appointment date reminds too (7 days ahead, and once
+      // it has passed), not only the kilometre mark.
+      final now = DateTime.now();
       for (final task in tasks) {
         if (task.taskId == null) continue;
-        if (task.isOverdue(currentOdo)) {
+        if (task.isOverdue(currentOdo, now: now)) {
           if (!_already(prefs, task, 'overdue')) overdue.add(task);
-        } else if (task.isDueSoon(currentOdo)) {
+        } else if (task.isDueSoon(currentOdo, now: now)) {
           if (!_already(prefs, task, 'due_soon')) dueSoon.add(task);
         }
       }
@@ -112,7 +115,8 @@ class MaintenanceReminderService {
     final summary = MaintenanceReminderSummary.of(
       titles: [for (final task in tasks) task.title],
       overdue: threshold == 'overdue',
-      remainingKm: tasks.length == 1
+      // The distance only when the kilometre mark is what makes it due.
+      remainingKm: tasks.length == 1 && tasks.single.isDueSoon(currentOdo)
           ? tasks.single.remainingKm(currentOdo)
           : null,
     );

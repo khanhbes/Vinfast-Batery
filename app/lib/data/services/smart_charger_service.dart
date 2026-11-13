@@ -672,7 +672,7 @@ class SmartChargerService {
     final duration = plan.effectiveDuration(now);
     if (duration <= Duration.zero || duration > maxSessionDuration) {
       throw const SmartChargerException(
-        'Phiên sạc phải lớn hơn 0 và không vượt quá 10 giờ.',
+        'Phiên sạc phải lớn hơn 0 và không vượt quá 7 giờ.',
         code: 'unsafeDuration',
       );
     }

@@ -236,7 +236,7 @@ class SmartChargePlan {
     this.hardDeadlineAt,
   });
 
-  static const maxDuration = Duration(hours: 10);
+  static const maxDuration = Duration(hours: 7);
   final String vehicleId;
   final double currentSoc;
   final double targetSoc;

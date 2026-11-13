@@ -72,9 +72,10 @@ def _vn_clock(instant: datetime) -> str:
 # half-interval + Cloud OFF latency) counts as already delivered, so the
 # outlet switches off within a fraction of 1 % of the target.
 TARGET_LEAD_SECONDS = 20
-# Owner's choice (13/11/2026): one timed charge runs at most 7 hours. A charge
-# to a target keeps the 10-hour ceiling (it stops on energy, not on the clock).
-TIMED_MAX_MINUTES = 420
+# Owner's choice (13/11/2026): one charge runs at most 7 hours, timed or to a
+# target (the Shelly ceiling of a target charge included). It was 10 hours.
+SESSION_MAX_MINUTES = 420
+TIMED_MAX_MINUTES = SESSION_MAX_MINUTES
 GAUGE_SETTLE_MIN_WH = 30.0  # the same line as a junk session (history_quality)
 # Ride-through (Task 126): a failed READ while a verified charge runs is a
 # connection gap, not an unknown relay. The Shelly keeps its own ceiling timer,
@@ -126,10 +127,10 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         # Clamp deployment configuration so an accidental environment value
         # can never permit a longer device timer or deadline.
         try:
-            configured_max = int(os.environ.get("SMART_CHARGE_MAX_MINUTES", "600"))
+            configured_max = int(os.environ.get("SMART_CHARGE_MAX_MINUTES", str(SESSION_MAX_MINUTES)))
         except (TypeError, ValueError):
-            configured_max = 600
-        self.max_minutes = max(1, min(configured_max, 600))
+            configured_max = SESSION_MAX_MINUTES
+        self.max_minutes = max(1, min(configured_max, SESSION_MAX_MINUTES))
         self.safety_policy = SmartChargeSafetyPolicy()
         self._unsafe_samples: dict[tuple[str, str], int] = {}
         self._last_telemetry_at: dict[str, datetime] = {}
@@ -355,10 +356,10 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         candidates = fusion.candidates
         seconds = fusion.duration_seconds
         if seconds <= 0 or seconds > self.max_minutes * 60:
-            raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 10 giờ")
+            raise SmartChargeError("unsafeDuration", "Thời gian sạc dự kiến phải lớn hơn 0 và không vượt quá 7 giờ")
         minutes = int(round(seconds / 60))
         if minutes <= 0:
-            raise SmartChargeError("unsafeDuration", "ETA phải lớn hơn 0 và không vượt quá 10 giờ")
+            raise SmartChargeError("unsafeDuration", "Thời gian sạc dự kiến phải lớn hơn 0 và không vượt quá 7 giờ")
         now = self.clock()
         source = str(result.get("modelSource") or "physics_fallback")
         runtime_health = str(result.get("runtimeHealth") or ("loaded" if source == "ai_model" else "fallback"))
@@ -448,7 +449,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         seconds = estimate.seconds
         if seconds <= 0 or seconds > self.max_minutes * 60:
             raise SmartChargeError("unsafeDuration",
-                                   "Thời gian dự kiến phải lớn hơn 0 và không vượt quá 10 giờ")
+                                   "Thời gian sạc dự kiến vượt giới hạn 7 giờ của một phiên. Hãy chọn mục tiêu thấp hơn.")
         device_timer = charge_model.ceiling_seconds(seconds, self.max_minutes)
         samples = params.samples
         stage = "personalized" if samples >= 3 else ("calibrating" if samples >= 1 else "base")
@@ -1029,7 +1030,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         if duration <= 0 or duration > self.max_minutes * 60:
             raise SmartChargeError(
                 "unsafeDuration",
-                "ETA phải lớn hơn 0 và không vượt quá 10 giờ",
+                "Thời gian sạc dự kiến phải lớn hơn 0 và không vượt quá 7 giờ",
                 400,
             )
         session = ChargingSession(
@@ -1685,7 +1686,7 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             if ceiling < 60:
                 raise SmartChargeError(
                     "safetyLimitReached",
-                    "Phiên sạc đã gần giới hạn an toàn 10 giờ; không nâng thêm mục tiêu.", 409)
+                    "Phiên sạc đã gần giới hạn an toàn 7 giờ; không nâng thêm mục tiêu.", 409)
             if now + timedelta(seconds=ceiling) > session.effective_stop_at + timedelta(seconds=30):
                 binding = self.session_binding(uid, session)
                 extender = getattr(self.provider, "extend_timer", None)

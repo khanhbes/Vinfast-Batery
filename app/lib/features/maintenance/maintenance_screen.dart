@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/utils/number_text.dart';
 import '../../core/widgets/vehicle_picker_sheet.dart';
@@ -16,6 +18,8 @@ import '../../core/theme/app_motion.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/widgets/error_state.dart';
 import '../../data/models/maintenance_task_model.dart';
+import '../../data/services/maintenance_reminder_service.dart';
+import 'widgets/maintenance_complete_sheet.dart';
 import '../../data/repositories/maintenance_repository.dart';
 import 'vinfast_service_catalog.dart';
 import '../../core/widgets/luxe_kit.dart';
@@ -192,6 +196,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                 )
               else
                 ..._buildTaskSlivers(filtered),
+              SliverToBoxAdapter(child: _buildYearSummary(tasks)),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
@@ -314,10 +319,12 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     MaintenanceUrgency? section;
     var index = 0;
     for (final task in filtered) {
-      final u = task.urgency(_currentOdo);
+      final u = task.urgency(_currentOdo, now: DateTime.now());
       if (_filter == _UrgencyFilter.all && u != section) {
         section = u;
-        final n = filtered.where((t) => t.urgency(_currentOdo) == u).length;
+        final n = filtered
+            .where((t) => t.urgency(_currentOdo, now: DateTime.now()) == u)
+            .length;
         items.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
@@ -411,6 +418,21 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     );
   }
 
+  /// QA 154: what this year's service book adds up to; nothing when the
+  /// year has no completed work.
+  Widget _buildYearSummary(List<MaintenanceTaskModel> tasks) {
+    final summary = MaintenanceYearSummary.of(tasks, DateTime.now());
+    if (summary == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: LuxeNotice(
+        key: const ValueKey('maintenance-year-summary'),
+        icon: Icons.menu_book_rounded,
+        message: summary.sentence,
+      ),
+    );
+  }
+
   // ── BatteryBot reminders (read only) ───────────────────────────────
 
   Widget _buildReminders() {
@@ -424,7 +446,7 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text('NHẮC LỊCH TỪ BATTERYBOT', style: LuxeText.eyebrow),
+              const Text('NHẮC LỊCH TỪ PINOVA BOT', style: LuxeText.eyebrow),
               const SizedBox(height: 4),
               const Text(
                 'Chỉ xem tại đây. Sửa hoặc hủy qua Pinova Bot.',
@@ -507,12 +529,16 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
     final filtered = filter == _UrgencyFilter.all
         ? List<MaintenanceTaskModel>.from(tasks)
         : tasks
-              .where((t) => t.urgency(_currentOdo) == filter.toUrgency())
+              .where(
+                (t) =>
+                    t.urgency(_currentOdo, now: DateTime.now()) ==
+                    filter.toUrgency(),
+              )
               .toList();
     // Ưu tiên hiển thị: overdue > dueSoon > upcoming > completed; cùng nhóm
     // sort theo targetOdo tăng dần.
     int rank(MaintenanceTaskModel t) {
-      switch (t.urgency(_currentOdo)) {
+      switch (t.urgency(_currentOdo, now: DateTime.now())) {
         case MaintenanceUrgency.overdue:
           return 0;
         case MaintenanceUrgency.dueSoon:
@@ -534,29 +560,48 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
 
   // ── Actions ────────────────────────────────────────────────────────
 
+  /// QA 154: "done" asks where the odometer stood and, if the owner
+  /// wants, what it cost. One tap kept only today's date.
   Future<void> _completeTask(MaintenanceTaskModel task) async {
-    if (task.taskId == null) return;
+    final id = task.taskId;
+    if (id == null) return;
     HapticFeedback.lightImpact();
-    try {
-      await MaintenanceRepository.updateMaintenanceTask(task.taskId!, {
-        'isCompleted': true,
-        'completedDate': DateTime.now().toUtc(),
-      });
-      if (mounted) {
-        AppPopup.showMessage(
-          'Đã đánh dấu hoàn thành',
-          kind: AppNoticeKind.success,
-          // QA 150: a mistaken tap could not be taken back.
-          actionLabel: 'Hoàn tác',
-          action: () => _undoComplete(task),
-        );
-        await _offerNext(task);
-      }
-    } catch (e) {
-      if (mounted) {
-        AppPopup.showError(AppErrorFormatter.format(e), userInitiated: true);
-      }
-    }
+    final record = await MaintenanceCompleteSheet.show(
+      context,
+      task: task,
+      currentOdo: _currentOdo,
+      onSave: (record) async {
+        try {
+          // Noon, so the day is the same in every time zone.
+          final at = DateTime(
+            record.date.year,
+            record.date.month,
+            record.date.day,
+            12,
+          );
+          await MaintenanceRepository.updateMaintenanceTask(id, {
+            'isCompleted': true,
+            'completedDate': at.toUtc(),
+            'completedOdo': record.odo,
+            'costVnd': record.costVnd,
+            'completionNote': record.note,
+          });
+          return null;
+        } catch (e) {
+          return AppErrorFormatter.format(e);
+        }
+      },
+    );
+    if (record == null || !mounted) return;
+    unawaited(MaintenanceReminderService.resetNotifyFlag(id));
+    AppPopup.showMessage(
+      'Đã ghi vào sổ bảo dưỡng',
+      kind: AppNoticeKind.success,
+      // QA 150: a mistaken tap could not be taken back.
+      actionLabel: 'Hoàn tác',
+      action: () => _undoComplete(task),
+    );
+    await _offerNext(task.copyWith(completedOdo: record.odo));
   }
 
   /// QA 150: a periodic service used to end with its one milestone. The
@@ -585,6 +630,9 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
       await MaintenanceRepository.updateMaintenanceTask(task.taskId!, {
         'isCompleted': false,
         'completedDate': null,
+        'completedOdo': null,
+        'costVnd': null,
+        'completionNote': null,
       });
     } catch (e) {
       if (mounted) {
@@ -594,40 +642,18 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
   }
 
   Future<void> _confirmDelete(MaintenanceTaskModel task) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => Theme(
-        data: LuxeTheme.of(context),
-        child: AlertDialog(
-          backgroundColor: LuxeColors.sheet,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(22),
-          ),
-          title: const Text(
-            'Xóa mốc bảo dưỡng',
-            style: TextStyle(color: LuxeColors.text),
-          ),
-          content: Text(
-            'Xóa "${task.title}"? Thao tác này không thể hoàn tác.',
-            style: const TextStyle(color: LuxeColors.muted),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Hủy'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: LuxeColors.danger),
-              child: const Text('Xóa'),
-            ),
-          ],
-        ),
-      ),
+    final ok = await showLuxeConfirm(
+      context,
+      title: 'Xóa mốc bảo dưỡng',
+      message: task.isCompleted
+          ? 'Xóa "${task.title}" khỏi sổ bảo dưỡng? Không hoàn tác được.'
+          : 'Xóa "${task.title}"? Không hoàn tác được.',
+      confirmLabel: 'Xóa',
     );
     if (ok != true || task.taskId == null) return;
     try {
       await MaintenanceRepository.deleteMaintenanceTask(task.taskId!);
+      unawaited(MaintenanceReminderService.resetNotifyFlag(task.taskId!));
       if (mounted) {
         AppPopup.showMessage('Đã xóa', kind: AppNoticeKind.success);
       }
@@ -658,6 +684,10 @@ class _MaintenanceScreenState extends ConsumerState<MaintenanceScreen> {
                 await MaintenanceRepository.updateMaintenanceTask(
                   task!.taskId!,
                   newTask.toFirestore(),
+                );
+                // A moved milestone or date may be due again later.
+                unawaited(
+                  MaintenanceReminderService.resetNotifyFlag(task.taskId!),
                 );
               } else {
                 await MaintenanceRepository.createMaintenanceTask(
@@ -807,7 +837,9 @@ class _TaskCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final urgency = task.urgency(currentOdo);
+    final now = DateTime.now();
+    final urgency = task.urgency(currentOdo, now: now);
+    final days = task.daysUntilScheduled(now);
     final color = urgencyColor(urgency);
     final meta = _ServiceTypeMeta.of(task.serviceType);
     final remain = task.remainingKm(currentOdo);
@@ -821,14 +853,29 @@ class _TaskCard extends StatelessWidget {
         ? 1.0
         : (1 - remain / interval).clamp(0.0, 1.0);
     final status = switch (urgency) {
-      MaintenanceUrgency.overdue => 'Quá ${groupThousands(-remain)} km',
-      MaintenanceUrgency.dueSoon => 'Còn ${groupThousands(remain)} km',
+      // QA 154: say which of the two limits made it due.
+      MaintenanceUrgency.overdue =>
+        remain <= 0
+            ? 'Quá ${groupThousands(-remain)} km'
+            : 'Quá ngày hẹn ${-(days ?? 0)} ngày · còn ${groupThousands(remain)} km',
+      MaintenanceUrgency.dueSoon =>
+        remain <= MaintenanceTaskModel.dueSoonKm
+            ? 'Còn ${groupThousands(remain)} km'
+            : days == 0
+            ? 'Hẹn hôm nay · còn ${groupThousands(remain)} km'
+            : 'Hẹn sau $days ngày · còn ${groupThousands(remain)} km',
       MaintenanceUrgency.upcoming =>
         'Còn ${groupThousands(remain)} km · mốc ${groupThousands(task.targetOdo)} km',
       MaintenanceUrgency.completed =>
         task.completedDate == null
             ? 'Đã hoàn thành'
-            : 'Hoàn thành ${DateFormat('dd/MM/yyyy').format(task.completedDate!.toLocal())}',
+            : [
+                'Hoàn thành ${DateFormat('dd/MM/yyyy').format(task.completedDate!.toLocal())}',
+                if (task.completedOdo != null)
+                  '${groupThousands(task.completedOdo!)} km',
+                if (task.costVnd != null && task.costVnd! > 0)
+                  formatVnd(task.costVnd!),
+              ].join(' · '),
     };
 
     return Material(
@@ -922,6 +969,7 @@ class _TaskCard extends StatelessWidget {
                 child: _UrgencyBar(value: progress, color: color),
               ),
               if (task.scheduledDate != null ||
+                  task.completionNote != null ||
                   task.description.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Padding(
@@ -930,6 +978,7 @@ class _TaskCard extends StatelessWidget {
                     [
                       if (task.scheduledDate != null)
                         'Hẹn ${DateFormat('dd/MM/yyyy').format(task.scheduledDate!.toLocal())}',
+                      if (task.completionNote != null) task.completionNote!,
                       if (task.description.isNotEmpty) task.description,
                     ].join(' · '),
                     maxLines: 2,
@@ -1064,7 +1113,7 @@ class _Counts {
   factory _Counts.from(List<MaintenanceTaskModel> tasks, int currentOdo) {
     var overdue = 0, dueSoon = 0, upcoming = 0, completed = 0;
     for (final t in tasks) {
-      switch (t.urgency(currentOdo)) {
+      switch (t.urgency(currentOdo, now: DateTime.now())) {
         case MaintenanceUrgency.overdue:
           overdue++;
           break;
@@ -1256,7 +1305,7 @@ class _UrgencyMeta {
 class _MaintenanceDialog extends StatefulWidget {
   final MaintenanceTaskModel? task;
   final int currentOdo;
-  final void Function(MaintenanceTaskModel) onSave;
+  final Future<void> Function(MaintenanceTaskModel) onSave;
 
   const _MaintenanceDialog({
     this.task,
@@ -1274,6 +1323,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
   late TextEditingController _odoCtrl;
   ServiceType _selectedType = ServiceType.other;
   DateTime? _scheduledDate;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -1356,7 +1406,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               const SizedBox(height: 6),
               _buildField(
                 _titleCtrl,
-                hint: 'VD: Thay dầu hộp số',
+                hint: 'VD: Thay má phanh sau',
                 icon: Icons.label_outline_rounded,
               ),
               const SizedBox(height: 14),
@@ -1383,7 +1433,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
               _buildDatePicker(),
               const SizedBox(height: 20),
               FilledButton(
-                onPressed: _save,
+                onPressed: _saving ? null : _save,
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   backgroundColor: context.planAccent,
@@ -1393,7 +1443,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
                   ),
                 ),
                 child: Text(
-                  widget.task?.taskId != null ? 'CẬP NHẬT' : 'THÊM MỚI',
+                  widget.task?.taskId != null ? 'Cập nhật' : 'Thêm mốc',
                   style: const TextStyle(
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.6,
@@ -1600,7 +1650,7 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
             Expanded(
               child: Text(
                 _scheduledDate != null
-                    ? '${_scheduledDate!.day}/${_scheduledDate!.month}/${_scheduledDate!.year}'
+                    ? DateFormat('dd/MM/yyyy').format(_scheduledDate!)
                     : 'Chọn ngày hẹn (tuỳ chọn)',
                 style: TextStyle(
                   color: _scheduledDate != null
@@ -1625,12 +1675,14 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
     );
   }
 
-  void _save() {
+  Future<void> _save() async {
+    if (_saving) return;
     final title = _titleCtrl.text.trim();
-    final odo = int.tryParse(_odoCtrl.text.trim()) ?? 0;
-    if (title.isEmpty || odo <= 0) {
+    // "5 000" and "5.000" are the same milestone.
+    final odo = MaintenanceCompleteSheet.parseAmount(_odoCtrl.text) ?? 0;
+    if (title.isEmpty || odo <= 0 || odo > 999999) {
       AppPopup.showMessage(
-        'Vui lòng nhập tên dịch vụ và mốc ODO hợp lệ',
+        'Nhập tên dịch vụ và mốc ODO từ 1 đến 999 999 km',
         kind: AppNoticeKind.warning,
       );
       return;
@@ -1646,8 +1698,17 @@ class _MaintenanceDialogState extends State<_MaintenanceDialog> {
       createdAt: widget.task?.createdAt ?? DateTime.now(),
       scheduledDate: _scheduledDate,
       serviceType: _selectedType,
+      completedOdo: widget.task?.completedOdo,
+      costVnd: widget.task?.costVnd,
+      completionNote: widget.task?.completionNote,
     );
-    widget.onSave(task);
+    // QA 154: a second tap while the first save ran made a duplicate.
+    setState(() => _saving = true);
+    try {
+      await widget.onSave(task);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 }
 
@@ -1886,14 +1947,67 @@ class _TypePickerSheet extends StatelessWidget {
         ServiceType.suspensionRear,
       ],
       'Động cơ': [ServiceType.motor, ServiceType.motorSeal],
+      // QA 154: engine oil, air filter, coolant and gearbox are not parts
+      // of an electric scooter; a task that already has one keeps it.
       'Khác': [
-        ServiceType.oilChange,
-        ServiceType.airFilter,
-        ServiceType.coolantFlush,
         ServiceType.inspection,
-        ServiceType.transmissionService,
         ServiceType.other,
+        if (const {
+          ServiceType.oilChange,
+          ServiceType.airFilter,
+          ServiceType.coolantFlush,
+          ServiceType.transmissionService,
+        }.contains(currentType))
+          currentType,
       ],
     };
+  }
+}
+
+/// QA 154: this year's completed work, for the line under the list.
+class MaintenanceYearSummary {
+  const MaintenanceYearSummary({
+    required this.year,
+    required this.count,
+    required this.costVnd,
+    required this.costed,
+  });
+
+  final int year;
+  final int count;
+  final int costVnd;
+
+  /// How many of them have a cost recorded.
+  final int costed;
+
+  static MaintenanceYearSummary? of(
+    List<MaintenanceTaskModel> tasks,
+    DateTime now,
+  ) {
+    var count = 0, cost = 0, costed = 0;
+    for (final task in tasks) {
+      final done = task.completedDate?.toLocal();
+      if (!task.isCompleted || done == null || done.year != now.year) continue;
+      count++;
+      final value = task.costVnd;
+      if (value != null && value > 0) {
+        cost += value;
+        costed++;
+      }
+    }
+    if (count == 0) return null;
+    return MaintenanceYearSummary(
+      year: now.year,
+      count: count,
+      costVnd: cost,
+      costed: costed,
+    );
+  }
+
+  String get sentence {
+    final head = 'Sổ bảo dưỡng $year: $count hạng mục đã làm';
+    if (costed == 0) return '$head. Chưa ghi chi phí.';
+    final partial = costed < count ? ' ($costed hạng mục có ghi chi phí)' : '';
+    return '$head, tổng chi ${formatVnd(costVnd)}$partial.';
   }
 }

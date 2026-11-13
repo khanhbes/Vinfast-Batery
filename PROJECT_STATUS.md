@@ -12,6 +12,38 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 154. Task Completion Log — Mọi phiên sạc tối đa 7 giờ, Lịch bảo dưỡng: ngày hẹn được tính, sổ bảo dưỡng (13/11/2026, chủ app: "trần AI cũng để 7h", "tập trung kiểm tra tổng thể chức năng lịch bảo dưỡng, sửa chữa và nâng cấp") — Code + test xong, APK 2.1.3+236 đã build, **chưa cài lên máy (điện thoại không kết nối)**, **máy chủ chưa deploy**
+
+**Trần 7 giờ cho mọi phiên sạc (thay câu "Sạc AI giữ trần 10 giờ" ở mục 153):**
+- Máy chủ (`web/shelly/service.py`): `SESSION_MAX_MINUTES = 420`, `TIMED_MAX_MINUTES` trỏ về cùng số; `max_minutes` không bao giờ vượt 420 kể cả khi biến môi trường đặt cao hơn. Pinova Bot (`engine.py`: 1–420 phút) và kiến thức bot ("tối đa 7 giờ").
+- App: `ChargeEstimator.maxMinutes`, `smartChargeMaxMinutes`, `ShellyConnection.maxDuration`, hạn cứng của controller (`SmartChargerService.maxSessionDuration`), các câu báo lỗi, màn thiết lập ổ ("7 giờ").
+- **Hệ quả cần biết:** dự đoán dài hơn 7 giờ nay bị từ chối. Với Feliz, sạc 0 → 100% khoảng 6,3–6,7 giờ, nên chỉ còn khoảng 20–40 phút dư; một lần sạc đầy chậm hơn thường lệ có thể bị ngắt bằng trần hẹn giờ (`ceiling_timer`) trước khi có tín hiệu đầy. Dòng xe pin lớn hơn có thể không sạc đầy được trong một phiên Sạc AI. Chưa đo trên xe thật.
+
+**Lịch bảo dưỡng, lỗi đã sửa:**
+- **Ngày hẹn chỉ hiển thị, không được tính:** một mốc có ngày hẹn đã qua vẫn là "sắp tới" nếu chưa tới số km, và không có nhắc. Nay `isOverdue`/`isDueSoon`/`urgency` nhận `now`: qua ngày hẹn là quá hạn, còn từ 7 ngày trở xuống là sắp đến hạn (hôm nay chưa phải quá hạn). Không truyền `now` thì giữ cách tính theo km như cũ. Nhắc bảo dưỡng (`maintenance_reminder_service.dart`) cũng theo ngày; số km còn lại chỉ ghi trong thông báo khi chính mốc km làm nó đến hạn.
+- **Đánh dấu xong chỉ lưu ngày hôm nay:** không có ODO lúc làm, nên mốc kế tiếp bị tính từ ODO hiện tại hoặc từ mốc cũ. Nay "Đã làm xong" mở `MaintenanceCompleteSheet` (ODO lúc làm, ngày làm, chi phí và ghi chú không bắt buộc); `VinFastServiceCatalog.nextAfter` tính từ `completedOdo` khi có. ODO lớn hơn ODO của xe quá 50 km bị từ chối kèm lời nhắc cập nhật ODO trước.
+- **`copyWith` làm mất `ownerUid`.**
+- Cờ đã nhắc được đặt lại khi sửa, xóa hoặc hoàn tác một mốc; lưu form có chặn bấm hai lần; ODO nhập có dấu ngăn cách vẫn đọc được và không vượt 999 999; xóa mốc hỏi lại qua `showLuxeConfirm`.
+
+**Lịch bảo dưỡng, phần thêm:**
+- **Sổ bảo dưỡng:** mốc đã xong hiện ODO lúc làm và chi phí; thẻ tổng kết năm (`MaintenanceYearSummary`): số hạng mục đã làm trong năm, tổng chi phí và bao nhiêu hạng mục có ghi chi phí (không có số nào thì ghi "Chưa ghi chi phí", không hiện 0đ).
+- Thẻ mốc ghi rõ giới hạn nào làm nó đến hạn (km hay ngày hẹn). Loại dịch vụ chỉ dành cho xe xăng ẩn khỏi bộ chọn, trừ mốc cũ đang dùng. Nút form là "Thêm mốc"/"Cập nhật", ngày viết dd/MM/yyyy.
+- Firestore: thêm `completedOdo`, `costVnd`, `completionNote` trên tài liệu mốc; mốc cũ không có vẫn đọc được.
+
+**Đã xem, không đổi:** ngưỡng "sắp đến hạn" 50 km; chu kỳ trong danh mục (1 000/2 000/5 000/10 000 km) chưa đối chiếu được với sổ bảo hành thật của VinFast; chưa có chu kỳ theo tháng; chọn ngày vẫn dùng `showDatePicker` của Material.
+
+**Kiểm thử:**
+- Backend: `pytest tests`: 957 đạt, 15 bỏ qua (test trần 600 phút sửa thành 420, vector `ceilingSeconds` kẹp 25 200).
+- Flutter: `flutter analyze lib` sạch; toàn bộ 1479 đạt, 216 bỏ qua, 0 trượt. Test mới `test/widget/qa154_maintenance_test.dart` (ngày hẹn, sổ, mốc kế, đọc số tiền, tổng kết năm, sheet ở 320 dp chữ ×1 và ×2, từ chối ODO).
+- APK: `app/build/app/outputs/flutter-apk/app-profile.apk`, 2.1.3+236, 166,3 MB. **Chưa cài, chưa xem trên máy:** lúc cài `adb` không thấy thiết bị nào.
+
+**Cần chủ app:**
+- Deploy máy chủ (API và worker) cho mục 153 và trần 7 giờ. Chưa deploy thì trần 7 giờ của Sạc AI chỉ có ở app.
+- Cắm lại Xiaomi để cài 2.1.3+236, hoặc tự cài file APK trên.
+- Trả lời: giữ ngưỡng 50 km hay nới; có sổ bảo dưỡng VinFast thật để đối chiếu chu kỳ không; có thêm chu kỳ theo tháng không.
+
+---
+
 ## 153. Task Completion Log — Tự rà trên Xiaomi, sạc theo giờ tối đa 7 giờ, Sạc đêm, Sức khỏe pin, Lộ trình (13/11/2026, chủ app: "tự cài lên xiaomi và tự kiểm tra… làm liên tục theo đề xuất của bạn", "sạc theo giờ tối đa 7h thay vì 10h", "tự nhận biết thời gian đêm và hỏi người dùng kích hoạt sạc đêm không") — Code + test xong, APK đã cài, đã commit, **máy chủ chưa deploy**
 
 **Màu và thiết kế (mục 8, 9, 5, 6 của 10 đề xuất ở mục 152, chủ app: "ổn, làm tiếp"):**

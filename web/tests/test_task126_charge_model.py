@@ -42,7 +42,7 @@ def test_charge_model_estimate_vectors(vector):
     params = charge_model.ChargeParams(**vector["params"])
     result = charge_model.estimate(params, vector["start"], vector["target"])
     assert result.seconds == vector["seconds"]
-    assert charge_model.ceiling_seconds(result.seconds, 600) == vector["ceilingSeconds"]
+    assert charge_model.ceiling_seconds(result.seconds, 420) == vector["ceilingSeconds"]
 
 
 def test_default_wh_per_pct_uses_capacity_soh_and_efficiency():

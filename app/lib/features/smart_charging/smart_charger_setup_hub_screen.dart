@@ -1656,7 +1656,7 @@ class _SetupState extends ConsumerState<SmartChargerSetupHubScreen>
               const SizedBox(height: 8),
               _protectionMetricRow(
                 'Thời gian tối đa',
-                'Theo giờ 7 giờ · Sạc AI 10 giờ',
+                '7 giờ',
                 icon: Icons.timer_rounded,
                 isMuted: true,
               ),

@@ -52,7 +52,7 @@ class AppNoticeCopy {
     'Chưa xác nhận được ổ sạc đã tắt. Hãy kiểm tra ổ sạc.',
     'Hãy kiểm tra ổ sạc trực tiếp.',
     'Chưa xác minh được Shelly trên thiết bị này; chỉ xem trạng thái đồng bộ.',
-    'Thời gian sạc vượt giới hạn an toàn 10 giờ. Vui lòng chọn mức pin thấp hơn.',
+    'Thời gian sạc vượt giới hạn an toàn 7 giờ. Vui lòng chọn mức pin thấp hơn.',
     'Model AI chưa sẵn sàng. Không thể bắt đầu sạc theo AI.',
     'Không thể tính thời gian sạc. Hãy thử lại.',
     'Relay không được đánh dấu an toàn. Kiểm tra tải điện và trạng thái OFF.',

@@ -232,12 +232,12 @@ class SmartChargeServiceTests(unittest.TestCase):
         self.assertEqual(session.strategy, "manual_timed")
         self.assertTrue(session.timer_verified)
 
-    def test_environment_cannot_raise_hard_ten_hour_limit(self):
+    def test_environment_cannot_raise_hard_seven_hour_limit(self):
         with patch.dict(os.environ, {"SMART_CHARGE_MAX_MINUTES": "9999"}):
             service = SmartChargeService(
                 self.repo, self.provider, predictor, sleeper=lambda _: None,
             )
-        self.assertEqual(service.max_minutes, 600)
+        self.assertEqual(service.max_minutes, 420)
 
     def test_fallback_preview_cannot_start_ai(self):
         service = SmartChargeService(

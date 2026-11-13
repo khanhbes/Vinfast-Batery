@@ -75,6 +75,19 @@ class MaintenanceTaskModel {
   final DateTime? scheduledDate; // Ngày lên lịch bảo dưỡng
   final ServiceType serviceType; // Loại dịch vụ
 
+  /// QA 154, the service record: what the odometer showed when the work
+  /// was done, what it cost (đồng) and a note (garage, parts). All
+  /// optional; older tasks have none.
+  final int? completedOdo;
+  final int? costVnd;
+  final String? completionNote;
+
+  /// An appointment this close counts as due soon.
+  static const dueSoonDays = 7;
+
+  /// A milestone this close counts as due soon.
+  static const dueSoonKm = 50;
+
   MaintenanceTaskModel({
     this.taskId,
     required this.vehicleId,
@@ -87,16 +100,36 @@ class MaintenanceTaskModel {
     DateTime? createdAt,
     this.scheduledDate,
     this.serviceType = ServiceType.other,
+    this.completedOdo,
+    this.costVnd,
+    this.completionNote,
   }) : createdAt = createdAt ?? DateTime.now();
 
-  /// Kiểm tra sắp đến hạn (còn ≤50km)
-  bool isDueSoon(int currentOdo) {
-    return !isCompleted && currentOdo >= targetOdo - 50;
+  /// Whole days from [now] to the appointment (negative once it has
+  /// passed), or null without one.
+  int? daysUntilScheduled(DateTime now) {
+    final date = scheduledDate?.toLocal();
+    if (date == null) return null;
+    final today = DateTime(now.year, now.month, now.day);
+    return DateTime(date.year, date.month, date.day).difference(today).inDays;
   }
 
-  /// Kiểm tra đã quá hạn
-  bool isOverdue(int currentOdo) {
-    return !isCompleted && currentOdo >= targetOdo;
+  /// Sắp đến hạn: còn ≤ 50 km, hoặc (khi truyền [now]) ngày hẹn trong
+  /// vòng 7 ngày. Đã quá hạn cũng tính là sắp đến hạn, như trước.
+  bool isDueSoon(int currentOdo, {DateTime? now}) {
+    if (isCompleted) return false;
+    if (currentOdo >= targetOdo - dueSoonKm) return true;
+    final days = now == null ? null : daysUntilScheduled(now);
+    return days != null && days <= dueSoonDays;
+  }
+
+  /// Đã quá hạn: qua mốc ODO, hoặc (khi truyền [now]) qua ngày hẹn.
+  /// QA 154: the appointment date was shown but never counted.
+  bool isOverdue(int currentOdo, {DateTime? now}) {
+    if (isCompleted) return false;
+    if (currentOdo >= targetOdo) return true;
+    final days = now == null ? null : daysUntilScheduled(now);
+    return days != null && days < 0;
   }
 
   /// Khoảng cách còn lại (km). Có thể âm (đã quá hạn).
@@ -105,10 +138,10 @@ class MaintenanceTaskModel {
   }
 
   /// Phân loại độ khẩn cấp dựa trên ODO hiện tại.
-  MaintenanceUrgency urgency(int currentOdo) {
+  MaintenanceUrgency urgency(int currentOdo, {DateTime? now}) {
     if (isCompleted) return MaintenanceUrgency.completed;
-    if (currentOdo >= targetOdo) return MaintenanceUrgency.overdue;
-    if (currentOdo >= targetOdo - 50) return MaintenanceUrgency.dueSoon;
+    if (isOverdue(currentOdo, now: now)) return MaintenanceUrgency.overdue;
+    if (isDueSoon(currentOdo, now: now)) return MaintenanceUrgency.dueSoon;
     return MaintenanceUrgency.upcoming;
   }
 
@@ -133,7 +166,18 @@ class MaintenanceTaskModel {
       createdAt: _safeTimestamp(data['createdAt']) ?? DateTime.now(),
       scheduledDate: _safeTimestamp(data['scheduledDate']),
       serviceType: _parseServiceType(data['serviceType']),
+      completedOdo: _optionalInt(data['completedOdo']),
+      costVnd: _optionalInt(data['costVnd']),
+      completionNote: switch (data['completionNote']) {
+        final String note when note.trim().isNotEmpty => note.trim(),
+        _ => null,
+      },
     );
+  }
+
+  static int? _optionalInt(dynamic value) {
+    if (value is num && value.isFinite && value >= 0) return value.round();
+    return null;
   }
 
   /// Parse Timestamp | String | DateTime | null an toàn
@@ -181,6 +225,9 @@ class MaintenanceTaskModel {
           ? Timestamp.fromDate(scheduledDate!)
           : null,
       'serviceType': serviceType.name,
+      'completedOdo': completedOdo,
+      'costVnd': costVnd,
+      'completionNote': completionNote,
     };
   }
 
@@ -195,10 +242,15 @@ class MaintenanceTaskModel {
     DateTime? createdAt,
     DateTime? scheduledDate,
     ServiceType? serviceType,
+    int? completedOdo,
+    int? costVnd,
+    String? completionNote,
   }) {
     return MaintenanceTaskModel(
       taskId: taskId ?? this.taskId,
       vehicleId: vehicleId ?? this.vehicleId,
+      // QA 154: the copy used to lose the owner.
+      ownerUid: ownerUid,
       title: title ?? this.title,
       description: description ?? this.description,
       targetOdo: targetOdo ?? this.targetOdo,
@@ -207,6 +259,9 @@ class MaintenanceTaskModel {
       createdAt: createdAt ?? this.createdAt,
       scheduledDate: scheduledDate ?? this.scheduledDate,
       serviceType: serviceType ?? this.serviceType,
+      completedOdo: completedOdo ?? this.completedOdo,
+      costVnd: costVnd ?? this.costVnd,
+      completionNote: completionNote ?? this.completionNote,
     );
   }
 }

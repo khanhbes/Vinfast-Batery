@@ -200,7 +200,10 @@ class VinFastServiceCatalog {
           t.serviceType == done.serviceType,
     );
     if (open) return null;
-    final from = currentOdo > done.targetOdo ? currentOdo : done.targetOdo;
+    // QA 154: counted from where the work was really done, when known.
+    final from =
+        done.completedOdo ??
+        (currentOdo > done.targetOdo ? currentOdo : done.targetOdo);
     return MaintenanceTaskModel(
       vehicleId: done.vehicleId,
       title: done.title,

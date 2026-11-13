@@ -341,7 +341,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
                    : raw;
              })(),
              hardDeadlineAt: (clock ?? DateTime.now)().add(
-               const Duration(hours: 10),
+               SmartChargerService.maxSessionDuration,
              ),
              strategy: ChargingStrategy.targetSoc,
              estimatedCapacityWh: estimatedCapacityWh,
@@ -1483,7 +1483,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
           preview: null,
           phase: SmartChargingViewPhase.error,
           actionError:
-              'Thời gian sạc vượt giới hạn an toàn 10 giờ. Vui lòng chọn mức pin thấp hơn.',
+              'Thời gian sạc vượt giới hạn an toàn 7 giờ. Vui lòng chọn mức pin thấp hơn.',
         );
         return;
       }

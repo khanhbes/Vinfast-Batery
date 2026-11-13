@@ -34,7 +34,7 @@
       "start": 0,
       "target": 100,
       "seconds": 21901,
-      "ceilingSeconds": 34052
+      "ceilingSeconds": 25200
     },
     {
       "name": "slow charger hits the 10 h ceiling",
@@ -45,7 +45,7 @@
       "start": 0,
       "target": 100,
       "seconds": 146400,
-      "ceilingSeconds": 36000
+      "ceilingSeconds": 25200
     },
     {
       "name": "nothing to charge",

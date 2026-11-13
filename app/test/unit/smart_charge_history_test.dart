@@ -71,7 +71,7 @@ void main() {
   });
 
   test('absolute Smart Charge limit is ten hours', () {
-    expect(SmartChargerService.maxSessionDuration, const Duration(hours: 10));
+    expect(SmartChargerService.maxSessionDuration, const Duration(hours: 7));
   });
 }
 

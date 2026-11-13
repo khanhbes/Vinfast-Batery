@@ -65,7 +65,7 @@ CLIENT_ACTIONS = [
                          "session_id": _s("STRING", "Chỉ khi screen=session_detail: id phiên sạc lấy từ get_charging_history")},
                         ["screen"])},
     {"name": "start_timed_charging", "description": "Đề xuất bật sạc hẹn giờ cho xe đang chọn. Người dùng phải vuốt xác nhận trên điện thoại; app tự kiểm tra an toàn.",
-     "parameters": _obj({"minutes": _s("INTEGER", "Thời lượng 1–600 phút"),
+     "parameters": _obj({"minutes": _s("INTEGER", "Thời lượng 1–420 phút"),
                          "until": _s("STRING", "Giờ ngắt HH:mm theo giờ Việt Nam khi người dùng nói giờ cụ thể (vd 'sạc đến 9 giờ 30' → '09:30'); khi có thì không cần minutes"),
                          "target_percent": _s("INTEGER", "Mức pin người dùng muốn đạt khi hết giờ (vd 'sạc từ 11 đến 85%'), nếu họ có nói")})},
     {"name": "stop_charging", "description": "Đề xuất dừng phiên sạc đang chạy của xe đang chọn (người dùng bấm xác nhận).",

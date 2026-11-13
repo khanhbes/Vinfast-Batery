@@ -99,7 +99,7 @@ class AppConstants {
   static const int maxOdoDigits = 6;
 
   /// Absolute device-side Smart Charge safety window.
-  static const int smartChargeMaxMinutes = 600;
+  static const int smartChargeMaxMinutes = 420; // 7 h, owner 13/11/2026 (was 600)
 
   // Defaults
   // Capacity must come from the selected vehicle/model record. A fabricated

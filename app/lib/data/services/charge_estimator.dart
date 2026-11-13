@@ -64,7 +64,8 @@ abstract final class ChargeEstimator {
   /// A reading below this is idle/standby, not charging.
   static const double minChargingPowerW = 30;
 
-  static const int maxMinutes = 600;
+  // 13/11/2026: 7 hours, the same limit as the server (was 600).
+  static const int maxMinutes = 420;
 
   /// Median of charging-level samples; null when there are too few.
   static double? medianChargingPower(
