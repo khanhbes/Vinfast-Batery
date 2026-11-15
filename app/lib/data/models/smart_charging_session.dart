@@ -132,6 +132,7 @@ class SmartChargingPlanDraft {
     this.estimatedCapacityWh = 0,
     this.powerHintW,
     this.livePowerW,
+    this.currentOdoKm,
   });
 
   final String vehicleId;
@@ -149,6 +150,9 @@ class SmartChargingPlanDraft {
   /// Median power measured right now while the relay is ON.
   final double? livePowerW;
 
+  /// QA 158: the odometer the owner read before charging (optional).
+  final double? currentOdoKm;
+
   SmartChargingPlanDraft withPower({double? powerHintW, double? livePowerW}) =>
       SmartChargingPlanDraft(
         vehicleId: vehicleId,
@@ -161,6 +165,7 @@ class SmartChargingPlanDraft {
         estimatedCapacityWh: estimatedCapacityWh,
         powerHintW: powerHintW,
         livePowerW: livePowerW,
+        currentOdoKm: currentOdoKm,
       );
 
   String? validate({DateTime? now}) {
@@ -179,6 +184,58 @@ class SmartChargingPlanDraft {
     // disables Wh/SOC-derived KPIs and physics fallback; it must not block a
     // real server-side AI prediction.
     return null;
+  }
+}
+
+/// QA 158: the gauge is right after a charge that reached full and drifts
+/// with every charge after it. The server says how far it is from that
+/// anchor and what error to expect.
+class GaugeTrust {
+  const GaugeTrust({
+    required this.level,
+    this.anchored = false,
+    this.sessionsSinceFull = 0,
+    this.expectedErrorPct,
+  });
+
+  /// high | medium | low
+  final String level;
+  final bool anchored;
+  final int sessionsSinceFull;
+  final double? expectedErrorPct;
+
+  bool get isHigh => level == 'high';
+
+  static GaugeTrust? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final level = raw['level']?.toString();
+    if (level != 'high' && level != 'medium' && level != 'low') return null;
+    return GaugeTrust(
+      level: level!,
+      anchored: raw['anchored'] == true,
+      sessionsSinceFull: (raw['sessionsSinceFull'] as num?)?.round() ?? 0,
+      expectedErrorPct: (raw['expectedErrorPct'] as num?)?.toDouble(),
+    );
+  }
+
+  static String _pct(double value) =>
+      (value - value.roundToDouble()).abs() < 0.05
+      ? '${value.round()}%'
+      : '${value.toStringAsFixed(1)}%';
+
+  /// The line under a forecast to a % below full.
+  String line(double marginPct) {
+    final error = expectedErrorPct;
+    final parts = <String>[
+      if (!anchored)
+        'Chưa có lần sạc đầy nào làm mốc'
+      else if (!isHigh)
+        'Đã $sessionsSinceFull lần chưa sạc đầy',
+      if (error != null) 'sai số dự kiến khoảng ${_pct(error)}',
+      if (marginPct > 0) 'app sạc dư ${_pct(marginPct)}',
+    ];
+    final text = parts.join(' · ');
+    return text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
   }
 }
 
@@ -223,6 +280,8 @@ class SmartChargingPlanPreview {
     this.socMae,
     this.learnedSamples = 0,
     this.deviceTimerSeconds,
+    this.gaugeTrust,
+    this.driftMarginPct = 0,
   });
 
   final SmartChargingPlanDraft draft;
@@ -273,6 +332,11 @@ class SmartChargingPlanPreview {
   final double? socMae;
   final int learnedSamples;
   final int? deviceTimerSeconds;
+
+  /// QA 158: how far the gauge is from its last full charge, and the extra
+  /// % the server charges for it. Null from an older server.
+  final GaugeTrust? gaugeTrust;
+  final double driftMarginPct;
 
   bool get isTargetMode => stopMode == 'target' && !isDisplayOnly;
 

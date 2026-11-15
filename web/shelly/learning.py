@@ -144,6 +144,12 @@ class VehicleLearningMixin:
         carried, next_offset = _gauge_shadow(learned, session, end_pct, at, wh_in_use)
         # Collected for later: nothing reads it yet (QA 147).
         temperature = _recent_battery_temp(vehicle, session)
+        # QA 158: how far the gauge was from its last full charge when this
+        # charge began. Every real charge counts, timed ones too.
+        sessions = _vehicle_sessions(self.repository, uid, session.vehicle_id)
+        trust = charge_ai.gauge_trust(learned, sessions, before=session.created_at,
+                                      now=now, wh_per_pct=wh_in_use)
+        trust_level = session.gauge_trust_level or trust["level"]
         queued, decision = charge_model.queue_sample(learned, {
             "sessionId": session.session_id,
             "energyWh": session.energy_used_wh,
@@ -158,33 +164,52 @@ class VehicleLearningMixin:
             "shadowOffsetPct": carried,
             "shadowWhPerPct": wh_in_use if carried is not None else None,
             "batteryTempC": temperature,
+            "trust": trust_level,
         }, base_wh_per_pct=base, now=now)
         if decision != "queued":
             return decision
         if next_offset is not None:
             queued.gauge_offset_pct = next_offset
             queued.gauge_offset_at = at
+        cross = _cross_entry(session, sessions, at)
+        if cross is not None:
+            queued.cross_log = [*[item for item in queued.cross_log
+                                  if item.get("sessionId") != cross["sessionId"]],
+                                cross][-charge_model.MAX_CROSS_LOG:]
         profile.learned = queued.to_dict()
         profile.updated_at = now
         self.repository.save_personal_profile(profile)
         self.repository.append_audit(uid, "charge_label_queued", session_id=session.session_id,
                                      label_source=label_source)
-        self._auto_train_charge(uid, profile, queued, base, now)
+        full = None
+        # A vehicle that has learned nothing yet waits for its first training.
+        if end_pct >= charge_model.GAUGE_RESET_END_PCT and learned.wh_per_pct:
+            full = {"sample": next((item for item in queued.pending
+                                    if item.get("sessionId") == session.session_id), None),
+                    "exact": label_source == "taper_full" or session.stop_reason == "battery_full",
+                    "trust": trust}
+        self._auto_train_charge(uid, profile, queued, base, now, full=full)
         return decision
 
-    def _auto_train_charge(self, uid: str, profile, learned, base: float | None, now: datetime) -> None:
+    def _auto_train_charge(self, uid: str, profile, learned, base: float | None, now: datetime,
+                           full: dict | None = None) -> None:
         """QA 148: people who never open the training screen still get an estimate
         that follows their vehicle. The label is already saved; a failure here only
         leaves it waiting for the next one."""
         if not profile.auto_train or not profile.consent_enabled:
             return
-        if not charge_model.training_status(learned)["ready"]:
-            return
+        # QA 158: a charge that reached full is the moment the gauge is right:
+        # recalibrate then, without waiting for more charges.
+        if full is None or full.get("sample") is None:
+            full = None
+            if not charge_model.training_status(learned)["ready"]:
+                return
         try:
             entitlements = getattr(self, "entitlements", None)
             # The worker does not know the plan: it leaves the layer as it is.
             layers = entitlements.allows(uid, "learning_train") if entitlements is not None else None
-            _, report = self._train_charge(profile, learned, base, now, mode="finetune", layers=layers)
+            _, report = self._train_charge(profile, learned, base, now, mode="finetune", layers=layers,
+                                           full=full)
             profile.training_reports = {**(profile.training_reports or {}),
                                         "charge": {**report, "model": "charge", "auto": True, "at": _iso(now)}}
             profile.last_trained_at = now
@@ -198,10 +223,19 @@ class VehicleLearningMixin:
 
     @staticmethod
     def _train_charge(profile, learned, base: float | None, now: datetime, *, mode: str,
-                      layers: bool | None) -> tuple[charge_model.LearnedProfile, dict]:
+                      layers: bool | None, full: dict | None = None
+                      ) -> tuple[charge_model.LearnedProfile, dict]:
         """One training on ``profile``. ``layers``: True selects the layer, False
         returns to the plain Wh/% (the model stays for a later plan), None keeps it."""
-        updated, report = charge_model.train(learned, base_wh_per_pct=base, now=now, mode=mode)
+        if full is not None:
+            trust = full.get("trust") or {}
+            updated, report = charge_model.recalibrate(
+                learned, base_wh_per_pct=base, now=now, full=full["sample"],
+                exact=bool(full.get("exact")),
+                sessions_since=int(trust.get("sessionsSinceFull") or 0),
+                fulls_since=trust.get("fullsSinceFull"), days_since=trust.get("daysSinceFull"))
+        else:
+            updated, report = charge_model.train(learned, base_wh_per_pct=base, now=now, mode=mode)
         if layers:
             updated, layer = charge_ai.select_layer(updated, base=base, now=now)
             report = {**report, "layer": layer}
@@ -370,7 +404,8 @@ class VehicleLearningMixin:
         charge = charge_model.training_status(learned)
         consent = profile.consent_enabled if profile else True
         charge["learning"]["state"] = _learning_state(charge["learning"], learned, consent)
-        charge["model"] = charge_ai.status(learned)
+        charge["model"] = charge_ai.status(learned, _vehicle_sessions(self.repository, uid, vehicle_id),
+                                            now=self.clock())
         charge.update({"whPerPct": learned.wh_per_pct, "powerW": learned.power_w,
                        "report": (profile.training_reports or {}).get("charge") if profile else None,
                        # What the model learned from and what waits (Task 127).
@@ -547,3 +582,40 @@ def _count_sources(rides: list[dict]) -> dict:
         key = str(item.get("source") or "trip")
         counts[key] = counts.get(key, 0) + 1
     return counts
+
+def _vehicle_sessions(repository, uid: str, vehicle_id: str, limit: int = 60) -> list | None:
+    """This vehicle's recent charges; None when the history cannot be read
+    (the gauge's trust then counts the labelled charges only)."""
+    try:
+        return [item for item in repository.history(uid, limit=limit) if item.vehicle_id == vehicle_id]
+    except Exception:
+        return None
+
+
+def _cross_entry(session, sessions: list | None, at: str) -> dict | None:
+    """QA 158: what the gauge and the odometer said between the previous
+    charge's end and this one's start. Collected only: km per 1 % comes from
+    the trip model when the comparison is run, so the worker never needs it."""
+    start_odo = getattr(session, "start_odo_km", None)
+    if start_odo is None or not sessions:
+        return None
+    began = session.created_at if session.created_at.tzinfo else session.created_at.replace(tzinfo=timezone.utc)
+    earlier = []
+    for item in sessions:
+        if item.session_id == session.session_id or item.stopped_at is None:
+            continue
+        ended = item.stopped_at if item.stopped_at.tzinfo else item.stopped_at.replace(tzinfo=timezone.utc)
+        if ended <= began:
+            earlier.append((ended, item))
+    if not earlier:
+        return None
+    ended, previous = max(earlier, key=lambda pair: pair[0])
+    if previous.actual_end_soc is None or previous.end_odo_km is None:
+        return None
+    km = float(start_odo) - float(previous.end_odo_km)
+    if not 0 <= km <= 500:
+        return None
+    return {"at": at, "sessionId": session.session_id, "km": round(km, 1),
+            "previousEndPct": float(previous.actual_end_soc), "previousEndAt": ended.isoformat(),
+            "gaugeStartPct": float(session.start_soc), "startedAt": began.isoformat()}
+

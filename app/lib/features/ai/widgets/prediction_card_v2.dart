@@ -20,7 +20,13 @@ class PredictionCardV2 extends StatelessWidget {
     this.rangeLabel,
     this.stopLine,
     this.learningTag,
+    this.trustLine,
+    this.trustCaution = false,
   });
+
+  /// QA 158: the expected error after this many charges since a full one.
+  final String? trustLine;
+  final bool trustCaution;
 
   /// "Đang học · 2/5 lần sạc" while the vehicle has too little data (QA 146).
   final String? learningTag;
@@ -141,6 +147,35 @@ class PredictionCardV2 extends StatelessWidget {
               ),
             ],
           ),
+          if (trustLine != null && trustLine!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              key: const ValueKey('prediction-trust'),
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  trustCaution
+                      ? Icons.battery_alert_rounded
+                      : Icons.verified_rounded,
+                  size: 14,
+                  color: trustCaution
+                      ? LuxeColors.champagne
+                      : LuxeColors.platinumMid,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    trustLine!,
+                    style: TextStyle(
+                      color: trustCaution ? LuxeColors.muted : LuxeColors.dim,
+                      fontSize: 12.5,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           for (final warning in warnings) ...[
             const SizedBox(height: 8),
             Row(

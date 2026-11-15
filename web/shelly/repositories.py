@@ -1674,6 +1674,8 @@ class SmartChargeRepository:
             "estimatedEndSoc": session.estimated_soc,
             "socError": session.soc_error,
             "endOdoKm": session.end_odo_km,
+            "gaugeTrustLevel": session.gauge_trust_level,
+            "startOdoKm": session.start_odo_km,
             "linkGapCount": session.link_gap_count,
             "linkGapSeconds": round(session.link_gap_seconds, 1),
             "isDeleted": False,
@@ -2609,6 +2611,8 @@ def _session(data: dict) -> ChargingSession:
         unsafe_samples=int(data.get("unsafe_samples") or 0),
         soc_error=_opt_float(data.get("soc_error")),
         end_odo_km=_opt_float(data.get("end_odo_km")),
+        gauge_trust_level=data.get("gauge_trust_level") or None,
+        start_odo_km=_opt_float(data.get("start_odo_km")),
         link_lost_since=_date(data.get("link_lost_since")),
         link_gap_count=int(data.get("link_gap_count") or 0),
         link_gap_seconds=float(data.get("link_gap_seconds") or 0),
@@ -2685,6 +2689,10 @@ def _preview(data: dict) -> ChargePreview:
         soc_mae=_opt_float(value("soc_mae", "socMae")),
         learned_samples=int(value("learned_samples", "learnedSamples", 0) or 0),
         device_timer_seconds=value("device_timer_seconds", "deviceTimerSeconds"),
+        gauge_trust=(dict(value("gauge_trust", "gaugeTrust"))
+                     if isinstance(value("gauge_trust", "gaugeTrust"), dict) else None),
+        drift_margin_pct=_opt_float(value("drift_margin_pct", "driftMarginPct")) or 0.0,
+        start_odo_km=_opt_float(value("start_odo_km", "startOdoKm")),
     )
 
 
@@ -2712,6 +2720,8 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
         if normalized.get("actual_end_soc") is None:
             normalized["actual_end_soc"] = history_quality.confirmed_end_soc(data)
         normalized.setdefault("end_odo_km", data.get("endOdoKm"))
+        normalized.setdefault("gauge_trust_level", data.get("gaugeTrustLevel"))
+        normalized.setdefault("start_odo_km", data.get("startOdoKm"))
         # Older embedded sessions carry naive local times and, after a later
         # rewrite, 0 Wh while the summary kept the measured energy.
         start_time, end_time = _date(data.get("startTime")), _date(data.get("endTime"))
@@ -2791,6 +2801,8 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
         carried_offset_pct=_opt_float(data.get("carriedOffsetPct")),
         soc_error=_opt_float(data.get("socError")),
         end_odo_km=_opt_float(data.get("endOdoKm")),
+        gauge_trust_level=data.get("gaugeTrustLevel") or None,
+        start_odo_km=_opt_float(data.get("startOdoKm")),
         training_eligible=bool(data.get("trainingEligible")),
         telemetry_coverage=float(data.get("telemetryCoverage") or 0),
         owner_uid=uid,

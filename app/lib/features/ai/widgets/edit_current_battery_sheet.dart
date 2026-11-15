@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
+import '../../../core/utils/number_text.dart';
 import '../../../core/widgets/luxe_kit.dart';
 import '../../../core/theme/plan_style.dart';
 
@@ -14,6 +15,9 @@ class EditCurrentBatterySheet extends StatefulWidget {
     required this.onSave,
     this.savedNote,
     this.scan,
+    this.scanReading,
+    this.onOdo,
+    this.lastOdoKm,
   });
 
   final double initialPercent;
@@ -25,12 +29,23 @@ class EditCurrentBatterySheet extends StatefulWidget {
   /// Reads the % from the dashboard; null when the caller has no scan.
   final Future<int?> Function()? scan;
 
+  /// QA 158: reads both numbers; preferred over [scan] when given.
+  final Future<({int? soc, double? odoKm})?> Function()? scanReading;
+
+  /// QA 158: the odometer before a charge, optional. The field shows only
+  /// when this is given.
+  final ValueChanged<double?>? onOdo;
+  final double? lastOdoKm;
+
   static Future<void> show(
     BuildContext context, {
     required double initialPercent,
     required ValueChanged<double> onSave,
     String? savedNote,
     Future<int?> Function()? scan,
+    Future<({int? soc, double? odoKm})?> Function()? scanReading,
+    ValueChanged<double?>? onOdo,
+    double? lastOdoKm,
   }) => showLuxeSheet<void>(
     context,
     builder: (_) => EditCurrentBatterySheet(
@@ -38,6 +53,9 @@ class EditCurrentBatterySheet extends StatefulWidget {
       onSave: onSave,
       savedNote: savedNote,
       scan: scan,
+      scanReading: scanReading,
+      onOdo: onOdo,
+      lastOdoKm: lastOdoKm,
     ),
   );
 
@@ -49,6 +67,14 @@ class EditCurrentBatterySheet extends StatefulWidget {
 class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
   late double _soc;
   bool _scanning = false;
+  final _odo = TextEditingController();
+  String? _odoError;
+
+  @override
+  void dispose() {
+    _odo.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -59,6 +85,15 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
   Future<void> _scan() async {
     setState(() => _scanning = true);
     try {
+      if (widget.scanReading != null) {
+        final both = await widget.scanReading!();
+        if (!mounted || both == null) return;
+        if (both.soc != null) _updateSoc(both.soc!.toDouble());
+        if (both.odoKm != null && widget.onOdo != null) {
+          setState(() => _odo.text = '${both.odoKm!.round()}');
+        }
+        return;
+      }
       final read = await widget.scan!();
       if (mounted && read != null) _updateSoc(read.toDouble());
     } on Object {
@@ -66,6 +101,29 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
+  }
+
+  /// The typed or scanned ODO, checked; false keeps the sheet open.
+  bool _saveOdo() {
+    final digits = _odo.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) {
+      widget.onOdo!(null);
+      return true;
+    }
+    final odo = double.tryParse(digits);
+    final last = widget.lastOdoKm;
+    String? error;
+    if (odo == null || odo > 999999) {
+      error = 'Nhập số km trên đồng hồ (0 đến 999 999), hoặc để trống.';
+    } else if (last != null && odo < last - 1) {
+      error =
+          'Nhỏ hơn ODO đã lưu (${groupThousands(last.round())} km). Kiểm tra '
+          'lại, hoặc để trống.';
+    }
+    setState(() => _odoError = error);
+    if (error != null) return false;
+    widget.onOdo!(odo);
+    return true;
   }
 
   void _updateSoc(double val) {
@@ -157,7 +215,30 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
               style: LuxeText.caption.copyWith(color: LuxeColors.champagne),
             ),
           ],
-          if (widget.scan != null) ...[
+          if (widget.onOdo != null) ...[
+            const SizedBox(height: 14),
+            TextField(
+              key: const ValueKey('start-odo'),
+              controller: _odo,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9 .]')),
+                LengthLimitingTextInputFormatter(9),
+              ],
+              style: const TextStyle(color: LuxeColors.text, fontSize: 15.5),
+              decoration: InputDecoration(
+                labelText: 'ODO trên đồng hồ (km, không bắt buộc)',
+                prefixIcon: const Icon(Icons.speed_rounded, size: 20),
+                helperText: widget.lastOdoKm == null
+                    ? 'Giúp app đối chiếu đồng hồ pin theo số km đã chạy.'
+                    : 'Lần gần nhất ${groupThousands(widget.lastOdoKm!.round())} km.',
+                helperMaxLines: 2,
+                errorText: _odoError,
+                errorMaxLines: 2,
+              ),
+            ),
+          ],
+          if (widget.scan != null || widget.scanReading != null) ...[
             const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerLeft,
@@ -220,6 +301,7 @@ class _EditCurrentBatterySheetState extends State<EditCurrentBatterySheet> {
           FilledButton(
             key: const ValueKey('start-soc-confirm'),
             onPressed: () {
+              if (widget.onOdo != null && !_saveOdo()) return;
               HapticFeedback.lightImpact();
               widget.onSave(_soc.roundToDouble());
               Navigator.of(context).pop();

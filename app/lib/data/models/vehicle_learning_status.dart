@@ -116,6 +116,36 @@ class ModelTrainingStatus {
     _ => null,
   };
 
+  /// QA 158: the error right after a full charge and far from one, and the
+  /// gauge's drift measured at the last full charge. Null on an older server.
+  String? get driftSummary {
+    final drift = _model['drift'];
+    if (drift is! Map) return null;
+    String? group(Object? raw, String label) {
+      if (raw is! Map) return null;
+      final n = _int(raw['n']);
+      final mae = _num(raw['mae']);
+      if (n <= 0 || mae == null) return null;
+      return '$label khoảng ${mae.toStringAsFixed(1)}% ($n lần)';
+    }
+
+    final parts = <String>[
+      ?group(drift['afterFull'], 'ngay sau sạc đầy sai số'),
+      ?group(drift['later'], 'xa lần sạc đầy'),
+    ];
+    final last = _model['lastDrift'];
+    final measured = last is Map ? _num(last['driftPct']) : null;
+    if (measured != null) {
+      parts.add(
+        'lần sạc đầy gần nhất đồng hồ lệch ${measured.abs().toStringAsFixed(1)}%',
+      );
+    }
+    if (_model['needsCalibration'] == true) {
+      parts.add('sai số gần đây tăng, lần sạc đầy tới sẽ hiệu chuẩn lại');
+    }
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
   /// The way to the small model, null once it is in use or on an older server.
   String? get aiProgressLabel {
     if (_model.isEmpty || _model['layer'] == 'ai') return null;

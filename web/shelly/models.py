@@ -278,6 +278,11 @@ class ChargePreview:
     soc_mae: float | None = None
     learned_samples: int = 0
     device_timer_seconds: int | None = None
+    # QA 158: how far the gauge is from its last full charge, the extra %
+    # charged for it, and the odometer the owner read before charging.
+    gauge_trust: dict | None = None
+    drift_margin_pct: float = 0.0
+    start_odo_km: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -322,6 +327,9 @@ class ChargePreview:
             "socMae": self.soc_mae,
             "learnedSamples": self.learned_samples,
             "deviceTimerSeconds": self.device_timer_seconds,
+            "gaugeTrust": self.gauge_trust,
+            "driftMarginPct": self.drift_margin_pct,
+            "startOdoKm": self.start_odo_km,
         }
 
 
@@ -415,6 +423,9 @@ class ChargingSession:
     unsafe_samples: int = 0
     soc_error: float | None = None
     end_odo_km: float | None = None
+    # QA 158: the gauge's trust when this charge began, and the odometer.
+    gauge_trust_level: str | None = None
+    start_odo_km: float | None = None
     # Task 126 ride-through: Shelly unreachable while a verified charge runs.
     link_lost_since: datetime | None = None
     link_gap_count: int = 0
@@ -518,6 +529,8 @@ class ChargingSession:
             "unsafe_samples": self.unsafe_samples,
             "soc_error": self.soc_error,
             "end_odo_km": self.end_odo_km,
+            "gauge_trust_level": self.gauge_trust_level,
+            "start_odo_km": self.start_odo_km,
             "link_lost_since": iso(self.link_lost_since),
             "link_gap_count": self.link_gap_count,
             "link_gap_seconds": round(self.link_gap_seconds, 1),

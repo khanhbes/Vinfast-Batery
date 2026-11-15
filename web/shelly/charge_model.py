@@ -77,6 +77,28 @@ MAX_LEDGER_CHARGES = 200
 GAUGE_RESET_END_PCT = 99.0
 SHADOW_MIN_CHARGES = 5
 # New labelled charges needed before the app suggests training (Task 127).
+# QA 158: how far the gauge is from its last anchor (a charge that reached
+# full). On the owner's charges the two after a full one were within about
+# 0.5 %, the later ones about 5 %: they teach Wh per 1 % far less.
+TRUST_WEIGHT = {"high": 1.0, "medium": 0.35, "low": 0.1}
+# Completed charges and energy (in full batteries) since the anchor. The
+# energy limits are recalibrated from measured drift (``calibrate_trust``).
+TRUST_LIMITS = {"highSessions": 1, "highFulls": 1.5, "mediumSessions": 3, "mediumFulls": 2.5}
+TRUST_MIN_SCORED = 3
+MAX_DRIFT_LOG = 40
+MAX_CROSS_LOG = 60
+MAX_WH_HISTORY = 3
+DRIFT_CALIBRATION_MIN = 5
+# A full-charge recalibration moves Wh per 1 % at most halfway when the
+# change is bigger than this.
+RECALIBRATE_MAX_STEP = 0.03
+# No clean charge for this long: the value in use is kept.
+CLEAN_DATA_DAYS = 60
+# A battery that wears: Wh per 1 % of clean charges, recent vs before.
+TREND_WINDOW_DAYS = 90
+TREND_MIN_CHARGES = 3
+TREND_DROP = 0.03
+FAST_HALF_LIFE_DAYS = 45.0
 FIRST_TRAINING_MIN_SAMPLES = 2
 TRAINING_MIN_NEW_SAMPLES = 3
 
@@ -125,6 +147,14 @@ class LearnedProfile:
     layer: str = "base"  # base | offset | ai (charge_ai)
     ai_model: dict | None = None
     layer_mae: float | None = None
+    # QA 158: the gauge's drift measured at each exact full charge, the trust
+    # limits fitted to it, the last Wh per 1 % values (to go back), what the
+    # gauge and the odometer said at each plug-in, and a wearing battery.
+    drift_log: list[dict] = field(default_factory=list)
+    trust_calibration: dict | None = None
+    wh_history: list[dict] = field(default_factory=list)
+    cross_log: list[dict] = field(default_factory=list)
+    trend: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -143,6 +173,11 @@ class LearnedProfile:
             "layer": self.layer,
             "aiModel": self.ai_model,
             "layerMae": self.layer_mae,
+            "driftLog": self.drift_log[-MAX_DRIFT_LOG:],
+            "trustCalibration": self.trust_calibration,
+            "whHistory": self.wh_history[-MAX_WH_HISTORY:],
+            "crossLog": self.cross_log[-MAX_CROSS_LOG:],
+            "trend": self.trend,
         }
 
     @classmethod
@@ -164,6 +199,12 @@ class LearnedProfile:
             layer=str(data.get("layer") or "base"),
             ai_model=dict(data["aiModel"]) if isinstance(data.get("aiModel"), dict) else None,
             layer_mae=_positive(data.get("layerMae"), allow_zero=True),
+            drift_log=_dicts(data.get("driftLog")),
+            trust_calibration=(dict(data["trustCalibration"])
+                               if isinstance(data.get("trustCalibration"), dict) else None),
+            wh_history=_dicts(data.get("whHistory")),
+            cross_log=_dicts(data.get("crossLog")),
+            trend=dict(data["trend"]) if isinstance(data.get("trend"), dict) else None,
         )
 
 
@@ -326,6 +367,8 @@ def queue_sample(
         "labelSource": label,
         "at": str(sample.get("at") or now.isoformat()),
     }
+    if sample.get("trust") in TRUST_WEIGHT:
+        entry["trust"] = sample["trust"]
     if sample.get("shadowOffsetPct") is not None and sample.get("shadowWhPerPct"):
         entry["shadowOffsetPct"] = round(float(sample["shadowOffsetPct"]), 2)
         entry["shadowWhPerPct"] = round(float(sample["shadowWhPerPct"]), 3)
@@ -569,6 +612,7 @@ def train(
     base_wh_per_pct: float | None,
     now: datetime | None = None,
     mode: str = "finetune",
+    step_limit: bool = False,
 ) -> tuple[LearnedProfile, dict]:
     """Fit the profile on stored + pending charges (owner pressed train).
 
@@ -586,8 +630,27 @@ def train(
         merged[str(item.get("sessionId") or f"_{index}")] = item
     # By the charge's date: correcting an old charge's % must not push out a newer one.
     samples = sorted(merged.values(), key=lambda item: str(item.get("at") or ""))[-MAX_PROFILE_SAMPLES:]
+    # QA 158: charges stored before trust existed get the trust their place
+    # since the last full charge gives them.
+    stamp_trust([*samples, *profile.ledger], profile.trust_calibration)
     weigh_now = None if retrain else now
-    candidate_wh = _robust_wh(samples, base_wh_per_pct, weigh_now)
+    half_life = (FAST_HALF_LIFE_DAYS if (profile.trend or {}).get("fastFollow")
+                 else HALF_LIFE_DAYS)
+    if (not retrain and profile.wh_per_pct
+            and not _recent_clean(unique_charges(profile) + samples, now)):
+        # Only charges far from a full one lately: they would teach the
+        # gauge's drift, not the battery. Keep the value in use.
+        kept = LearnedProfile(**{**profile.__dict__, "samples": samples, "pending": [],
+                                 "trained_at": now.isoformat()})
+        return kept, {"mode": mode, "used": len(samples), "added": len(profile.pending),
+                      "beforeMae": profile.soc_mae, "afterMae": profile.soc_mae,
+                      "whPerPct": profile.wh_per_pct, "decision": "kept_no_clean_data"}
+    candidate_wh = _robust_wh(samples, base_wh_per_pct, weigh_now, half_life)
+    step_limited = False
+    if step_limit and profile.wh_per_pct and candidate_wh:
+        if abs(candidate_wh / profile.wh_per_pct - 1) > RECALIBRATE_MAX_STEP:
+            candidate_wh = (candidate_wh + profile.wh_per_pct) / 2
+            step_limited = True
     tapers = [(item.get("taperStartPct"), item.get("taperPowerRatio")) for item in samples
               if item.get("taperStartPct") and item.get("taperPowerRatio")]
     if retrain:
@@ -610,15 +673,20 @@ def train(
         layer=profile.layer,
         ai_model=profile.ai_model,
         layer_mae=profile.layer_mae,
+        drift_log=profile.drift_log,
+        trust_calibration=profile.trust_calibration,
+        wh_history=_with_history(profile, candidate_wh, now, mode),
+        cross_log=profile.cross_log,
+        trend=profile.trend,
     )
-    candidate.soc_mae = _loo_mae(samples, base_wh_per_pct, weigh_now)
-    evaluation = _evaluate(samples, profile, base_wh_per_pct, weigh_now)
+    candidate.soc_mae = _loo_mae(samples, base_wh_per_pct, weigh_now, half_life)
+    evaluation = _evaluate(samples, profile, base_wh_per_pct, weigh_now, half_life)
     after = evaluation["new"]["mae"]
     before = evaluation["current"]["mae"]
     report = {"mode": "retrain" if retrain else "finetune", "used": len(samples),
               "added": len(profile.pending), "beforeMae": before,
               "afterMae": after, "whPerPct": candidate.wh_per_pct,
-              "evaluation": evaluation}
+              "evaluation": evaluation, "stepLimited": step_limited}
     # Before anything was learned, the value to beat is the catalog's (QA 148).
     reference = before if profile.wh_per_pct else evaluation["base"]["mae"]
     if reference is not None and after is not None and after > reference + 0.5:
@@ -633,7 +701,7 @@ def train(
 
 
 def _evaluate(samples: list[dict], profile: LearnedProfile, base: float | None,
-              now: datetime | None) -> dict:
+              now: datetime | None, half_life: float = HALF_LIFE_DAYS) -> dict:
     """Objective comparison on labelled charges (Task 127).
 
     Each charge's end % is predicted from its energy by: the model in use now,
@@ -645,14 +713,15 @@ def _evaluate(samples: list[dict], profile: LearnedProfile, base: float | None,
     a Wh/% too low for every other charge.
     """
     pending_ids = {str(item.get("sessionId")) for item in profile.pending}
-    scored = [item for item in samples if _scored(item)]
+    # QA 158: judged on charges near a full one when there are enough.
+    scored = _scoring_set(samples)
     fresh = [item for item in scored if str(item.get("sessionId")) in pending_ids]
     test = fresh or scored
     rows = []
     pairs = {"current": [], "new": [], "base": []}
     for item in samples:
         others = [other for other in samples if other is not item]
-        loo_wh = _robust_wh(others, base, now) if others else None
+        loo_wh = _robust_wh(others, base, now, half_life) if others else None
         actual = float(item["actualEndPct"])
         predicted = {
             "current": _predicted_end(item, profile.wh_per_pct) if profile.wh_per_pct else None,
@@ -681,6 +750,7 @@ def _evaluate(samples: list[dict], profile: LearnedProfile, base: float | None,
         "new": _stats(pairs["new"]),
         "base": _stats(pairs["base"]),
         "examples": rows[-12:],
+        "cleanOnly": len(scored) < sum(1 for item in samples if _scored(item)),
     }
 
 
@@ -748,7 +818,8 @@ def _scored(item: dict) -> bool:
     return not item.get("censored") and float(item.get("actualEndPct") or 0) < GAUGE_RESET_END_PCT
 
 
-def _robust_wh(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
+def _robust_wh(samples: list[dict], base: float | None, now: datetime | None,
+               half_life: float = HALF_LIFE_DAYS) -> float | None:
     """Median weighted by % gained and recency, starting from the catalog value.
 
     QA 146: this used to clamp to the lowest charge that ended at 100 %, so one
@@ -757,23 +828,30 @@ def _robust_wh(samples: list[dict], base: float | None, now: datetime | None) ->
     separates a battery that wears from one odd gauge reading.
     """
     pairs = [(float(item["whPerPct"]),
-              _gain(item) * _weight(item, now)
-              * (1.0 if _scored(item) else FULL_CHARGE_WEIGHT))
+              _gain(item) * _weight(item, now, half_life)
+              * (1.0 if _scored(item) else FULL_CHARGE_WEIGHT)
+              # QA 158: a charge far from a full one teaches the gauge's drift.
+              * TRUST_WEIGHT[trust_of(item)])
              for item in samples]
     if base:
         # The catalog fades with the vehicle's own charges: one full charge cannot
         # move it, a second one that agrees can, whatever % they started from.
-        pairs.append((base, PRIOR_GAIN_PCT / max(1, len(samples))))
+        # QA 158: trust weighs the charges against each other, not against
+        # the catalog: with no clean charge yet, the catalog keeps its pull.
+        top = max((TRUST_WEIGHT[trust_of(item)] for item in samples), default=1.0)
+        pairs.append((base, PRIOR_GAIN_PCT / max(1, len(samples)) * top))
     return _weighted_median(pairs)
 
 
-def _loo_mae(samples: list[dict], base: float | None, now: datetime | None) -> float | None:
+def _loo_mae(samples: list[dict], base: float | None, now: datetime | None,
+             half_life: float = HALF_LIFE_DAYS) -> float | None:
     errors = []
+    scoring = _scoring_set(samples)
     for index, item in enumerate(samples):
-        if not _scored(item):
+        if not any(item is other for other in scoring):
             continue
         others = samples[:index] + samples[index + 1:]
-        wh = _robust_wh(others, base, now)
+        wh = _robust_wh(others, base, now, half_life)
         if wh:
             errors.append(abs(_predicted_end(item, wh) - float(item["actualEndPct"])))
     return round(sum(errors) / len(errors), 2) if errors else None
@@ -781,7 +859,7 @@ def _loo_mae(samples: list[dict], base: float | None, now: datetime | None) -> f
 
 def _mae_with(samples: list[dict], wh: float) -> float:
     errors = [abs(_predicted_end(item, wh) - float(item["actualEndPct"]))
-              for item in samples if _scored(item)]
+              for item in _scoring_set(samples)]
     return sum(errors) / len(errors) if errors else 0.0
 
 
@@ -789,7 +867,7 @@ def _predicted_end(item: dict, wh: float) -> float:
     return min(100.0, float(item["startPct"]) + float(item["energyWh"]) / wh)
 
 
-def _weight(item: dict, now: datetime | None) -> float:
+def _weight(item: dict, now: datetime | None, half_life: float = HALF_LIFE_DAYS) -> float:
     if now is None:
         return 1.0  # retrain: every stored charge weighs the same
     try:
@@ -799,7 +877,164 @@ def _weight(item: dict, now: datetime | None) -> float:
         age_days = max(0.0, (now - at).total_seconds() / 86400)
     except (TypeError, ValueError):
         age_days = 0.0
-    return 0.5 ** (age_days / HALF_LIFE_DAYS)
+    return 0.5 ** (age_days / half_life)
+
+
+def trust_of(item: dict) -> str:
+    """The stored trust of a labelled charge; one stored before QA 158 and not
+    yet stamped counts as clean, as it did before."""
+    value = item.get("trust")
+    return value if value in TRUST_WEIGHT else "high"
+
+
+def trust_level(sessions_since: int, fulls_since: float | None, *, anchored: bool,
+                limits: dict | None = None) -> str:
+    """QA 158: how far the gauge can have drifted, from the charges and the
+    energy since the last full one. Never ``high`` without a full one yet."""
+    allowed = {**TRUST_LIMITS, **{key: value for key, value in (limits or {}).items()
+                                  if key in TRUST_LIMITS and isinstance(value, (int, float))}}
+    def within(sessions_key: str, fulls_key: str) -> bool:
+        return (sessions_since <= allowed[sessions_key]
+                and (fulls_since is None or fulls_since <= allowed[fulls_key]))
+    level = ("high" if within("highSessions", "highFulls")
+             else "medium" if within("mediumSessions", "mediumFulls") else "low")
+    if not anchored and level == "high":
+        level = "medium"
+    return level
+
+
+def stamp_trust(rows: list[dict], limits: dict | None = None) -> None:
+    """Give labelled charges without a trust the one their place in the
+    charge order gives them (charges stored before QA 158). Every list holding
+    a copy of a charge gets the same value."""
+    order: dict[str, str] = {}
+    anchored = False
+    partial = 0
+    seen: set[str] = set()
+    for item in sorted(rows, key=lambda row: str(row.get("at") or "")):
+        sid = str(item.get("sessionId") or id(item))
+        if sid in seen:
+            continue
+        seen.add(sid)
+        order[sid] = item.get("trust") if item.get("trust") in TRUST_WEIGHT else trust_level(
+            partial, None, anchored=anchored, limits=limits)
+        if float(item.get("actualEndPct") or 0) >= GAUGE_RESET_END_PCT:
+            anchored, partial = True, 0
+        else:
+            partial += 1
+    for item in rows:
+        if item.get("trust") not in TRUST_WEIGHT:
+            sid = str(item.get("sessionId") or id(item))
+            if sid in order:
+                item["trust"] = order[sid]
+
+
+def _scoring_set(samples: list[dict]) -> list[dict]:
+    """Charges an estimate is judged on: the clean ones near a full charge when
+    there are enough of them, otherwise every charge the estimate decided."""
+    scored = [item for item in samples if _scored(item)]
+    clean = [item for item in scored if trust_of(item) == "high"]
+    return clean if len(clean) >= TRUST_MIN_SCORED else scored
+
+
+def _recent_clean(rows: list[dict], now: datetime) -> bool:
+    """A clean charge lately, or never one (nothing to compare): learning goes on."""
+    clean = [item for item in rows if _scored(item) and item.get("trust") == "high"]
+    if not clean:
+        return True
+    for item in clean:
+        at = _parse_at(item.get("at"))
+        if at is not None and (now - at).days <= CLEAN_DATA_DAYS:
+            return True
+    return False
+
+
+def _parse_at(value) -> datetime | None:
+    try:
+        at = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+
+
+def _with_history(profile: LearnedProfile, new_wh: float | None, now: datetime,
+                  reason: str) -> list[dict]:
+    """The last Wh per 1 % values, to see and to go back to (QA 158)."""
+    old = profile.wh_per_pct
+    history = list(profile.wh_history)
+    if old and new_wh and abs(new_wh - old) >= 0.001:
+        history.append({"at": now.isoformat(), "whPerPct": round(old, 3), "reason": reason})
+    return history[-MAX_WH_HISTORY:]
+
+
+def calibrate_trust(drift_log: list[dict], now: datetime) -> dict | None:
+    """Energy limits of the trust levels from the drift measured at full
+    charges: about 1.5 % of drift is still ``high``, 3 % ``medium``."""
+    rates = [abs(float(item["driftPct"])) / float(item["fulls"]) for item in drift_log
+             if item.get("driftPct") is not None and float(item.get("fulls") or 0) >= 0.3]
+    if len(rates) < DRIFT_CALIBRATION_MIN:
+        return None
+    rate = _median(rates)
+    if not rate or rate <= 0:
+        return None
+    high = min(3.0, max(0.7, 1.5 / rate))
+    medium = min(5.0, max(high + 0.5, 3.0 / rate))
+    return {"highFulls": round(high, 2), "mediumFulls": round(medium, 2),
+            "driftPctPerFull": round(rate, 2), "n": len(rates), "at": now.isoformat()}
+
+
+def wh_trend(rows: list[dict], now: datetime) -> dict | None:
+    """Wh per 1 % of clean charges in the last 90 days against the 90 before.
+    A drop beyond 3 % is a battery that wears: learning follows it faster."""
+    recent, prior = [], []
+    for item in rows:
+        if not _scored(item) or trust_of(item) != "high" or not item.get("whPerPct"):
+            continue
+        at = _parse_at(item.get("at"))
+        if at is None:
+            continue
+        age = (now - at).days
+        if age <= TREND_WINDOW_DAYS:
+            recent.append(float(item["whPerPct"]))
+        elif age <= 2 * TREND_WINDOW_DAYS:
+            prior.append(float(item["whPerPct"]))
+    if len(recent) < TREND_MIN_CHARGES or len(prior) < TREND_MIN_CHARGES:
+        return None
+    drop = 1 - _median(recent) / _median(prior)
+    return {"whDropPct": round(drop * 100, 1), "fastFollow": drop > TREND_DROP,
+            "recent": len(recent), "prior": len(prior), "at": now.isoformat()}
+
+
+def recalibrate(profile: LearnedProfile, *, base_wh_per_pct: float | None, now: datetime,
+                full: dict, exact: bool, sessions_since: int, fulls_since: float | None,
+                days_since: float | None) -> tuple[LearnedProfile, dict]:
+    """QA 158: the deep calibration at each charge that reached full, the
+    moment the gauge is right. Measures how far it had drifted, refits Wh per
+    1 % on clean charges (at most halfway when it moves more than 3 %), fits
+    the trust limits to the measured drift and checks for a wearing battery.
+    ``full`` is the charge just queued; ``exact`` = the charger's full signal
+    ended it (a % typed after a timed charge that ran on is not a measure)."""
+    wh = profile.wh_per_pct or base_wh_per_pct
+    drift = None
+    log = list(profile.drift_log)
+    if exact and wh and full.get("energyWh"):
+        drift = round(100.0 - (float(full.get("startPct") or 0) + float(full["energyWh"]) / wh), 2)
+        log.append({"at": str(full.get("at") or now.isoformat()), "sessionId": full.get("sessionId"),
+                    "driftPct": drift, "sessions": sessions_since,
+                    "fulls": round(fulls_since, 2) if fulls_since is not None else None,
+                    "days": round(days_since, 1) if days_since is not None else None})
+    working = LearnedProfile(**{**profile.__dict__, "drift_log": log[-MAX_DRIFT_LOG:]})
+    updated, report = train(working, base_wh_per_pct=base_wh_per_pct, now=now,
+                            mode="finetune", step_limit=True)
+    calibration = calibrate_trust(updated.drift_log, now) or profile.trust_calibration
+    trend = wh_trend(unique_charges(updated), now)
+    updated = LearnedProfile(**{**updated.__dict__, "trust_calibration": calibration, "trend": trend})
+    return updated, {**report, "reason": "full_charge", "driftPct": drift,
+                     "trustCalibration": calibration, "trend": trend}
+
+
+def _dicts(value) -> list[dict]:
+    return [dict(item) for item in (value or []) if isinstance(item, dict)]
 
 
 def _weighted_median(pairs: list[tuple[float, float]]) -> float | None:

@@ -282,7 +282,10 @@ def test_gauge_offset_through_the_service():
     # The next charge carries it; reaching 100 % settles it.
     second = _charge(service, provider, clock, "g2", start=0, wh=88 * 26.0, end=100)
     assert second.training_state == "queued"
-    entry = next(item for item in learned().pending if item["sessionId"] == second.session_id)
+    # QA 158: a full charge recalibrates at once, so it is stored, not waiting.
+    stored = learned()
+    entry = next(item for item in [*stored.pending, *stored.samples]
+                 if item["sessionId"] == second.session_id)
     assert entry["shadowOffsetPct"] == pytest.approx(12.0)
     assert learned().gauge_offset_pct == 0.0
 

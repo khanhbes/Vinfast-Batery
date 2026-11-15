@@ -1360,6 +1360,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
 
   void updateDraft({
     double? currentSoc,
+    double? currentOdoKm,
     double? targetSoc,
     DateTime? hardDeadlineAt,
     ChargingStrategy? strategy,
@@ -1376,6 +1377,7 @@ class SmartChargingController extends StateNotifier<SmartChargingUiState> {
       timeMode: timeMode ?? old.timeMode,
       chargingMode: chargingMode ?? old.chargingMode,
       estimatedCapacityWh: old.estimatedCapacityWh,
+      currentOdoKm: currentOdoKm ?? old.currentOdoKm,
     );
     _idempotencyKey = null;
 

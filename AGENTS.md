@@ -337,6 +337,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Trên xe chủ app, 2 lần sau sạc đầy lệch khoảng 0,5%, từ lần thứ 3 khoảng 5%. Nhắc sạc đầy sau 3 lần; từ lần thứ 3 `charge_ai.drift_margin` nạp dư 1–3% (mọi gói, không cho mục tiêu 100%). Khi không chắc thì dư, không thiếu.
   - Đánh giá mô hình phải tách hai nhóm (`drift_report`); một con số MAE gộp che mất mẫu này. Nhiệt độ pin dưới 10°C coi là đọc sai.
   - Đọc sổ sạc của chủ app: `tools/read_charge_ledger.ps1` (chỉ đọc, chủ app chạy, kết quả ở `charge-ledger.local.json`, không commit).
+- **QA 158 (15/11/2026, chủ app chọn) — độ tin cậy của đồng hồ:**
+  - Mức `high/medium/low` (`charge_ai.gauge_trust`) tính từ **mọi phiên sạc thật** và lượng điện kể từ lần sạc đầy gần nhất (tín hiệu đầy của bộ sạc ở mọi kiểu phiên, hoặc số đọc ≥ 99%). Biên sạc dư, trọng số học (`TRUST_WEIGHT`), chấm điểm và nhắc sạc đầy đều theo mức này; không bao giờ chặn sạc.
+  - Chưa từng sạc đầy thì không cộng biên. Lần sạc đầy của xe đã học thì hiệu chuẩn ngay (`charge_model.recalibrate`): đo độ trôi chỉ khi bộ sạc báo đầy, Wh/1% đổi quá 3% thì đi nửa đường, ngưỡng theo độ trôi đo được khi đủ 5 lần.
+  - Hồ sơ học có thêm `driftLog`, `trustCalibration`, `whHistory`, `crossLog`, `trend`; mọi chỗ dựng `LearnedProfile(...)` bằng tham số tên phải mang theo các trường này.
+  - ODO lúc cắm sạc chỉ để thu (`crossLog`); chỉ dùng cho điểm ngắt khi `web/scripts/qa158_cross_check.py` cho thấy giảm sai số rõ.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

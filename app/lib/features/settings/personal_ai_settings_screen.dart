@@ -501,11 +501,13 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
     }
     final mae = status.mae;
     final layer = status.layerLabel;
+    final drift = status.driftSummary;
     return '${wh.toStringAsFixed(1)} Wh cho 1%'
         '${layer == null ? '' : ' $layer'}'
         '${power == null ? '' : ' · sạc khoảng ${power.round()} W'}'
         '${mae == null ? '' : ' · sai số khoảng ±${mae.toStringAsFixed(1)}%'}'
-        '${ai == null ? '' : ' · $ai'}';
+        '${ai == null ? '' : ' · $ai'}'
+        '${drift == null ? '' : '. ${drift[0].toUpperCase()}${drift.substring(1)}.'}';
   }
 
   static String _tripLearned(VehicleLearningStatus status) {

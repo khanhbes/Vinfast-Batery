@@ -139,6 +139,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     savedNote: savedNote,
     scan: () async =>
         (await scanDashboard(context, lastOdoKm: widget.currentOdoKm))?.soc,
+    // QA 158: the odometer too, to compare the gauge with the km ridden.
+    scanReading: () async {
+      final read = await scanDashboard(context, lastOdoKm: widget.currentOdoKm);
+      return read == null ? null : (soc: read.soc, odoKm: read.odoKm);
+    },
+    lastOdoKm: widget.currentOdoKm,
+    onOdo: (odo) => controller.updateDraft(currentOdoKm: odo),
     onSave: (value) {
       _setStartSoc(controller, value);
       onSaved?.call();
@@ -622,8 +629,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     ShellyConnectionSnapshot connection,
   ) {
     final draft = state.draft;
+    // QA 158: the server's trust when a forecast carries it (every real
+    // charge and the energy since the last full one); otherwise the count.
+    final trust = state.preview?.gaugeTrust;
     final sinceFull = chargesSinceFull(state.history);
-    final suggestFullAfter = sinceFull >= fullChargeSuggestAfter
+    final suggestFullAfter = trust != null
+        ? (trust.isHigh ? null : trust.sessionsSinceFull)
+        : sinceFull >= fullChargeSuggestAfter
         ? sinceFull
         : null;
     final busy =
@@ -824,6 +836,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
           const SizedBox(height: 12),
           FullChargeNudge(
             chargesSinceFull: suggestFullAfter,
+            anchored: trust?.anchored ?? true,
             onChooseFull: busy
                 ? null
                 : () => controller.updateDraft(targetSoc: 100),
@@ -843,6 +856,10 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                       fromSoc: draft.currentSoc.round(),
                       toSoc: currentTarget.round(),
                       personalizationLabel: preview.personalizationLabel,
+                      trustLine: currentTarget >= 100
+                          ? null
+                          : preview.gaugeTrust?.line(preview.driftMarginPct),
+                      trustCaution: !(preview.gaugeTrust?.isHigh ?? true),
                       learningTag: ref
                           .watch(learnedModelsProvider(widget.vehicleId))
                           .valueOrNull

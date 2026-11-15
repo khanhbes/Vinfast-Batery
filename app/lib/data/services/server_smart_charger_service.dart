@@ -539,6 +539,7 @@ class ServerSmartChargerService {
         'batteryCapacityWh': draft.estimatedCapacityWh,
         if (draft.powerHintW != null) 'historyPowerW': draft.powerHintW,
         if (draft.livePowerW != null) 'livePowerW': draft.livePowerW,
+        if (draft.currentOdoKm != null) 'currentOdoKm': draft.currentOdoKm,
       },
     );
     final minutes = (data['predictedMinutes'] as num).round();
@@ -598,6 +599,8 @@ class ServerSmartChargerService {
       powerSource: data['powerSource']?.toString(),
       socMae: (data['socMae'] as num?)?.toDouble(),
       learnedSamples: (data['learnedSamples'] as num?)?.round() ?? 0,
+      gaugeTrust: GaugeTrust.fromJson(data['gaugeTrust']),
+      driftMarginPct: (data['driftMarginPct'] as num?)?.toDouble() ?? 0,
       deviceTimerSeconds: (data['deviceTimerSeconds'] as num?)?.round(),
     );
   }

@@ -12,6 +12,31 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 158. Task Completion Log — Dự đoán % sạc theo độ tin cậy của đồng hồ, học sạch, hiệu chuẩn ở mỗi lần sạc đầy (15/11/2026, chủ app: "thực hiện code theo plan"; plan 5 tầng; chọn: app tự quyết nhịp sạc đầy kể cả khi sạc theo giờ hoặc hôm vội, ODO cả quét và nhập tay, hiệu chuẩn sâu mỗi lần sạc đầy, khi kém tin cậy thì báo và tự sạc dư) — Code + test xong, **chưa deploy, chưa build APK**
+
+**Tầng 1, độ tin cậy của đồng hồ** (`charge_ai.gauge_trust`): mốc là lần sạc gần nhất kết thúc bằng tín hiệu đầy của bộ sạc (mọi kiểu phiên, kể cả sạc theo giờ) hoặc có số đọc ≥ 99%. Đếm **mọi phiên sạc thật** kể từ mốc (≥ 30 Wh, cả phiên không nhập %) và lượng điện theo số bình. Ba mức: `high` (≤ 1 phiên và ≤ 1,5 bình), `medium` (≤ 3 phiên và ≤ 2,5 bình), `low`. Chưa từng có mốc thì không bao giờ `high`. Sạc theo giờ và hôm vội không bị chặn, chỉ làm mức tin cậy lần sau giảm.
+
+**Tầng 2, biên sạc dư theo mức** (`charge_ai.drift_margin`): `high` 0%; `medium` 1–2% theo số phiên; `low` 3%; khi một mức đã có ≥ 5 lần sạc có nhãn thì lấy phân vị 75 của sai số mức đó (0–4%). Tối đa 10% phần cần sạc, không áp dụng cho mục tiêu 100%. **Chưa có lần sạc đầy nào thì không cộng biên** (chưa đo được độ trôi; app nhắc sạc đầy thay vì đoán), lệch khỏi plan vì cộng biên cho xe mới làm hỏng điểm ngắt của người dùng mới. Báo giá trả `gaugeTrust` và `driftMarginPct`; phiên lưu `gauge_trust_level`.
+
+**Tầng 3, học sạch và hiệu chuẩn ở lần sạc đầy:**
+- Mỗi lần sạc có nhãn lưu `trust` lúc bắt đầu; lần sạc cũ được suy ra theo vị trí kể từ lần đầy (`stamp_trust`). `_robust_wh` nhân trọng số 1,0 / 0,35 / 0,1; số của hãng giữ sức kéo tương đối (nhân theo trọng số cao nhất có mặt) để xe chưa có lần sạc sạch không bị kéo hết về số hãng.
+- Chấm điểm (bỏ-một-ra, cổng "kém hơn thì giữ") trên lần sạc `high` khi có ≥ 3 lần.
+- **Mỗi lần sạc đầy** (khi xe đã có Wh/1% học được): `charge_model.recalibrate` đo độ trôi (`driftLog`, chỉ khi bộ sạc báo đầy, không lấy số gõ 100% sau sạc theo giờ), tinh chỉnh Wh/1% trên lần sạc sạch, đổi quá 3% thì chỉ đi nửa đường, giữ 3 giá trị Wh/1% gần nhất (`whHistory`). Khi đủ 5 lần đo, ngưỡng năng lượng của các mức được chỉnh theo độ trôi thật (`calibrate_trust`). Tinh chỉnh nhẹ mỗi 3 lần giữ nguyên.
+
+**Tầng 4, ODO lúc cắm sạc (chỉ thu):** sheet xác nhận pin trước khi sạc có ô ODO không bắt buộc (quét điền cả % lẫn ODO, nhập tay được; nhỏ hơn ODO đã lưu thì từ chối). Không nhập thì máy chủ lấy ODO của số đọc trong 2 giờ gần nhất. Phiên lưu `start_odo_km`; mỗi lần sạc có nhãn ghi `crossLog` (số đồng hồ và km giữa hai lần sạc). Chưa dùng để ngắt: `web/scripts/qa158_cross_check.py` (chạy trên file của `tools/read_charge_ledger.ps1`) quyết định sau ≥ 10 lần.
+
+**Tầng 5:** xu hướng Wh/1% của lần sạc sạch 90 ngày gần nhất so với 90 ngày trước; giảm > 3% thì học nhanh hơn (nửa đời 45 ngày thay 90). Sai số trung bình 5 lần sạc sạch gần nhất > 2% thì báo `needsCalibration`. Không có lần sạc sạch nào trong 60 ngày thì giữ Wh/1% đang dùng (`kept_no_clean_data`).
+
+**App:** dòng dưới dự đoán, ví dụ "Đã 3 lần chưa sạc đầy · sai số dự kiến khoảng 3% · app sạc dư 2%" (champagne khi không ở mức cao); nhắc sạc đầy theo độ tin cậy của máy chủ (máy chủ cũ thì đếm trên máy, ngưỡng 2); câu nhắc riêng khi chưa có mốc. Màn AI cá nhân thêm sai số hai nhóm, độ lệch đo được ở lần sạc đầy gần nhất. Nút "Đặt mục tiêu 100%" của thẻ nhắc chuyển xuống dưới chữ (tràn 11 px ở 320 dp).
+
+**Phát lại 12 lần sạc thật của chủ app (chỉ lần có nhãn):** Wh/1% cuối 26,20 (cũ 26,37). Biên sạc dư làm các lần thiếu nhẹ đi (23/10: 4,8% → 1,8%; 31/10: 11,4% → 8,4%), đổi lại các lần vốn dư thì dư thêm (26/10: 8,1%; 09/11: 8,7%). Sai số trung bình 3,29% → 3,15%. Đúng như đã nói trước: không giảm được sai số của các lần xa lần sạc đầy, chỉ lệch nó về phía dư; cách giảm thật là sạc đầy đều.
+
+**Kiểm thử:** backend `pytest tests`: 971 đạt, 15 bỏ qua (thêm `test_qa158_gauge_trust.py` 12 test; viết lại 3 test QA 157 theo quy tắc mới; 1 test QA 146 đọc lần sạc đầy trong `samples` vì nay hiệu chuẩn ngay). Flutter: `flutter analyze lib` sạch; toàn bộ 1500 đạt, 216 bỏ qua, 0 trượt; test mới `test/widget/qa158_gauge_trust_test.dart` (320 dp chữ ×1/×2).
+
+**Cần chủ app:** deploy máy chủ (API và worker, gồm cả mục 153–157); build và cài APK; sau khoảng 10 lần sạc có ODO chạy `pwsh tools/read_charge_ledger.ps1` rồi `python web/scripts/qa158_cross_check.py`.
+
+---
+
 ## 157. Task Completion Log — Dự đoán % sạc: đồng hồ xe lệch dần giữa hai lần sạc đầy (13/11/2026, chủ app: "đánh giá phần AI dự đoán… làm như nào để giảm sai số nhất có thể lâu dài"; chọn: dư vài % khi không chắc, mục tiêu dưới 2%, đồng ý sạc đầy mỗi 3 lần sạc) — Code + test xong, **chưa deploy, chưa build APK**
 
 **Dữ liệu (chủ app tự chạy `tools/read_charge_ledger.ps1`, chỉ đọc, một xe):** 12 lần sạc có nhãn từ 06/09 đến 09/11, Wh/1% đang dùng 26,372. Trên 10 lần không tới 100%: sai số trung bình 3,23%, trung vị 1,01%, lớn nhất 11,4%; dùng số của hãng (26,67) cho 3,30%.

@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 
 from . import charge_model
 from .charge_model import LearnedProfile
+from .models import NONTERMINAL_SESSION_STATES
 
 # Project rule for personal AI (AGENTS 3.4): 30 validated samples over 14 days,
 # at least 20 test samples, RMSE not worse by 3 %, bias not up. MAE must improve by
@@ -53,6 +54,14 @@ FULL_SUGGEST_AFTER = 3
 DRIFT_FREE_CHARGES = 2
 DRIFT_MARGIN_MAX_PCT = 3.0
 DRIFT_MARGIN_SHARE = 0.1
+# QA 158: the margin follows the gauge's trust; once a level has enough
+# charges of its own, the measured errors of that level decide it.
+TRUST_DEFAULT_ERROR_PCT = {"high": 1.0, "medium": 3.0, "low": 5.0}
+TRUST_MARGIN_MIN_CHARGES = 5
+TRUST_MARGIN_MAX_PCT = 4.0
+MIN_SESSION_WH = 30.0
+CALIBRATION_WATCH = 5
+CALIBRATION_WATCH_MAE = 2.0
 FULL_END_PCT = charge_model.GAUGE_RESET_END_PCT
 
 
@@ -277,46 +286,158 @@ def correction(profile: LearnedProfile | None, start_pct: float, target_pct: flo
     return round(min(limit, max(-limit, value)), 2)
 
 
-def drift_margin(profile: LearnedProfile | None, start_pct: float, target_pct: float) -> float:
-    """Extra % to charge because the gauge has gone several charges without
-    a full one (QA 157). For every plan: it is caution, not a trained layer.
-    0 for a charge to full (the charger ends it) and right after a full one."""
-    if profile is None or target_pct >= FULL_END_PCT:
+def _aware(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def gauge_trust(profile: LearnedProfile | None, sessions: list | None = None, *,
+                before: datetime | None = None, now: datetime | None = None,
+                wh_per_pct: float | None = None) -> dict:
+    """QA 158: how much the gauge can be trusted for the next charge.
+
+    The anchor is the last charge that reached full: the charger's full signal
+    (any kind of charge, a timed one too) or a reading of 99 % and more. From
+    it: the charges since (every real one with ``sessions``, the labelled ones
+    without, as in the worker), the energy in full batteries and the days.
+    ``before`` keeps only what happened before a given charge began."""
+    before = _aware(before)
+    labels = charges(profile) if profile else []
+    anchor: datetime | None = None
+    for item in labels:
+        at = _at(item)
+        if at is None or (before is not None and at >= before):
+            continue
+        if float(item.get("actualEndPct") or 0) >= FULL_END_PCT and (anchor is None or at > anchor):
+            anchor = at
+    if sessions is not None:
+        real = []
+        for session in sessions:
+            if session.state in NONTERMINAL_SESSION_STATES:
+                continue
+            if float(session.energy_used_wh or 0) < MIN_SESSION_WH:
+                continue
+            began = _aware(session.created_at)
+            if before is not None and began is not None and began >= before:
+                continue
+            ended = _aware(session.stopped_at) or _aware(session.updated_at) or began
+            if ended is None:
+                continue
+            real.append((ended, session))
+            if (session.stop_reason == "battery_full"
+                    or float(session.actual_end_soc or 0) >= FULL_END_PCT):
+                anchor = ended if anchor is None or ended > anchor else anchor
+        after = [session for ended, session in real if anchor is None or ended > anchor]
+        count = len(after)
+        energy = sum(float(session.energy_used_wh or 0) for session in after)
+        source = "sessions"
+    else:
+        after = [item for item in labels
+                 if (at := _at(item)) is not None
+                 and (anchor is None or at > anchor) and (before is None or at < before)
+                 and float(item.get("actualEndPct") or 0) < FULL_END_PCT]
+        count = len(after)
+        energy = sum(float(item.get("energyWh") or 0) for item in after)
+        source = "labels"
+    wh = wh_per_pct or (profile.wh_per_pct if profile else None)
+    fulls = energy / (wh * 100) if wh else None
+    level = charge_model.trust_level(count, fulls, anchored=anchor is not None,
+                                     limits=profile.trust_calibration if profile else None)
+    errors = [abs(value) for value in level_errors(profile).get(level, [])]
+    expected = (round(sum(errors) / len(errors), 1) if len(errors) >= charge_model.TRUST_MIN_SCORED
+                else TRUST_DEFAULT_ERROR_PCT[level])
+    moment = before or _aware(now) or datetime.now(timezone.utc)
+    return {"level": level, "anchored": anchor is not None, "sessionsSinceFull": count,
+            "fullsSinceFull": round(fulls, 2) if fulls is not None else None,
+            "daysSinceFull": round((moment - anchor).total_seconds() / 86400, 1) if anchor else None,
+            "lastFullAt": anchor.isoformat() if anchor else None,
+            "expectedErrorPct": expected, "source": source}
+
+
+def level_errors(profile: LearnedProfile | None) -> dict[str, list[float]]:
+    """Signed errors (estimate - gauge, % points) of the Wh per 1 % in use on
+    the labelled charges, by the trust each charge started with."""
+    out: dict[str, list[float]] = {"high": [], "medium": [], "low": []}
+    if profile is None or not profile.wh_per_pct:
+        return out
+    rows = [dict(item) for item in charges(profile)]
+    charge_model.stamp_trust(rows, profile.trust_calibration)
+    for item in rows:
+        end = float(item.get("actualEndPct") or 0)
+        if end >= FULL_END_PCT or item.get("censored"):
+            continue
+        predicted = float(item.get("startPct") or 0) + float(item["energyWh"]) / profile.wh_per_pct
+        out[charge_model.trust_of(item)].append(predicted - end)
+    return out
+
+
+def _quantile(values: list[float], share: float) -> float:
+    ordered = sorted(values)
+    position = share * (len(ordered) - 1)
+    low = math.floor(position)
+    high = min(len(ordered) - 1, low + 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def drift_margin(profile: LearnedProfile | None, start_pct: float, target_pct: float,
+                 trust: dict | None = None) -> float:
+    """Extra % to charge for a gauge that may have drifted (QA 157, QA 158).
+    The owner prefers a little too much to too little. By level: none right
+    after a full charge, 1 to 2 % a few charges later, 3 % far from it; with
+    five charges of a level, the 75th percentile of that level's errors (0 to
+    4 %). At most a tenth of the charge, nothing for a charge to full. For
+    every plan: it is caution, not a trained layer."""
+    if target_pct >= FULL_END_PCT:
         return 0.0
-    rows = charges(profile)
-    if not any(float(item.get("actualEndPct") or 0) >= FULL_END_PCT for item in rows):
-        return 0.0  # never anchored: nothing says how far it has drifted
-    partial = charges_since_full(profile)
-    if partial < DRIFT_FREE_CHARGES:
+    if trust is None:
+        if profile is None:
+            return 0.0
+        trust = gauge_trust(profile)
+    if not trust.get("anchored"):
+        # No full charge yet: nothing has measured the drift. The app suggests
+        # a full charge instead of guessing a margin.
         return 0.0
+    level = trust.get("level") or "medium"
+    errors = level_errors(profile).get(level, [])
+    if len(errors) >= TRUST_MARGIN_MIN_CHARGES:
+        margin = min(TRUST_MARGIN_MAX_PCT, max(0.0, _quantile(errors, 0.75)))
+    elif level == "high":
+        margin = 0.0
+    elif level == "medium":
+        since = int(trust.get("sessionsSinceFull") or 0)
+        # Nothing for the first charge or two, even before any full one: there
+        # is no drift to speak of yet.
+        margin = float(min(2, max(0, since - charge_model.TRUST_LIMITS["highSessions"])))
+    else:
+        margin = DRIFT_MARGIN_MAX_PCT
     gain = max(0.0, target_pct - start_pct)
-    return round(min(DRIFT_MARGIN_MAX_PCT, gain * DRIFT_MARGIN_SHARE,
-                     float(partial - DRIFT_FREE_CHARGES + 1)), 2)
+    return round(min(margin, gain * DRIFT_MARGIN_SHARE), 2)
 
 
 def drift_report(profile: LearnedProfile) -> dict:
-    """The error of the stored Wh per 1 % apart for the charges right after a
-    full one and for the later ones. One figure for both hid the pattern."""
-    wh = profile.wh_per_pct
-    near: list[float] = []
-    later: list[float] = []
-    position = None
-    for item in charges(profile):
-        end = float(item.get("actualEndPct") or 0)
-        if end >= FULL_END_PCT:
-            position = 0
-            continue
-        if position is None or not wh or item.get("censored"):
-            continue
-        position += 1
-        error = abs(float(item.get("startPct") or 0) + float(item["energyWh"]) / wh - end)
-        (near if position <= DRIFT_FREE_CHARGES else later).append(error)
+    """The error of the Wh per 1 % in use by trust level. One figure for every
+    charge hid that the gauge drifts between full charges (QA 157)."""
+    errors = level_errors(profile)
 
     def side(values: list[float]) -> dict:
-        return {"n": len(values),
-                "mae": round(sum(values) / len(values), 2) if values else None}
+        if not values:
+            return {"n": 0, "mae": None, "bias": None}
+        return {"n": len(values), "mae": round(sum(abs(v) for v in values) / len(values), 2),
+                "bias": round(sum(values) / len(values), 2)}
 
-    return {"afterFull": side(near), "later": side(later), "freeCharges": DRIFT_FREE_CHARGES}
+    return {"high": side(errors["high"]), "medium": side(errors["medium"]),
+            "low": side(errors["low"]),
+            "afterFull": side(errors["high"]), "later": side(errors["medium"] + errors["low"]),
+            "freeCharges": DRIFT_FREE_CHARGES}
+
+
+def needs_calibration(profile: LearnedProfile) -> bool:
+    """The last clean charges drift more than 2 %: the next full charge should
+    recalibrate (QA 158)."""
+    recent = level_errors(profile)["high"][-CALIBRATION_WATCH:]
+    return (len(recent) >= charge_model.TRUST_MIN_SCORED
+            and sum(abs(value) for value in recent) / len(recent) > CALIBRATION_WATCH_MAE)
 
 
 def _gap_days(profile: LearnedProfile, now: datetime | None) -> float:
@@ -337,13 +458,16 @@ def charges_since_full(profile: LearnedProfile) -> int:
     return count
 
 
-def status(profile: LearnedProfile) -> dict:
+def status(profile: LearnedProfile, sessions: list | None = None,
+           now: datetime | None = None) -> dict:
     """What the app shows: the layer in use, the way to the small model, and
     whether to suggest a full charge."""
     rows = charges(profile)
     scored = sum(1 for item in rows
                  if float(item.get("actualEndPct") or 0) < FULL_END_PCT and not item.get("censored"))
     partial = charges_since_full(profile)
+    # QA 158: the app's nudge follows the gauge's trust, not a fixed count.
+    trust = gauge_trust(profile, sessions, now=now)
     return {
         "layer": profile.layer,
         "aiCharges": scored,
@@ -351,6 +475,11 @@ def status(profile: LearnedProfile) -> dict:
         "aiDays": round(_span_days(rows), 1),
         "aiNeedDays": AI_MIN_DAYS,
         "chargesSinceFull": partial,
-        "suggestFull": bool(rows) and partial >= FULL_SUGGEST_AFTER,
+        "suggestFull": bool(rows) and trust["level"] != "high",
+        "trust": trust,
         "drift": drift_report(profile),
+        "needsCalibration": needs_calibration(profile),
+        "lastDrift": profile.drift_log[-1] if profile.drift_log else None,
+        "trustCalibration": profile.trust_calibration,
+        "trend": profile.trend,
     }

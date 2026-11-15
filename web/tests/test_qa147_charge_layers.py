@@ -327,9 +327,11 @@ def test_full_charge_is_suggested_after_several_partial_ones():
     partial = [_charge(i, day=i, start=20, gain=50, actual=70) for i in range(4)]
     assert charge_ai.status(LearnedProfile())["suggestFull"] is False
     assert charge_ai.status(LearnedProfile(ledger=partial))["chargesSinceFull"] == 4
-    # QA 157: suggested from the third partial charge (was the fifth).
-    assert charge_ai.status(LearnedProfile(ledger=partial[:2]))["suggestFull"] is False
-    assert charge_ai.status(LearnedProfile(ledger=partial[:3]))["suggestFull"] is True
+    # QA 158: with no full charge at all the gauge has no anchor: suggested.
+    assert charge_ai.status(LearnedProfile(ledger=partial[:1]))["suggestFull"] is True
+    # After a full one: not for the next two charges, then yes.
+    assert charge_ai.status(_after_full(1))["suggestFull"] is False
+    assert charge_ai.status(_after_full(2))["suggestFull"] is True
     five = [*partial, _charge(4, day=4, start=20, gain=50, actual=70)]
     assert charge_ai.status(LearnedProfile(ledger=five))["suggestFull"] is True
     full = [*five, _charge(5, day=5, start=10, gain=90, actual=100, censored=True)]
@@ -364,13 +366,16 @@ def test_drift_margin_starts_at_the_third_charge_after_a_full_one():
     assert charge_ai.drift_margin(_after_full(1), 20, 80) == 0.0
     assert charge_ai.drift_margin(_after_full(2), 20, 80) == 1.0
     assert charge_ai.drift_margin(_after_full(3), 20, 80) == 2.0
-    assert charge_ai.drift_margin(_after_full(9), 20, 80) == 3.0
+    # QA 158: far from the full charge (low trust) without enough measured charges.
+    assert charge_ai.drift_margin(_after_full(5), 20, 80) == 3.0
+    # Five measured charges at that level: their errors decide (all +0.58 here).
+    assert charge_ai.drift_margin(_after_full(9), 20, 80) == pytest.approx(0.58)
     # A charge to full is ended by the charger; a small top-up gets a small margin.
     assert charge_ai.drift_margin(_after_full(9), 20, 100) == 0.0
-    assert charge_ai.drift_margin(_after_full(9), 70, 80) == 1.0
+    assert charge_ai.drift_margin(_after_full(3), 70, 80) == 1.0
 
 
 def test_drift_report_scores_the_two_groups_apart():
     report = charge_ai.status(_after_full(4))["drift"]
     assert report["afterFull"]["n"] == 2 and report["later"]["n"] == 2
-    assert charge_ai.status(LearnedProfile())["drift"]["afterFull"] == {"n": 0, "mae": None}
+    assert charge_ai.status(LearnedProfile())["drift"]["afterFull"] == {"n": 0, "mae": None, "bias": None}

@@ -336,6 +336,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             )
         if self.predictor is None:
             preview = self._charge_model_preview(uid, vehicle_id, trusted_payload, current, target)
+            preview.start_odo_km = (_start_odo(payload.get("currentOdoKm"))
+                                    or self._recent_odo(uid, vehicle_id, self.clock()))
             self.repository.save_preview(uid, preview)
             self.repository.append_audit(uid, "preview_created", preview_id=preview.preview_id)
             return preview
@@ -445,9 +447,12 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
                                or self.entitlements.allows(uid, "learning_train")))
         correction = (charge_ai.correction(learned, current, target, self.clock())
                       if layers_allowed else 0.0)
-        # QA 157: several charges since a full one: charge a little more.
-        # A negative correction asks for more energy.
-        correction = round(correction - charge_ai.drift_margin(learned, current, target), 2)
+        # QA 157/158: the further the gauge is from its last full charge, the
+        # more it may have drifted: charge a little more (the owner prefers too
+        # much to too little). A negative correction asks for more energy.
+        trust = self._gauge_trust(uid, vehicle_id, learned)
+        margin = charge_ai.drift_margin(learned, current, target, trust)
+        correction = round(correction - margin, 2)
         estimate = charge_model.estimate(params, max(0.0, current + correction), target)
         seconds = estimate.seconds
         if seconds <= 0 or seconds > self.max_minutes * 60:
@@ -502,7 +507,41 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             soc_mae=params.soc_mae,
             learned_samples=samples,
             device_timer_seconds=device_timer,
+            gauge_trust=trust,
+            drift_margin_pct=margin,
         )
+
+    def _vehicle_sessions(self, uid: str, vehicle_id: str, limit: int = 60) -> list | None:
+        """This vehicle's recent charges, or None when the history cannot be read."""
+        try:
+            return [item for item in self.repository.history(uid, limit=limit)
+                    if item.vehicle_id == vehicle_id]
+        except Exception:
+            return None
+
+    def _recent_odo(self, uid: str, vehicle_id: str, now: datetime) -> float | None:
+        """The odometer of a reading taken in the last 2 hours (QA 158)."""
+        try:
+            for item in self.repository.battery_readings(uid, vehicle_id, limit=5):
+                at = item.get("at")
+                when = datetime.fromisoformat(str(at).replace("Z", "+00:00")) if at else None
+                if when is not None and when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+                if when is None or now - when > timedelta(hours=2):
+                    return None
+                odo = _start_odo(item.get("odoKm"))
+                if odo is not None:
+                    return odo
+        except Exception:
+            return None
+        return None
+
+    def _gauge_trust(self, uid: str, vehicle_id: str, learned, *,
+                     before: datetime | None = None) -> dict:
+        """QA 158: every real charge counts (timed ones and charges without a
+        typed %), not only the labelled ones."""
+        return charge_ai.gauge_trust(learned, self._vehicle_sessions(uid, vehicle_id),
+                                     before=before, now=self.clock())
 
     def _require_ready_to_energize(self, binding: DeviceBinding, status, *,
                                    live_context_verified: bool = False,
@@ -1095,6 +1134,8 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             model_wh_per_pct=preview.wh_per_pct if target_mode else None,
             soc_correction_pct=preview.soc_correction_pct if target_mode else 0.0,
             carried_offset_pct=preview.carried_offset_pct,
+            gauge_trust_level=(preview.gauge_trust or {}).get("level"),
+            start_odo_km=preview.start_odo_km,
             target_energy_wh=(round(preview.wh_per_pct * max(
                 0.0, preview.target_soc - preview.current_soc - preview.soc_correction_pct), 2)
                               if target_mode else None),
@@ -2533,3 +2574,11 @@ def _running_average(previous: float | None, value: float, count: int) -> float:
     if count <= 1 or previous is None:
         return float(value)
     return previous + (float(value) - previous) / count
+
+def _start_odo(value) -> float | None:
+    """QA 158: the odometer typed or scanned before a charge (optional)."""
+    number = _optional_float(value)
+    if number is None or not 0 <= number <= 999999:
+        return None
+    return round(number, 1)
+
