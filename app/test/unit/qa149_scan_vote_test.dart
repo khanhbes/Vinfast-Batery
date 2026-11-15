@@ -92,6 +92,11 @@ void main() {
       for (final soc in [8, 8, 88, 8, 8]) {
         vote.add(_r(soc: soc));
       }
+      // QA 159: nor does 8 lock while "88" is in view (37 % locked as 7 %).
+      expect(vote.socLocked, isNull);
+      for (var i = 0; i < 6; i++) {
+        vote.add(_r(soc: 8));
+      }
       expect(vote.socLocked, 8);
     });
 

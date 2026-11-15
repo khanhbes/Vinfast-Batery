@@ -155,6 +155,19 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
   int _frames = 0;
 
+  /// QA 159: the camera zooms in when the cluster is small in the window
+  /// (the owner's real scan had it at 60 %), and asks to come closer when
+  /// it cannot zoom more. Never out again within one scan.
+  double _zoom = 1;
+  double _maxZoom = 1;
+  int _smallFrames = 0;
+  bool _tooFar = false;
+  DateTime _lastZoomAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static const _zoomLimit = 3.0;
+  static const _zoomBelow = 0.75;
+  static const _zoomTarget = 0.88;
+  static const _tooFarBelow = 0.6;
+
   /// Frames in a row without segment digits: then text recognition gets a
   /// turn (dashboards that are not seven-segment LCDs).
   int _noSegments = 0;
@@ -242,6 +255,12 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
         return;
       }
       _recognizer ??= TextRecognizer(script: TextRecognitionScript.latin);
+      try {
+        _maxZoom = math.min(_zoomLimit, await controller.getMaxZoomLevel());
+        _zoom = 1;
+      } on Object {
+        _maxZoom = 1; // no zoom on this camera: only the hint
+      }
       if (_torch) {
         await controller.setFlashMode(FlashMode.torch).catchError((_) {});
       }
@@ -398,6 +417,37 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
     );
   }
 
+  /// QA 159: zoom in while the cluster is small in the window, in steps at
+  /// least 0.6 s apart; at the limit, ask to come closer.
+  void _followGlass(double? share) {
+    if (share == null || _done) return;
+    _smallFrames = share < _zoomBelow ? _smallFrames + 1 : 0;
+    final atLimit = _zoom >= _maxZoom - 0.01;
+    final tooFar = atLimit && share < _tooFarBelow;
+    if (tooFar != _tooFar && mounted) setState(() => _tooFar = tooFar);
+    final controller = _controller;
+    if (controller == null || atLimit || _smallFrames < 3) return;
+    final now = DateTime.now();
+    if (now.difference(_lastZoomAt) < const Duration(milliseconds: 600)) return;
+    final next = math.min(_maxZoom, _zoom * (_zoomTarget / share));
+    if (next <= _zoom + 0.05) return;
+    _lastZoomAt = now;
+    _smallFrames = 0;
+    controller
+        .setZoomLevel(next)
+        .then(
+          (_) {
+            _zoom = next;
+            _log.line(
+              'zoom ${next.toStringAsFixed(2)} share=${share.toStringAsFixed(2)}',
+            );
+          },
+          onError: (_) {
+            _maxZoom = _zoom; // refused: stop trying, the hint takes over
+          },
+        );
+  }
+
   int? _rotationDegrees() {
     final camera = _camera;
     final controller = _controller;
@@ -437,6 +487,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   Future<void> _process(_FrameJob job, InputImage? text) async {
     final watch = Stopwatch()..start();
     final frame = await _FrameJob.read(job, widget.lastOdoKm);
+    _followGlass(frame.glassShare);
     if (frame.reading.tempC != null) _tempBox = frame.reading.tempBox;
     final hasDigits = frame.hasDigits;
     _noSegments = hasDigits ? 0 : _noSegments + 1;
@@ -745,6 +796,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
                             socLocked: _vote.socLocked != null,
                             odoLocked: _vote.odoLocked != null,
                             blindFrames: _noSegments,
+                            tooFar: _tooFar,
                           ),
                         )
                       : _CameraProblemView(
@@ -793,8 +845,11 @@ String? scanHint({
   required bool socLocked,
   required bool odoLocked,
   required int blindFrames,
+  bool tooFar = false,
 }) {
   if (socLocked && odoLocked) return 'Đã đọc xong';
+  // QA 159: zoomed in as far as the camera goes and still small.
+  if (tooFar) return 'Đưa điện thoại gần màn hình xe hơn.';
   if (socLocked) return 'Đã có % pin. Giữ yên để đọc ODO.';
   if (odoLocked) return 'Đã có ODO. Giữ yên để đọc % pin.';
   if (blindFrames >= 8) {
@@ -1440,8 +1495,6 @@ class _GuidePainter extends CustomPainter {
       canvas.restore();
     }
 
-    if (t != null) _zones(canvas, rect, t);
-
     final hint = TextPainter(
       text: TextSpan(
         // QA 156: the reader finds the glass itself; the owner only has
@@ -1462,69 +1515,6 @@ class _GuidePainter extends CustomPainter {
         ? below
         : rect.bottom - hint.height - 12;
     hint.paint(canvas, Offset(size.width / 2 - hint.width / 2, y));
-  }
-
-  void _zones(Canvas canvas, Rect r, DashboardTemplate t) {
-    Rect zone(Rect z) => Rect.fromLTRB(
-      r.left + z.left * r.width,
-      r.top + z.top * r.height,
-      r.left + z.right * r.width,
-      r.top + z.bottom * r.height,
-    );
-    final ignored = RRect.fromRectAndRadius(
-      zone(t.ignore),
-      const Radius.circular(12),
-    );
-    canvas.drawRRect(
-      ignored,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1
-        ..color = Colors.white.withValues(alpha: 0.14),
-    );
-    for (final (z, label, locked) in [
-      (t.soc, '% PIN', socLocked),
-      (t.odo, 'ODO', odoLocked),
-      (t.temp, '°C PIN', false),
-    ]) {
-      final box = RRect.fromRectAndRadius(zone(z), const Radius.circular(12));
-      final color = locked ? LuxeColors.emerald : LuxeColors.platinumHi;
-      canvas.drawRRect(
-        box,
-        Paint()..color = color.withValues(alpha: locked ? 0.16 : 0.05),
-      );
-      canvas.drawRRect(
-        box,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = locked ? 1.8 : 1.3
-          ..color = color.withValues(alpha: locked ? 0.95 : 0.5),
-      );
-      // The zone's name on a small pill above it.
-      final text = TextPainter(
-        text: TextSpan(
-          text: locked ? '$label ✓' : label,
-          style: TextStyle(
-            color: locked ? PlanColors.ink : LuxeColors.background,
-            fontSize: 11.5,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.6,
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final pill = RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          box.left + 6,
-          box.top - text.height - 6,
-          text.width + 12,
-          text.height + 4,
-        ),
-        const Radius.circular(99),
-      );
-      canvas.drawRRect(pill, Paint()..color = color.withValues(alpha: 0.92));
-      text.paint(canvas, Offset(pill.left + 6, pill.top + 2));
-    }
   }
 
   @override
@@ -1564,7 +1554,7 @@ class _FoundPainter extends CustomPainter {
     if (image == null || image.width <= 0 || image.height <= 0) return;
     final sx = size.width / image.width;
     final sy = size.height / image.height;
-    void outline(Rect? box, bool locked) {
+    void outline(Rect? box, bool locked, String label) {
       if (box == null) return;
       final rect = Rect.fromLTRB(
         box.left * sx,
@@ -1572,7 +1562,9 @@ class _FoundPainter extends CustomPainter {
         box.right * sx,
         box.bottom * sy,
       ).inflate(6);
-      final color = locked ? LuxeColors.emerald : LuxeColors.champagne;
+      // QA 159: drawn where the number really is, named; platinum while it
+      // is being confirmed (champagne is for cautions).
+      final color = locked ? LuxeColors.emerald : LuxeColors.platinumHi;
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(10));
       canvas.drawRRect(rrect, Paint()..color = color.withValues(alpha: 0.14));
       canvas.drawRRect(
@@ -1582,11 +1574,34 @@ class _FoundPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2,
       );
+      final text = TextPainter(
+        text: TextSpan(
+          text: locked ? '$label ✓' : label,
+          style: const TextStyle(
+            color: LuxeColors.background,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final pill = RRect.fromRectAndRadius(
+        Rect.fromLTWH(
+          rect.left,
+          rect.top - text.height - 6,
+          text.width + 12,
+          text.height + 4,
+        ),
+        const Radius.circular(99),
+      );
+      canvas.drawRRect(pill, Paint()..color = color.withValues(alpha: 0.92));
+      text.paint(canvas, Offset(pill.left + 6, pill.top + 2));
     }
 
-    outline(socBox, socLocked);
-    outline(odoBox, odoLocked);
-    outline(tempBox, false);
+    outline(socBox, socLocked, '% PIN');
+    outline(odoBox, odoLocked, 'ODO');
+    outline(tempBox, false, '°C PIN');
   }
 
   @override
@@ -1707,22 +1722,24 @@ class _FrameJob {
 
   GrayCrop _crop({int maxSide = SevenSegmentReader.frameSide}) =>
       GrayImage.crop(
-    bytes,
-    width: width,
-    height: height,
-    bytesPerRow: bytesPerRow,
-    rotation: rotation,
-    bgra: bgra,
-    roi: roi ?? const Rect.fromLTRB(0, 0, 1, 1),
-    maxSide: roi == null ? 960 : maxSide,
-  );
+        bytes,
+        width: width,
+        height: height,
+        bytesPerRow: bytesPerRow,
+        rotation: rotation,
+        bgra: bgra,
+        roi: roi ?? const Rect.fromLTRB(0, 0, 1, 1),
+        maxSide: roi == null ? 960 : maxSide,
+      );
 
   /// The frame's reading, boxes in upright full-frame coordinates (QA 135:
   /// the guide window at full resolution, several thresholds, consensus).
-  static Future<({DashboardLayoutReading reading, bool hasDigits})> read(
-    _FrameJob job,
-    double? lastOdoKm,
-  ) async {
+  /// QA 159: the glass is cut again from the camera frame when it is small
+  /// in the guide window; [glassShare] is its width over the window's.
+  static Future<
+    ({DashboardLayoutReading reading, bool hasDigits, double? glassShare})
+  >
+  read(_FrameJob job, double? lastOdoKm) async {
     try {
       return await Isolate.run(() {
         final crop = job._crop();
@@ -1736,14 +1753,46 @@ class _FrameJob {
                 w.right * crop.image.width,
                 w.bottom * crop.image.height,
               );
+        final quarter = job.rotation == 90 || job.rotation == 270;
+        final upW = (quarter ? job.height : job.width).toDouble();
+        final upH = (quarter ? job.width : job.height).toDouble();
+        Recut? recut(Rect box, int side) {
+          final frame = crop.toFrame(box);
+          final again = GrayImage.crop(
+            job.bytes,
+            width: job.width,
+            height: job.height,
+            bytesPerRow: job.bytesPerRow,
+            rotation: job.rotation,
+            bgra: job.bgra,
+            roi: Rect.fromLTRB(
+              frame.left / upW,
+              frame.top / upH,
+              frame.right / upW,
+              frame.bottom / upH,
+            ),
+            maxSide: side,
+            upscale: true,
+          );
+          return (
+            image: again.image,
+            origin: Offset(
+              (again.left - crop.left) * crop.scale,
+              (again.top - crop.top) * crop.scale,
+            ),
+            scale: again.scale / crop.scale,
+          );
+        }
+
         final scan = SevenSegmentReader.scanFrame(
           crop.image,
           template: template,
           window: window,
           lastOdoKm: lastOdoKm,
+          recut: recut,
         );
         final r = scan.reading;
-        final hasDigits = scan.hasDigits;
+        final glass = scan.glass;
         return (
           reading: DashboardLayoutReading(
             soc: r.soc,
@@ -1758,11 +1807,18 @@ class _FrameJob {
             tempBox: r.tempBox == null ? null : crop.toFrame(r.tempBox!),
             tempConfident: r.tempConfident,
           ),
-          hasDigits: hasDigits,
+          hasDigits: scan.hasDigits,
+          glassShare: glass == null || window == null || window.width <= 0
+              ? null
+              : glass.width / window.width,
         );
       });
     } on Object {
-      return (reading: const DashboardLayoutReading(), hasDigits: false);
+      return (
+        reading: const DashboardLayoutReading(),
+        hasDigits: false,
+        glassShare: null,
+      );
     }
   }
 

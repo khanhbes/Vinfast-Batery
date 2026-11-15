@@ -12,6 +12,30 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 159. Task Completion Log — Quét đồng hồ: % pin mất chữ số đầu (37% đọc thành 7%) (15/11/2026, chủ app quét thật bằng 2.1.5 và gửi ảnh: "%pin hay sai chỉ nhận được 1 số ví dụ 39 thì nhận được 9"; chọn: cầm xa thì tự phóng to rồi mới nhắc, % chưa chắc thì không khóa và đọc tiếp) — Code + test xong, **chưa build APK, chưa quét thử trên xe**
+
+**Tái hiện trước khi sửa:** ảnh thật thứ hai làm fixture (`test/fixtures/dashboard/feliz_photo_37.gray.gz`: 37%, 5494 km, 22°C). Bài đo `qa156_scan_bench_test.dart` viết lại để mô phỏng đúng đường đi của máy: khung camera (cửa sổ ngắm khoảng 950 px), vùng cắt 900 px, và thêm dải "cầm xa" (khung ngắm 1,3–1,9 lần kính, như ảnh quét của chủ app). Mã cũ: ảnh 37% đọc thành **7** ở 15% số khung cầm gần và 52,5% khi cầm xa; ảnh cũ (68%) sai 10% khi cầm xa.
+
+**Nguyên nhân (soi từng khung lỗi):** chữ "3" dính liền với biểu tượng cục pin ngay bên dưới thành một khối cao 147 px (chữ số cao 46 px). Khối đó không phải "cỡ chữ số" nên chốt QA 156 không kích hoạt, và chữ "7" còn lại thành số hợp lệ. Cầm xa làm chữ số nhỏ hơn và các vùng mẫu lệch khỏi số thật, nên lỗi nhiều hơn.
+
+**Sửa:**
+- **Chốt ô bên trái** (`seven_segment_reader.dart`): số nào có nét sáng ngay bên trái chữ số đầu (hơn 8% diện tích ô) mà ô đó không phải một số khác (như "48 18") thì đánh dấu ô đó là chữ số chưa đọc được, và vùng đó của khung bị bỏ. Pin thật 1 chữ số có ô hàng chục tối nên vẫn đọc được (test xóa chữ "3" trên ảnh đọc ra 7); "07" thì chữ "0" được đọc thành số.
+- **Định vị kính bằng số tốc độ** (`DashboardLayoutParser.locateGlass`, `DashboardTemplate.speed`): "00" là chữ số to và dễ đọc nhất; chiều cao của nó cho cỡ kính, mép phải và mép trên cho vị trí (đo trên cả hai ảnh, lệch dưới 1,5%). `fitWindow` dò thêm tới 0,5 lần khung.
+- **Đọc lần hai ở cỡ chuẩn** (`scanFrame(recut:)`): kính nhỏ trong vùng cắt (phóng được từ 1,25 lần trở lên) thì cắt lại từ khung camera gốc và đọc ở 900 px. % chỉ lấy từ lần đọc này; ODO và nhiệt độ lấy lần nào có.
+- **Bỏ phiếu:** % một chữ số không được khóa khi trong 8 khung gần nhất có khung đọc ra số hai chữ số chứa nó (kể cả chỉ một lần). Đổi quyết định QA 149 ("88 đọc một lần không chặn 8%"): nay 8% chờ tới khi "88" ra khỏi cửa sổ.
+- **Tự phóng to:** kính nhỏ hơn 75% khung trong 3 khung liền thì camera zoom lên (tối đa 3× hoặc mức máy cho phép, mỗi lần cách nhau ít nhất 0,6 giây, không thu nhỏ lại). Zoom hết mức mà kính vẫn dưới 60% thì dòng dưới khung là "Đưa điện thoại gần màn hình xe hơn."
+- **Khung ngắm nói thật:** bỏ ba ô vùng vẽ sẵn ở chỗ cố định (đang lệch khỏi số thật). Hộp quanh số đã đọc có nhãn (% PIN, ODO, °C PIN), emerald khi đã khóa, bạch kim khi đang xác nhận (trước là champagne).
+
+**Kết quả bài đo (200 khung mỗi trường hợp, sau sửa):** ảnh 68% gần: % đúng 100%; ảnh 68% xa: đúng 96,5%, sai 0,5% (1 khung, một khung lẻ không đủ để khóa); ảnh 37% gần: đúng 95%, sai 0%; ảnh 37% xa: đúng 91,5%, sai 0%. Phần còn lại là không có số và máy đọc tiếp. ODO đúng 100% cả bốn. Lần đọc thứ hai chỉ chạy khi kính nhỏ hoặc lần đầu chưa ra %: thời gian mỗi khung trên máy tính khoảng 225–250 ms khi cầm gần, 340–400 ms khi cầm xa; trên điện thoại sẽ chậm hơn, chưa đo.
+
+**Kiểm thử:** Flutter: toàn bộ 1507 đạt, 216 bỏ qua; ngưỡng % đúng của ảnh 37% cầm gần trượt ở lần đầu (83,5%), sửa bằng đọc lần hai khi lần đầu chưa ra % rồi chạy lại các test quét đạt hết (chưa chạy lại toàn bộ sau lần sửa cuối). Test mới `test/unit/qa159_scan_far_test.dart`; bài đo chạy trên hai ảnh với ngưỡng % sai ≤ 1%.
+
+**Giới hạn:** vẫn chỉ có hai ảnh thật của một xe, lệch là giả lập; zoom số không thêm chi tiết khi cảm biến đã hết độ phân giải. Chưa có ảnh khi pin dưới 10%.
+
+**Cần chủ app:** cài bản mới và quét thử ở khoảng cách như hôm nay; ảnh nào quét sai gửi mình để thành fixture.
+
+---
+
 ## 158. Task Completion Log — Dự đoán % sạc theo độ tin cậy của đồng hồ, học sạch, hiệu chuẩn ở mỗi lần sạc đầy (15/11/2026, chủ app: "thực hiện code theo plan"; plan 5 tầng; chọn: app tự quyết nhịp sạc đầy kể cả khi sạc theo giờ hoặc hôm vội, ODO cả quét và nhập tay, hiệu chuẩn sâu mỗi lần sạc đầy, khi kém tin cậy thì báo và tự sạc dư) — Code + test xong, **chưa deploy, chưa build APK**
 
 **Tầng 1, độ tin cậy của đồng hồ** (`charge_ai.gauge_trust`): mốc là lần sạc gần nhất kết thúc bằng tín hiệu đầy của bộ sạc (mọi kiểu phiên, kể cả sạc theo giờ) hoặc có số đọc ≥ 99%. Đếm **mọi phiên sạc thật** kể từ mốc (≥ 30 Wh, cả phiên không nhập %) và lượng điện theo số bình. Ba mức: `high` (≤ 1 phiên và ≤ 1,5 bình), `medium` (≤ 3 phiên và ≤ 2,5 bình), `low`. Chưa từng có mốc thì không bao giờ `high`. Sạc theo giờ và hôm vội không bị chặn, chỉ làm mức tin cậy lần sau giảm.

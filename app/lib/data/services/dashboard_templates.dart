@@ -18,7 +18,13 @@ class DashboardTemplate {
     required this.temp,
     required this.ignore,
     this.glass,
+    this.speed,
   });
+
+  /// QA 159: where the speed digits ("00") stand on the glass. They are
+  /// the largest digits on the cluster and the easiest to read, so they
+  /// say where the glass is and how big, however far the phone is.
+  final Rect? speed;
 
   /// QA 149: the glass as a smooth closed curve, the way the cluster really
   /// looks (the polygon in [outline] drew a hard trapezoid). Each entry is
@@ -97,6 +103,8 @@ class DashboardTemplate {
     odo: Rect.fromLTRB(0.11, 0.58, 0.49, 0.73),
     temp: Rect.fromLTRB(0.36, 0.74, 0.63, 0.89),
     ignore: Rect.fromLTRB(0.40, 0.32, 0.68, 0.57),
+    // Measured on both real photos (13/11 and 15/11/2026), within 1.5 %.
+    speed: Rect.fromLTRB(0.42, 0.348, 0.624, 0.552),
     // QA 149: a badge, not a trapezoid: the top is square with soft
     // corners, the sides run straight down most of the way and then sweep
     // in to a rounded bottom (the owner's photos, 01/11/2026).

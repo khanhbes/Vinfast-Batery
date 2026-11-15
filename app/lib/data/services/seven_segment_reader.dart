@@ -5,6 +5,23 @@ import 'dart:ui';
 import 'dashboard_layout_parser.dart';
 import 'dashboard_templates.dart';
 
+/// QA 159: a part of the camera frame cut again at a better size. Pixel p
+/// of [image] sits at [origin] + p / [scale] in the image read first.
+typedef Recut = ({GrayImage image, Offset origin, double scale});
+
+/// Cuts [box] (coordinates of the image read first) again from the camera
+/// frame, [side] pixels on its long side; null when it cannot.
+typedef RecutFn = Recut? Function(Rect box, int side);
+
+/// One frame's reading (QA 156) and, with a template, where its glass was
+/// found and the angle it was turned level by (QA 159).
+typedef FrameScan = ({
+  DashboardLayoutReading reading,
+  bool hasDigits,
+  Rect? glass,
+  double angle,
+});
+
 /// A grayscale image (one byte per pixel, row-major).
 class GrayImage {
   const GrayImage(this.width, this.height, this.pixels);
@@ -148,6 +165,44 @@ class GrayImage {
     return GrayImage(width, height, out);
   }
 
+  /// [box] of this image resampled to [side] pixels on its long side,
+  /// bilinear; larger than the box when [upscale] (QA 159: small digits read
+  /// at the size the decoder was tuned for). Null for an empty box.
+  Recut? region(Rect box, int side, {bool upscale = true}) {
+    final left = box.left.clamp(0.0, width.toDouble());
+    final top = box.top.clamp(0.0, height.toDouble());
+    final right = box.right.clamp(0.0, width.toDouble());
+    final bottom = box.bottom.clamp(0.0, height.toDouble());
+    final w = right - left, h = bottom - top;
+    if (w < 4 || h < 4) return null;
+    var scale = side / math.max(w, h);
+    if (!upscale) scale = math.min(1.0, scale);
+    final outW = math.max(1, (w * scale).round());
+    final outH = math.max(1, (h * scale).round());
+    final out = Uint8List(outW * outH);
+    for (var v = 0; v < outH; v++) {
+      final y = (top + (v + 0.5) / scale - 0.5).clamp(0.0, height - 1.001);
+      final y0 = y.floor();
+      final fy = y - y0;
+      for (var u = 0; u < outW; u++) {
+        final x = (left + (u + 0.5) / scale - 0.5).clamp(0.0, width - 1.001);
+        final x0 = x.floor();
+        final fx = x - x0;
+        final i = y0 * width + x0;
+        final top0 = pixels[i] + (pixels[i + 1] - pixels[i]) * fx;
+        final bottom0 =
+            pixels[i + width] +
+            (pixels[i + width + 1] - pixels[i + width]) * fx;
+        out[v * outW + u] = (top0 + (bottom0 - top0) * fy).round();
+      }
+    }
+    return (
+      image: GrayImage(outW, outH, out),
+      origin: Offset(left, top),
+      scale: scale,
+    );
+  }
+
   /// This image turned by [degrees] clockwise (a photo whose orientation
   /// is unknown is tried every way round).
   GrayImage rotated(int degrees) => degrees % 360 == 0
@@ -175,6 +230,7 @@ class GrayImage {
     required bool bgra,
     required Rect roi,
     int maxSide = 720,
+    bool upscale = false,
   }) {
     final quarter = rotation == 90 || rotation == 270;
     final upW = quarter ? height : width;
@@ -185,7 +241,10 @@ class GrayImage {
     final bottom = (roi.bottom.clamp(0.0, 1.0) * upH).toDouble();
     final cropW = math.max(1.0, right - left),
         cropH = math.max(1.0, bottom - top);
-    final scale = math.min(1.0, maxSide / math.max(cropW, cropH));
+    // QA 159: a second, closer look may enlarge (bilinear) so the digits
+    // reach the size the decoder was tuned for.
+    final fit = maxSide / math.max(cropW, cropH);
+    final scale = upscale ? fit : math.min(1.0, fit);
     final outW = math.max(1, (cropW * scale).round());
     final outH = math.max(1, (cropH * scale).round());
     int luma(int x, int y) {
@@ -342,7 +401,95 @@ abstract final class SevenSegmentReader {
   /// threshold pass parsed (by zone when the owner lines the cluster up
   /// with [template], whose glass is [window] in [image]), then their
   /// consensus. The scanner and the accuracy benchmark both call this.
-  static ({DashboardLayoutReading reading, bool hasDigits}) scanFrame(
+  ///
+  /// QA 159: with a template, the glass is found from the speed digits;
+  /// when it is small in [image] (the phone held far) and [recut] can cut
+  /// the camera frame again, the glass is read a second time at the size
+  /// the decoder was tuned for. The % comes only from that second reading.
+  /// [FrameScan.glass] is where the glass was found, in [image].
+  static FrameScan scanFrame(
+    GrayImage image, {
+    DashboardTemplate? template,
+    Rect? window,
+    double? lastOdoKm,
+    RecutFn? recut,
+  }) {
+    final first = _scanOnce(
+      image,
+      template: template,
+      window: window,
+      lastOdoKm: lastOdoKm,
+    );
+    final glass = first.glass;
+    if (template == null || recut == null || glass == null) return first;
+    final tilt = math.sin(first.angle.abs() * math.pi / 180);
+    final box = Rect.fromLTRB(
+      glass.left - 0.06 * glass.width - tilt * glass.height / 2,
+      glass.top - 0.08 * glass.height - tilt * glass.width / 2,
+      glass.right + 0.06 * glass.width + tilt * glass.height / 2,
+      glass.bottom + 0.08 * glass.height + tilt * glass.width / 2,
+    );
+    // A second read when it makes the digits clearly larger, or when the
+    // first one gave no % (on the owner's 37 % the "3" ran into the battery
+    // icon; the camera's own pixels part them more often). A frame read
+    // well the first time stays fast.
+    if (frameSide / math.max(box.width, box.height) < recutGain &&
+        first.reading.soc != null) {
+      return first;
+    }
+    final cut = recut(box, frameSide);
+    if (cut == null) return first;
+    Rect toCut(Rect r) => Rect.fromLTRB(
+      (r.left - cut.origin.dx) * cut.scale,
+      (r.top - cut.origin.dy) * cut.scale,
+      (r.right - cut.origin.dx) * cut.scale,
+      (r.bottom - cut.origin.dy) * cut.scale,
+    );
+    Rect? back(Rect? r) => r == null
+        ? null
+        : Rect.fromLTRB(
+            cut.origin.dx + r.left / cut.scale,
+            cut.origin.dy + r.top / cut.scale,
+            cut.origin.dx + r.right / cut.scale,
+            cut.origin.dy + r.bottom / cut.scale,
+          );
+    final second = _scanOnce(
+      cut.image,
+      template: template,
+      window: toCut(glass),
+      lastOdoKm: lastOdoKm,
+    );
+    if (!second.hasDigits) return first;
+    final a = second.reading, b = first.reading;
+    final odo = a.odoKm != null;
+    final temp = a.tempC != null;
+    return (
+      reading: DashboardLayoutReading(
+        // The % only from the closer look: the far one is what read "7".
+        soc: a.soc,
+        socBox: back(a.socBox),
+        socConfident: a.socConfident,
+        socCandidates: a.socCandidates,
+        odoKm: odo ? a.odoKm : b.odoKm,
+        odoBox: odo ? back(a.odoBox) : b.odoBox,
+        odoConfident: odo ? a.odoConfident : b.odoConfident,
+        odoCandidates: odo ? a.odoCandidates : b.odoCandidates,
+        tempC: temp ? a.tempC : b.tempC,
+        tempBox: temp ? back(a.tempBox) : b.tempBox,
+        tempConfident: temp ? a.tempConfident : b.tempConfident,
+      ),
+      hasDigits: true,
+      glass: back(second.glass) ?? glass,
+      angle: first.angle,
+    );
+  }
+
+  /// A second read happens when it makes the glass at least this much
+  /// larger, or when the first read has no % (QA 159).
+  static const recutGain = 1.25;
+
+  /// One read of [image]: brightened, turned level, every pass parsed.
+  static FrameScan _scanOnce(
     GrayImage image, {
     DashboardTemplate? template,
     Rect? window,
@@ -405,6 +552,8 @@ abstract final class SevenSegmentReader {
           tempConfident: r.tempConfident,
         ),
         hasDigits: scan.hasDigits,
+        glass: back(scan.glass),
+        angle: angle,
       );
     }
     return _scanLevel(
@@ -476,7 +625,7 @@ abstract final class SevenSegmentReader {
     return best;
   }
 
-  static ({DashboardLayoutReading reading, bool hasDigits}) _scanLevel(
+  static FrameScan _scanLevel(
     GrayImage image, {
     DashboardTemplate? template,
     Rect? window,
@@ -486,11 +635,19 @@ abstract final class SevenSegmentReader {
     final hasDigits = passes.any(
       (p) => p.any((t) => RegExp(r'\d').hasMatch(t.text)),
     );
+    // QA 159: start from the glass the speed digits show, when they do.
+    final located = template != null && window != null
+        ? DashboardLayoutParser.locateGlass(
+            passes,
+            template: template,
+            window: window,
+          )
+        : null;
     final fitted = template != null && window != null
         ? DashboardLayoutParser.fitWindow(
             passes,
             template: template,
-            window: window,
+            window: located ?? window,
           )
         : null;
     final reading = DashboardLayoutParser.combine([
@@ -504,7 +661,7 @@ abstract final class SevenSegmentReader {
               )
             : DashboardLayoutParser.parse(p, lastOdoKm: lastOdoKm),
     ]);
-    return (reading: reading, hasDigits: hasDigits);
+    return (reading: reading, hasDigits: hasDigits, glass: fitted, angle: 0.0);
   }
 
   static DashboardLayoutReading readFrame(
@@ -512,11 +669,13 @@ abstract final class SevenSegmentReader {
     DashboardTemplate? template,
     Rect? window,
     double? lastOdoKm,
+    RecutFn? recut,
   }) => scanFrame(
     image,
     template: template,
     window: window,
     lastOdoKm: lastOdoKm,
+    recut: recut,
   ).reading;
 
   /// Tried in order when the level image misses the % or the ODO.
@@ -602,6 +761,30 @@ abstract final class SevenSegmentReader {
   /// (QA 156: 720 before; with the phone a little far the % digits were
   /// 25 px tall and a soft frame read "68" as "63").
   static const frameSide = 900;
+
+  /// QA 159: lit share of the cell left of a number above which a digit
+  /// is there but was not read.
+  static const lostDigitLit = 0.08;
+
+  static double _litShare(
+    Uint8List mask,
+    int w, {
+    required int h0,
+    required Rect cell,
+  }) {
+    final x0 = math.max(0, cell.left.floor()),
+        x1 = math.min(w, cell.right.ceil());
+    final y0 = math.max(0, cell.top.floor()),
+        y1 = math.min(h0, cell.bottom.ceil());
+    if (x1 - x0 < 2 || y1 - y0 < 2) return 0;
+    var lit = 0;
+    for (var y = y0; y < y1; y++) {
+      for (var x = x0; x < x1; x++) {
+        lit += mask[y * w + x];
+      }
+    }
+    return lit / ((x1 - x0) * (y1 - y0));
+  }
 
   /// Token text of a digit-sized shape the reader could not decode.
   static const unreadGlyph = DashboardLayoutParser.unreadGlyph;
@@ -925,6 +1108,44 @@ abstract final class SevenSegmentReader {
           percents.add(rect);
           break;
         }
+      }
+    }
+
+    // QA 159: a number with lit segments just left of its first digit has
+    // lost that digit (the "3" of "37" ran into the battery icon under
+    // it and read as one tall shape: the owner's 37 % locked as 7 %). The
+    // cell is marked unread, so the number is not taken. A real one-digit
+    // number has a dark cell there; a "0" in front is read as a digit.
+    final taken = [for (final r in runs) r.rect];
+    for (final r in runs) {
+      final first = r.boxes.first;
+      final h = first.height;
+      if (h < 18 || !RegExp(r'\d').hasMatch(r.text)) continue;
+      final cell = Rect.fromLTRB(
+        first.left - 0.72 * h,
+        first.top + 0.12 * h,
+        first.left - 0.1 * h,
+        first.bottom - 0.12 * h,
+      );
+      // Another number there ("48 18") is not a lost digit.
+      final covered = taken.any(
+        (other) =>
+            other != r.rect &&
+            other.overlaps(cell) &&
+            math.min(other.right, cell.right) -
+                    math.max(other.left, cell.left) >
+                0.3 * cell.width,
+      );
+      if (!covered &&
+          _litShare(mask, w, h0: image.height, cell: cell) > lostDigitLit) {
+        unread.add(
+          Rect.fromLTRB(
+            first.left - 0.7 * h,
+            first.top,
+            first.left - 0.1 * h,
+            first.bottom,
+          ),
+        );
       }
     }
 

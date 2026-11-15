@@ -251,6 +251,56 @@ abstract final class DashboardLayoutParser {
   /// The most an ODO may run ahead of the last known one (QA 149).
   static const maxOdoLeapKm = 3000.0;
 
+  /// QA 159: the glass from the speed digits, the largest on the cluster:
+  /// their height gives the glass's size, their right edge and top its
+  /// place (a one-digit speed is as tall, only narrower). One estimate per
+  /// threshold pass, the median of them; null when no pass has them or the
+  /// result is not where the owner aims ([window]).
+  static Rect? locateGlass(
+    List<List<OcrToken>> passes, {
+    required DashboardTemplate template,
+    required Rect window,
+  }) {
+    final speed = template.speed;
+    if (speed == null) return null;
+    final digits = RegExp(r'^\d{1,2}$');
+    final found = <Rect>[];
+    for (final pass in passes) {
+      final numbers = [
+        for (final t in pass)
+          if (digits.hasMatch(t.text)) t,
+      ]..sort((a, b) => b.box.height.compareTo(a.box.height));
+      if (numbers.length < 2) continue;
+      final tallest = numbers.first;
+      final rest = [for (final t in numbers.skip(1)) t.box.height]..sort();
+      if (tallest.box.height < 1.5 * rest[rest.length ~/ 2]) continue;
+      final h = tallest.box.height / speed.height;
+      if (h < 0.35 * window.height || h > 1.4 * window.height) continue;
+      final w = h * template.aspect;
+      found.add(
+        Rect.fromLTWH(
+          tallest.box.right - speed.right * w,
+          tallest.box.top - speed.top * h,
+          w,
+          h,
+        ),
+      );
+    }
+    if (found.isEmpty) return null;
+    double middle(double Function(Rect) of) {
+      final values = [for (final r in found) of(r)]..sort();
+      return values[values.length ~/ 2];
+    }
+
+    final glass = Rect.fromLTWH(
+      middle((r) => r.left),
+      middle((r) => r.top),
+      middle((r) => r.width),
+      middle((r) => r.height),
+    );
+    return window.contains(glass.center) ? glass : null;
+  }
+
   /// QA 156: where the template's glass really is. The owner holds the
   /// phone roughly on the outline, never exactly: a window a little low
   /// put the temperature "31" in the ODO zone (ODO read 31, or
@@ -272,7 +322,8 @@ abstract final class DashboardLayoutParser {
           if (t.text != unreadGlyph) t,
     ];
     if (tokens.isEmpty) return window;
-    const scales = [0.75, 0.84, 0.92, 1.0, 1.08, 1.18, 1.3];
+    // QA 159: the owner's real scan had the glass at 60 % of the window.
+    const scales = [0.5, 0.58, 0.67, 0.75, 0.84, 0.92, 1.0, 1.08, 1.18, 1.3];
     var best = window;
     var bestScore = double.negativeInfinity;
     for (final scale in scales) {
@@ -856,7 +907,7 @@ class DashboardScanVote {
     _push(_odos, reading.odoConfident ? reading.odoKm : null);
     socSeen = reading.soc ?? socSeen;
     odoSeen = reading.odoKm ?? odoSeen;
-    socLocked ??= _winner(_socs);
+    socLocked ??= _winner(_socs, strictShort: true);
     odoLocked ??= _winner(_odos);
     _push(_temps, reading.tempC);
     tempSeen = reading.tempC ?? tempSeen;
@@ -886,7 +937,7 @@ class DashboardScanVote {
     if (list.length > window) list.removeAt(0);
   }
 
-  T? _winner<T>(List<T?> list) {
+  T? _winner<T>(List<T?> list, {bool strictShort = false}) {
     final counts = <T, int>{};
     var seen = 0;
     for (final v in list) {
@@ -919,6 +970,18 @@ class DashboardScanVote {
     final ranked = merged.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final best = ranked.first;
+    // QA 159: a one-digit % that a two-digit reading in view contains is
+    // most likely that number with a lost digit (37 % locked as 7 %), even
+    // when the longer one was read once. It waits until that one is gone.
+    if (strictShort &&
+        digits(best.key).length == 1 &&
+        keys.any(
+          (long) =>
+              digits(long).length == 2 &&
+              DashboardLayoutParser.contains(digits(long), digits(best.key)),
+        )) {
+      return null;
+    }
     final runnerUp = ranked.length > 1 ? ranked[1].value : 0;
     return best.value >= needed &&
             best.value >= seen * 0.6 &&

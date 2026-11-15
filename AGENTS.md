@@ -342,6 +342,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Chưa từng sạc đầy thì không cộng biên. Lần sạc đầy của xe đã học thì hiệu chuẩn ngay (`charge_model.recalibrate`): đo độ trôi chỉ khi bộ sạc báo đầy, Wh/1% đổi quá 3% thì đi nửa đường, ngưỡng theo độ trôi đo được khi đủ 5 lần.
   - Hồ sơ học có thêm `driftLog`, `trustCalibration`, `whHistory`, `crossLog`, `trend`; mọi chỗ dựng `LearnedProfile(...)` bằng tham số tên phải mang theo các trường này.
   - ODO lúc cắm sạc chỉ để thu (`crossLog`); chỉ dùng cho điểm ngắt khi `web/scripts/qa158_cross_check.py` cho thấy giảm sai số rõ.
+- **QA 159 (15/11/2026, chủ app chọn) — quét: mất chữ số đầu:**
+  - Số có nét sáng ở ô ngay bên trái chữ số đầu mà không đọc được thì bỏ (`lostDigitLit`). Đừng nới chốt này để tăng tỉ lệ "đọc được".
+  - Kính được định vị bằng số tốc độ (`DashboardTemplate.speed`, `locateGlass`); kính nhỏ thì cắt lại từ khung camera (`scanFrame(recut:)`), % chỉ lấy từ lần đọc thứ hai. Thêm dòng xe mới phải đo `speed` trên ảnh thật.
+  - % một chữ số không khóa khi trong cửa sổ có số hai chữ số chứa nó. Camera tự zoom tới 3× khi kính dưới 75% khung; hết mức thì nhắc đưa gần.
+  - Bài đo `qa156_scan_bench_test.dart` chạy trên mọi ảnh trong `photos` (mỗi ảnh quét sai thật thêm một mục), cả dải cầm xa.
 
 ### 3.7. BatteryBot (trợ lý AI)
 
