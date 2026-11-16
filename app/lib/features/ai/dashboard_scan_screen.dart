@@ -168,6 +168,13 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   static const _zoomTarget = 0.88;
   static const _tooFarBelow = 0.6;
 
+  /// QA 160: frames in a row, zoomed in, with neither the ODO nor the
+  /// temperature; at [_zoomBackAfter] the camera goes back to 1× and stays
+  /// there for the rest of the scan (the owner's 2.1.6 scans found the %
+  /// and lost the other two).
+  int _lostFrames = 0;
+  static const _zoomBackAfter = 5;
+
   /// Frames in a row without segment digits: then text recognition gets a
   /// turn (dashboards that are not seven-segment LCDs).
   int _noSegments = 0;
@@ -419,13 +426,36 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
 
   /// QA 159: zoom in while the cluster is small in the window, in steps at
   /// least 0.6 s apart; at the limit, ask to come closer.
-  void _followGlass(double? share) {
-    if (share == null || _done) return;
+  ///
+  /// QA 160: the glass counts only when the frame also read the ODO or
+  /// the temperature (the % alone can sit in a glass found in the wrong
+  /// place); zoomed in and both gone for a few frames, back to 1×.
+  void _followGlass(double? share, DashboardLayoutReading reading) {
+    if (_done) return;
+    final placed = reading.odoKm != null || reading.tempC != null;
+    final controller = _controller;
+    if (_zoom > 1.01) {
+      _lostFrames = placed ? 0 : _lostFrames + 1;
+      if (_lostFrames >= _zoomBackAfter && controller != null) {
+        _lostFrames = 0;
+        _smallFrames = 0;
+        _zoom = 1;
+        _maxZoom = 1; // no more zoom in this scan: only the hint
+        _lastZoomAt = DateTime.now();
+        controller
+            .setZoomLevel(1)
+            .then(
+              (_) => _log.line('zoom back 1.00 (no ODO, no temperature)'),
+              onError: (_) {},
+            );
+        return;
+      }
+    }
+    if (share == null || !placed) return;
     _smallFrames = share < _zoomBelow ? _smallFrames + 1 : 0;
     final atLimit = _zoom >= _maxZoom - 0.01;
     final tooFar = atLimit && share < _tooFarBelow;
     if (tooFar != _tooFar && mounted) setState(() => _tooFar = tooFar);
-    final controller = _controller;
     if (controller == null || atLimit || _smallFrames < 3) return;
     final now = DateTime.now();
     if (now.difference(_lastZoomAt) < const Duration(milliseconds: 600)) return;
@@ -487,7 +517,7 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
   Future<void> _process(_FrameJob job, InputImage? text) async {
     final watch = Stopwatch()..start();
     final frame = await _FrameJob.read(job, widget.lastOdoKm);
-    _followGlass(frame.glassShare);
+    _followGlass(frame.glassShare, frame.reading);
     if (frame.reading.tempC != null) _tempBox = frame.reading.tempBox;
     final hasDigits = frame.hasDigits;
     _noSegments = hasDigits ? 0 : _noSegments + 1;
@@ -515,7 +545,11 @@ class _DashboardScanScreenState extends State<DashboardScanScreen>
       'roi=${job.roi} '
       'soc=${reading.soc}${reading.socConfident ? '' : '?'} '
       'odo=${reading.odoKm}${reading.odoConfident ? '' : '?'} '
-      'cand=${reading.socCandidates}/${reading.odoCandidates}',
+      'temp=${reading.tempC} '
+      'cand=${reading.socCandidates}/${reading.odoCandidates} '
+      // QA 160: where the glass was found and how far the camera zoomed.
+      'glass=${frame.glassShare?.toStringAsFixed(2)} '
+      'zoom=${_zoom.toStringAsFixed(2)}',
     );
     final socBefore = _vote.socLocked;
     final odoBefore = _vote.odoLocked;

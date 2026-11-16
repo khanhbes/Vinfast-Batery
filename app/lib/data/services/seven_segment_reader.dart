@@ -643,13 +643,29 @@ abstract final class SevenSegmentReader {
             window: window,
           )
         : null;
-    final fitted = template != null && window != null
-        ? DashboardLayoutParser.fitWindow(
-            passes,
-            template: template,
-            window: located ?? window,
-          )
-        : null;
+    // QA 160: the speed digits' glass is checked against the owner's
+    // window: whichever puts more numbers in their zones wins (on the
+    // owner's 2.1.6 scans the % was found and the ODO and temperature
+    // were not). A tie stays with the speed digits.
+    Rect? fitted;
+    if (template != null && window != null) {
+      final fromWindow = DashboardLayoutParser.fitWindowScored(
+        passes,
+        template: template,
+        window: window,
+      );
+      fitted = fromWindow.window;
+      if (located != null) {
+        final fromSpeed = DashboardLayoutParser.fitWindowScored(
+          passes,
+          template: template,
+          window: located,
+        );
+        if (fromSpeed.score >= fromWindow.score - 0.5) {
+          fitted = fromSpeed.window;
+        }
+      }
+    }
     final reading = DashboardLayoutParser.combine([
       for (final p in passes)
         template != null && fitted != null
@@ -1116,6 +1132,7 @@ abstract final class SevenSegmentReader {
     // it and read as one tall shape: the owner's 37 % locked as 7 %). The
     // cell is marked unread, so the number is not taken. A real one-digit
     // number has a dark cell there; a "0" in front is read as a digit.
+    final lost = <Rect>[];
     final taken = [for (final r in runs) r.rect];
     for (final r in runs) {
       final first = r.boxes.first;
@@ -1138,7 +1155,7 @@ abstract final class SevenSegmentReader {
       );
       if (!covered &&
           _litShare(mask, w, h0: image.height, cell: cell) > lostDigitLit) {
-        unread.add(
+        lost.add(
           Rect.fromLTRB(
             first.left - 0.7 * h,
             first.top,
@@ -1156,6 +1173,7 @@ abstract final class SevenSegmentReader {
       for (final p in percents) OcrToken('%', p),
       for (final u in unread)
         if (!percents.contains(u)) OcrToken(unreadGlyph, u),
+      for (final u in lost) OcrToken(DashboardLayoutParser.lostGlyph, u),
     ];
   }
 

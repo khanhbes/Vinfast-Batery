@@ -347,6 +347,9 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Kính được định vị bằng số tốc độ (`DashboardTemplate.speed`, `locateGlass`); kính nhỏ thì cắt lại từ khung camera (`scanFrame(recut:)`), % chỉ lấy từ lần đọc thứ hai. Thêm dòng xe mới phải đo `speed` trên ảnh thật.
   - % một chữ số không khóa khi trong cửa sổ có số hai chữ số chứa nó. Camera tự zoom tới 3× khi kính dưới 75% khung; hết mức thì nhắc đưa gần.
   - Bài đo `qa156_scan_bench_test.dart` chạy trên mọi ảnh trong `photos` (mỗi ảnh quét sai thật thêm một mục), cả dải cầm xa.
+- **QA 160 (16/11/2026) — quét: giữ ODO và nhiệt độ:**
+  - Dấu mất chữ số đầu (`lostGlyph`) chỉ chặn %; `unreadGlyph` vẫn chặn mọi số. Kính từ số tốc độ phải thắng kính từ khung ngắm theo điểm `fitWindowScored` (hòa thì giữ số tốc độ).
+  - Zoom chỉ theo khung có ODO hoặc nhiệt độ; đã zoom mà 5 khung liền mất cả hai thì về 1× cho tới hết lần quét. Nhật ký quét mỗi khung có `temp`, `glass`, `zoom`.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

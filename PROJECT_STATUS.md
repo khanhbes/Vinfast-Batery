@@ -12,7 +12,30 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 159. Task Completion Log — Quét đồng hồ: % pin mất chữ số đầu (37% đọc thành 7%) (15/11/2026, chủ app quét thật bằng 2.1.5 và gửi ảnh: "%pin hay sai chỉ nhận được 1 số ví dụ 39 thì nhận được 9"; chọn: cầm xa thì tự phóng to rồi mới nhắc, % chưa chắc thì không khóa và đọc tiếp) — Code + test xong, **chưa build APK, chưa quét thử trên xe**
+## 160. Task Completion Log — Quét đồng hồ 2.1.6: % tốt hơn nhưng không tìm được ODO và nhiệt độ (16/11/2026, chủ app quét thật bằng 2.1.6: "odo và nhiệt độ lại nhận diện kém đi", triệu chứng: không khớp được, không thấy ô ODO và nhiệt độ) — Code + test xong, APK 2.1.7+240, **chưa quét thử trên xe**
+
+**Chưa tái hiện được:** điện thoại không cắm vào máy tính nên không lấy được nhật ký quét; chủ app sẽ gửi ảnh chụp màn hình lúc quét. Bài đo trên hai ảnh thật vẫn đọc ODO và nhiệt độ 100% (cả cầm xa, và thử thêm khi kính lớn hơn khung tới 1,7 lần, số tốc độ dính nét bên dưới). Vì vậy phần sửa là các chốt an toàn cho những chỗ QA 159 có thể làm mất ODO/nhiệt độ ngoài đời, không phải sửa một lỗi đã thấy.
+
+**Sửa:**
+- **Dấu "mất chữ số đầu" chỉ chặn %** (`DashboardLayoutParser.lostGlyph`): QA 159 đánh dấu cho mọi số, nên một vệt sáng bên trái ODO hay nhiệt độ cũng làm mất số đó. ODO đã có chốt riêng (không nhỏ hơn ODO cũ, ít chữ số hơn là mất chữ số), nhiệt độ một chữ số đã bị bỏ (QA 157).
+- **Hai cách định vị kính, chọn cách khớp nhiều số hơn** (`fitWindowScored`, `_scanLevel`): kính tìm từ số tốc độ được so với kính tìm từ khung ngắm; cách nào đặt được nhiều số vào đúng ô hơn (hơn 0,5 điểm) thì thắng, hòa thì giữ số tốc độ. Kính sai chỗ vẫn có thể ra % (gần số tốc độ) mà mất ODO và nhiệt độ ở mép dưới.
+- **Phóng to chỉ khi vị trí đã được xác nhận:** chỉ tính độ lớn của kính khi khung đó đọc được ODO hoặc nhiệt độ. Đã phóng to mà 5 khung liền không có cả hai thì camera về 1× và không phóng nữa trong lần quét đó (còn lời nhắc đưa gần).
+- **Nhật ký quét** (bản profile, `Android/data/com.bes.vinbatery/files/ocr/`) ghi thêm nhiệt độ, tỉ lệ kính/khung và mức zoom mỗi khung, để lần sau biết đúng nguyên nhân.
+
+**Bài đo (200 khung mỗi trường hợp):**
+- Ảnh 68% gần: % đúng 100%, ODO 100%, nhiệt độ 100%.
+- Ảnh 68% xa: % đúng 96,5%, sai 0,5% (1 khung); ODO 100%, nhiệt độ 100%.
+- Ảnh 37% gần: % đúng 95%, sai 0%; ODO 100%, nhiệt độ 100%.
+- Ảnh 37% xa: % đúng 91,5%, sai 0%; ODO 100%; nhiệt độ đúng 99,5%, sai 0,5% (1 khung, một khung lẻ không đủ để khóa).
+- % giống hệt QA 159; thời gian mỗi khung không đổi (195–380 ms trên máy tính).
+
+**Kiểm thử:** Flutter: 1513 passed, 216 skipped, 0 failed; `flutter analyze lib` sạch. Test mới `test/unit/qa160_scan_odo_temp_test.dart`.
+
+**Cần chủ app:** cài 2.1.7, quét lại; nếu ODO/nhiệt độ vẫn không ra thì gửi ảnh chụp màn hình lúc quét, hoặc cắm điện thoại để lấy nhật ký và khung hình đã lưu.
+
+---
+
+## 159. Task Completion Log — Quét đồng hồ: % pin mất chữ số đầu (37% đọc thành 7%) (15/11/2026, chủ app quét thật bằng 2.1.5 và gửi ảnh: "%pin hay sai chỉ nhận được 1 số ví dụ 39 thì nhận được 9"; chọn: cầm xa thì tự phóng to rồi mới nhắc, % chưa chắc thì không khóa và đọc tiếp) — Code + test xong, APK 2.1.6+239; chủ app quét thật 16/11: % tốt hơn, ODO và nhiệt độ không ra (xem mục 160)
 
 **Tái hiện trước khi sửa:** ảnh thật thứ hai làm fixture (`test/fixtures/dashboard/feliz_photo_37.gray.gz`: 37%, 5494 km, 22°C). Bài đo `qa156_scan_bench_test.dart` viết lại để mô phỏng đúng đường đi của máy: khung camera (cửa sổ ngắm khoảng 950 px), vùng cắt 900 px, và thêm dải "cầm xa" (khung ngắm 1,3–1,9 lần kính, như ảnh quét của chủ app). Mã cũ: ảnh 37% đọc thành **7** ở 15% số khung cầm gần và 52,5% khi cầm xa; ảnh cũ (68%) sai 10% khi cầm xa.
 

@@ -66,13 +66,22 @@ abstract final class DashboardLayoutParser {
   /// A digit-sized shape the segment reader could not decode (QA 156).
   static const unreadGlyph = '?';
 
+  /// QA 160: lit segments just left of a number's first digit (QA 159,
+  /// the "3" of 37 % lost). Only the % is dropped for it: the ODO and
+  /// the temperature have their own lost-digit guards (the last ODO, no
+  /// one-digit temperature), and on the owner's 2.1.6 scans they were no
+  /// longer found at all.
+  static const lostGlyph = '?<';
+
+  static bool isUnread(String text) => text == unreadGlyph || text == lostGlyph;
+
   static DashboardLayoutReading parse(
     List<OcrToken> tokens, {
     double? lastOdoKm,
   }) {
     final items = [
       for (final t in tokens)
-        if (t.text != unreadGlyph) _Item.from(t),
+        if (!isUnread(t.text)) _Item.from(t),
     ];
     final percents = items.where((i) => i.isPercent).toList();
     final speedLabels = items.where((i) => i.isSpeedLabel).toList();
@@ -314,14 +323,22 @@ abstract final class DashboardLayoutParser {
     List<List<OcrToken>> passes, {
     required DashboardTemplate template,
     required Rect window,
+  }) => fitWindowScored(passes, template: template, window: window).window;
+
+  /// [fitWindow] with how many of the numbers and marks the winner puts
+  /// in their zones (QA 160: two starting guesses are compared by it).
+  static ({Rect window, double score}) fitWindowScored(
+    List<List<OcrToken>> passes, {
+    required DashboardTemplate template,
+    required Rect window,
   }) {
     final digit = RegExp(r'\d');
     final tokens = [
       for (final p in passes)
         for (final t in p)
-          if (t.text != unreadGlyph) t,
+          if (!isUnread(t.text)) t,
     ];
-    if (tokens.isEmpty) return window;
+    if (tokens.isEmpty) return (window: window, score: 0);
     // QA 159: the owner's real scan had the glass at 60 % of the window.
     const scales = [0.5, 0.58, 0.67, 0.75, 0.84, 0.92, 1.0, 1.08, 1.18, 1.3];
     var best = window;
@@ -407,7 +424,7 @@ abstract final class DashboardLayoutParser {
         }
       }
     }
-    return best;
+    return (window: best, score: bestScore);
   }
 
   /// Reads the numbers by zone when the owner lined the cluster up with
@@ -438,7 +455,7 @@ abstract final class DashboardLayoutParser {
     // QA 156: a zone with an unread digit in line with its number has
     // lost a digit ("68" → "8"). No number beats a wrong one.
     final broken = <Rect>{};
-    ({String digits, Rect box})? read(Rect area) {
+    ({String digits, Rect box})? read(Rect area, {bool lostBlocks = false}) {
       final inside = [
         for (final t in tokens)
           if (area.contains(t.box.center) &&
@@ -490,7 +507,9 @@ abstract final class DashboardLayoutParser {
           inside.map((t) => t.box.height).reduce((a, b) => a + b) /
           inside.length;
       for (final t in tokens) {
-        if (t.text != unreadGlyph || ignore.contains(t.box.center)) continue;
+        final blocks =
+            t.text == unreadGlyph || (lostBlocks && t.text == lostGlyph);
+        if (!blocks || ignore.contains(t.box.center)) continue;
         final overlap =
             math.min(t.box.bottom, box.bottom) - math.max(t.box.top, box.top);
         if (area.inflate(0.03 * window.width).contains(t.box.center) &&
@@ -510,7 +529,7 @@ abstract final class DashboardLayoutParser {
     final socZone = zone(template.soc);
     final odoZone = zone(template.odo);
     final tempZone = zone(template.temp);
-    final socRead = read(socZone);
+    final socRead = read(socZone, lostBlocks: true);
     final odoRead = read(odoZone);
     final tempRead = read(tempZone);
 
