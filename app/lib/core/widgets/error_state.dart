@@ -1,9 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../services/app_connection.dart';
 import '../theme/luxe_theme.dart';
 import '../utils/app_error_formatter.dart';
 import 'debug_error_sheet.dart';
+import 'offline_dock.dart';
 
 /// Recoverable error presentation. Diagnostics are opt-in in debug builds;
 /// raw service content is never rendered automatically into the screen.
@@ -14,6 +16,10 @@ class ErrorState extends StatelessWidget {
   final String retryLabel;
   final Object? rawError;
 
+  /// QA 161: what failed to load ("Chưa tải được lịch bảo dưỡng"), the
+  /// title of the offline look.
+  final String? offlineTitle;
+
   const ErrorState({
     super.key,
     this.message = 'Đã xảy ra lỗi. Vui lòng thử lại.',
@@ -21,6 +27,7 @@ class ErrorState extends StatelessWidget {
     this.icon = Icons.error_outline_rounded,
     this.retryLabel = 'Thử lại',
     this.rawError,
+    this.offlineTitle,
   });
 
   /// Factory constructor nhận raw error object và format tự động.
@@ -42,11 +49,29 @@ class ErrorState extends StatelessWidget {
       icon: icon,
       retryLabel: retryLabel,
       rawError: error,
+      offlineTitle: prefix,
     );
   }
 
+  /// QA 161: while the app is offline every page that could not load shows
+  /// the same cloud and reloads by itself when the link is back.
   @override
-  Widget build(BuildContext context) => Center(
+  Widget build(BuildContext context) => ValueListenableBuilder<AppLinkState>(
+    valueListenable: AppConnection.instance,
+    builder: (context, link, _) =>
+        AppConnection.instance.started && link.offline
+        ? OfflineRecovery(
+            onBack: onRetry,
+            child: Center(
+              child: SingleChildScrollView(
+                child: LuxeOfflineEmpty(title: offlineTitle, onRetry: onRetry),
+              ),
+            ),
+          )
+        : _error(context),
+  );
+
+  Widget _error(BuildContext context) => Center(
     child: SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
       child: Column(

@@ -12,6 +12,24 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 161. Task Completion Log — "Chưa liên lạc được máy chủ" khi máy chủ vẫn chạy; giao diện mất kết nối thống nhất (16/11/2026, chủ app: "đang không kết nối được máy chủ, sửa lỗi… khi mất kết nối sẽ có pop up nổi… kèm thao tác… các trang đều thống nhất 1 kiểu hiển thị"; chọn: thẻ nổi phía dưới, trang giữ dữ liệu và ghi rõ là cũ) — Code + test xong, APK 2.1.8+241, **chưa thử trên máy**
+
+**Kiểm tra máy chủ:** cùng lúc chủ app thấy dải "Chưa liên lạc được máy chủ", `/api/health` và `/api/ready` trả 200 (Firebase sẵn sàng, AI `degraded`), kể cả khi gửi kèm mã đăng nhập sai; APK có đúng địa chỉ máy chủ. Lỗi nằm ở cách app tự kiểm tra: `InternetConnectionNotice` gọi hai địa chỉ này qua `ApiService` và chờ lấy mã đăng nhập Firebase trước; lấy mã chậm (làm mới phiên) quá 7 giây là bị tính như máy chủ chết. Chưa có nhật ký từ điện thoại để khẳng định đây là nguyên nhân duy nhất; thẻ mới ghi lý do để lần sau biết ngay.
+
+**Sửa:**
+- **Một nguồn kết nối** (`core/services/app_connection.dart`, `AppConnection.instance`): gọi `GET /api/ready` **không kèm mã đăng nhập**, 8 giây; lỗi một lần bỏ qua, lần thứ hai mới báo; thử lại sau 5/15/30/60 giây; mất Wi-Fi/4G báo ngay. Mọi lệnh qua `ApiService` có trả lời (bất kỳ mã HTTP) là đã kết nối lại ngay (`sawServer`); hết thời gian hay không mở được kết nối thì kiểm tra lại sau 1 giây (`missedServer`). Lý do lỗi được ghi bằng lời ("hết thời gian chờ", "không tìm thấy địa chỉ máy chủ", "HTTP 503"…). Lần cuối liên lạc được lưu trên máy.
+- **Thẻ nổi** (`core/widgets/offline_dock.dart`, `OfflineDock` đặt ở `MaterialApp.builder`): bỏ dải trên cùng. Thẻ kính nổi phía dưới, trên thanh tab ở các tab, sát đáy ở trang khác, ẩn khi đang mở sheet/hộp thoại. Nội dung: biểu tượng, tên lỗi, một câu (máy chủ: "Vẫn xem được dữ liệu đã lưu. Bật sạc tạm khóa, tắt sạc vẫn gửi được."), đếm ngược lần thử kế và lý do; nút **Thử lại**, và **Cài đặt mạng** khi mất Internet (Android mở cài đặt mạng qua kênh `com.vinfast.battery/settings`, iOS mở trang Cài đặt của app). Dấu X thu thành viên "Ngoại tuyến"; có mạng lại thì hiện "Đã kết nối lại" (emerald) 2,4 giây rồi tự tắt. Thẻ tối đa nửa màn hình (chữ ×2 thì cuộn bên trong). Chờ đồng bộ khảo sát cũng hiện ở thẻ này.
+- **Mọi trang một kiểu:** `OfflineStamp` "Ngoại tuyến · cập nhật lúc 14:05" dưới thanh tiêu đề ở 4 tab (shell) và mọi trang `LuxeScaffold` có thanh tiêu đề (`OfflineStamped`, không lặp khi lồng nhau). Trang chưa có dữ liệu: `ErrorState` (10 trang), banner lỗi ở Tổng quan, AI cá nhân hiện cùng một màn `LuxeOfflineEmpty` (đám mây, "Cần kết nối mạng để tải lần đầu…", Thử lại) và tự tải lại khi có mạng (`OfflineRecovery`). Tab Sạc không còn thông báo mất kết nối trùng với thẻ nổi (vẫn giữ thông báo ổ Shelly ngoại tuyến).
+- **Thao tác cần máy chủ** (`OnlineGate.allows`): bật sạc (AI, theo giờ), xem dự đoán, Huấn luyện báo "Cần kết nối để …" thay vì lỗi sau. Tắt sạc không bao giờ đi qua chốt này.
+
+**Kiểm thử:** Flutter toàn bộ: 1525 passed, 216 skipped, 1 failed (test nguồn qa149_overlap tìm chuỗi body: Stack( cũ; đã sửa theo cấu trúc mới và chạy lại riêng: đạt); flutter analyze sạch. Test mới `test/widget/qa161_offline_test.dart` (lõi kết nối, thẻ ở 320 dp chữ ×1/×2, nút ≥ 48 dp, thu gọn/mở lại, mất Internet, đã kết nối lại, ẩn dưới sheet, trang lỗi thành màn ngoại tuyến và tự tải lại, không đóng dấu hai lần, `OnlineGate`).
+
+**Giới hạn:** các trang tự viết thông báo lỗi riêng (Sức khỏe pin, Thói quen sạc, Lịch sử thanh toán…) chưa đổi sang màn ngoại tuyến chung, nhưng vẫn có nhãn "Ngoại tuyến" và thẻ nổi. Trang không có thanh tiêu đề không có nhãn.
+
+**Cần chủ app:** cài 2.1.8; nếu còn thấy thẻ "Chưa liên lạc được máy chủ" thì chụp lại dòng "Lý do: …" trên thẻ.
+
+---
+
 ## 160. Task Completion Log — Quét đồng hồ 2.1.6: % tốt hơn nhưng không tìm được ODO và nhiệt độ (16/11/2026, chủ app quét thật bằng 2.1.6: "odo và nhiệt độ lại nhận diện kém đi", triệu chứng: không khớp được, không thấy ô ODO và nhiệt độ) — Code + test xong, APK 2.1.7+240, **chưa quét thử trên xe**
 
 **Chưa tái hiện được:** điện thoại không cắm vào máy tính nên không lấy được nhật ký quét; chủ app sẽ gửi ảnh chụp màn hình lúc quét. Bài đo trên hai ảnh thật vẫn đọc ODO và nhiệt độ 100% (cả cầm xa, và thử thêm khi kính lớn hơn khung tới 1,7 lần, số tốc độ dính nét bên dưới). Vì vậy phần sửa là các chốt an toàn cho những chỗ QA 159 có thể làm mất ODO/nhiệt độ ngoài đời, không phải sửa một lỗi đã thấy.

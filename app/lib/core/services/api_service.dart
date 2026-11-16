@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_constants.dart';
+import 'app_connection.dart';
 import 'app_error_reporter.dart';
 import 'api_result.dart';
 
@@ -87,6 +88,7 @@ class ApiService {
 
       return _handleResponse(endpoint, response);
     } on TimeoutException catch (_, stack) {
+      AppConnection.instance.missedServer();
       final err = ApiException(
         endpoint: endpoint,
         message: 'Yêu cầu hết thời gian chờ (Timeout).',
@@ -107,6 +109,7 @@ class ApiService {
         'retryable': true,
       };
     } on SocketException catch (e, stack) {
+      AppConnection.instance.missedServer();
       final err = ApiException(
         endpoint: endpoint,
         message: 'Không thể kết nối tới máy chủ (${e.message}).',
@@ -272,6 +275,7 @@ class ApiService {
           .timeout(const Duration(seconds: 30));
       return _handleResponse(endpoint, response);
     } on TimeoutException catch (e, stack) {
+      AppConnection.instance.missedServer();
       final err = ApiException(
         endpoint: endpoint,
         message: 'Yêu cầu hết thời gian chờ.',
@@ -292,6 +296,7 @@ class ApiService {
         'retryable': true,
       };
     } on SocketException catch (e, stack) {
+      AppConnection.instance.missedServer();
       final err = ApiException(
         endpoint: endpoint,
         message: 'Không thể kết nối tới máy chủ.',
@@ -386,6 +391,7 @@ class ApiService {
 
       return _handleResponse(endpoint, response);
     } on TimeoutException catch (e, stack) {
+      AppConnection.instance.missedServer();
       final err = ApiException(
         endpoint: endpoint,
         message: 'Yêu cầu hết thời gian chờ (Timeout).',
@@ -406,6 +412,7 @@ class ApiService {
         'retryable': true,
       };
     } on SocketException catch (e, stack) {
+      AppConnection.instance.missedServer();
       final err = ApiException(
         endpoint: endpoint,
         message: 'Không thể kết nối tới máy chủ (${e.message}).',
@@ -452,6 +459,8 @@ class ApiService {
     String endpoint,
     http.Response response,
   ) {
+    // QA 161: the server answered, whatever it said.
+    AppConnection.instance.sawServer();
     Map<String, dynamic>? parsedJson;
     try {
       final decoded = jsonDecode(response.body);

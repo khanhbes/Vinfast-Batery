@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'core/widgets/offline_dock.dart';
 import 'core/services/settings_service.dart';
 import 'core/providers/appearance_provider.dart';
 import 'core/providers/entitlement_provider.dart';
@@ -155,6 +156,9 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
 
       scaffoldMessengerKey: AppPopup.messengerKey,
       navigatorKey: AppPopup.navigatorKey,
+      // QA 161: the offline card follows the top route (above the tabs,
+      // lower on other pages, hidden under sheets).
+      navigatorObservers: [OfflineDock.observer],
       // QA 140: no ambient colour flow across the app (the Premium page has
       // its own); Ultra's effects stay on interaction and real activity.
       builder: (context, child) => PlanMotionHost(
@@ -164,9 +168,12 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
             effects &&
             !MediaQuery.disableAnimationsOf(context),
         // QA 140: a short animation once when the plan changes.
-        child: ready
-            ? PlanTransitionHost(child: child ?? const SizedBox.shrink())
-            : child ?? const SizedBox.shrink(),
+        // QA 161: one floating offline card over every page.
+        child: OfflineDock(
+          child: ready
+              ? PlanTransitionHost(child: child ?? const SizedBox.shrink())
+              : child ?? const SizedBox.shrink(),
+        ),
       ),
       home: const AuthGate(),
     );

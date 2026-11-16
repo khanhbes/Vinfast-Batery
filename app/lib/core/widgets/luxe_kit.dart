@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'offline_dock.dart';
 import '../theme/luxe_theme.dart';
 import '../theme/plan_style.dart';
 
@@ -214,23 +215,28 @@ class LuxeScaffold extends StatelessWidget {
     );
   }
 
-  Widget _frame(PreferredSizeWidget? appBar, Widget body) => Stack(
-    children: [
-      Positioned.fill(child: LuxeBackdrop(accent: backdropAccent)),
-      Scaffold(
-        backgroundColor: Colors.transparent,
-        resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-        appBar:
-            appBar ??
-            (title != null || actions != null
-                ? LuxeAppBar(title: title, actions: actions)
-                : null),
-        body: body,
-        bottomNavigationBar: bottomNavigationBar,
-        floatingActionButton: floatingActionButton,
-      ),
-    ],
-  );
+  Widget _frame(PreferredSizeWidget? appBar, Widget body) {
+    final bar =
+        appBar ??
+        (title != null || actions != null
+            ? LuxeAppBar(title: title, actions: actions)
+            : null);
+    return Stack(
+      children: [
+        Positioned.fill(child: LuxeBackdrop(accent: backdropAccent)),
+        Scaffold(
+          backgroundColor: Colors.transparent,
+          resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+          appBar: bar,
+          // QA 161: "Ngoại tuyến · cập nhật lúc …" under the bar while
+          // offline (a page without a bar draws under the status bar: none).
+          body: bar == null ? body : OfflineStamped(child: body),
+          bottomNavigationBar: bottomNavigationBar,
+          floatingActionButton: floatingActionButton,
+        ),
+      ],
+    );
+  }
 }
 
 /// Holds "has the page scrolled past its heading" for [LuxeScaffold].

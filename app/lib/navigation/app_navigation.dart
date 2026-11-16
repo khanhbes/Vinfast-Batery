@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers/app_providers.dart';
 import '../core/services/assistant_context_coordinator.dart';
 import '../core/theme/luxe_theme.dart';
+import '../core/widgets/offline_dock.dart';
 import '../core/widgets/app_navigation_bar.dart';
 import '../core/widgets/app_popup.dart';
 import '../core/widgets/app_tab_stack.dart';
@@ -322,54 +323,60 @@ class _AppNavigationState extends ConsumerState<AppNavigation> {
       child: Scaffold(
         backgroundColor: LuxeColors.background,
         appBar: _buildUnifiedAppBar(context, currentIndex),
-        body: Stack(
-          children: [
-            NotificationListener<ScrollNotification>(
-              onNotification: (scrollInfo) {
-                final bot = ref.read(assistantContextCoordinatorProvider);
-                final vertical = scrollInfo.metrics.axis == Axis.vertical;
-                if (scrollInfo is UserScrollNotification) {
-                  if (scrollInfo.direction == ScrollDirection.reverse) {
-                    bot.setDocked(true);
-                    if (vertical) bot.setScrollingAway(true);
-                  } else if (scrollInfo.metrics.pixels <= 20) {
-                    bot.setDocked(false);
-                    bot.setScrollingAway(false);
-                  } else if (scrollInfo.direction == ScrollDirection.forward) {
-                    // QA 151: mid-page it comes back tucked into the edge
-                    // (it used to return full size over the cards); only
-                    // the top of the page gives it its full button.
-                    bot.setDocked(true);
+        // QA 161: "Ngoại tuyến · cập nhật lúc …" under the bar on every tab.
+        body: OfflineStamped(
+          child: Stack(
+            children: [
+              NotificationListener<ScrollNotification>(
+                onNotification: (scrollInfo) {
+                  final bot = ref.read(assistantContextCoordinatorProvider);
+                  final vertical = scrollInfo.metrics.axis == Axis.vertical;
+                  if (scrollInfo is UserScrollNotification) {
+                    if (scrollInfo.direction == ScrollDirection.reverse) {
+                      bot.setDocked(true);
+                      if (vertical) bot.setScrollingAway(true);
+                    } else if (scrollInfo.metrics.pixels <= 20) {
+                      bot.setDocked(false);
+                      bot.setScrollingAway(false);
+                    } else if (scrollInfo.direction ==
+                        ScrollDirection.forward) {
+                      // QA 151: mid-page it comes back tucked into the edge
+                      // (it used to return full size over the cards); only
+                      // the top of the page gives it its full button.
+                      bot.setDocked(true);
+                      bot.setScrollingAway(false);
+                    }
+                  } else if (scrollInfo is ScrollEndNotification && vertical) {
                     bot.setScrollingAway(false);
                   }
-                } else if (scrollInfo is ScrollEndNotification && vertical) {
-                  bot.setScrollingAway(false);
-                }
-                return false;
-              },
-              child: AppTabStack(index: currentIndex, children: _screens),
-            ),
-            const FloatingBatteryBot(),
-          ],
+                  return false;
+                },
+                child: AppTabStack(index: currentIndex, children: _screens),
+              ),
+              const FloatingBatteryBot(),
+            ],
+          ),
         ),
         // QA 149: the charging pill sits in its own strip above the tabs
         // instead of floating over the page (it covered the Overview's
         // middle card).
-        bottomNavigationBar: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const GlobalChargingPill(),
-            AppNavigationBar(
-              selectedIndex: currentIndex,
-              onSelected: (index) {
-                if (currentIndex != index) {
-                  HapticFeedback.selectionClick();
-                }
-                AppPopup.clearShownErrors();
-                ref.read(currentTabProvider.notifier).state = index;
-              },
-            ),
-          ],
+        bottomNavigationBar: OfflineDockInset(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const GlobalChargingPill(),
+              AppNavigationBar(
+                selectedIndex: currentIndex,
+                onSelected: (index) {
+                  if (currentIndex != index) {
+                    HapticFeedback.selectionClick();
+                  }
+                  AppPopup.clearShownErrors();
+                  ref.read(currentTabProvider.notifier).state = index;
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );

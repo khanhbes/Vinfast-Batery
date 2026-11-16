@@ -13,6 +13,7 @@ import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
 import '../../core/services/assistant_context_coordinator.dart';
 import '../../core/widgets/luxe_connection_notice.dart';
+import '../../core/widgets/offline_dock.dart';
 import '../../core/utils/app_error_formatter.dart';
 import '../../core/utils/start_soc_freshness.dart';
 import '../../core/widgets/app_popup.dart';
@@ -157,6 +158,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     SmartChargingUiState state,
     SmartChargingController controller,
   ) async {
+    // QA 161: the forecast is the server's.
+    if (!OnlineGate.allows('dự đoán thời gian sạc')) return;
     if (_startNeedsConfirm) {
       var confirmed = false;
       await _editStartSoc(
@@ -433,9 +436,13 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
                     ],
                     // A failed read when no charge runs: one notice with
                     // retry, the same as the app bar strip (QA 130).
+                    // QA 161: the app offline is said once, by the
+                    // floating card; only the plug's own trouble stays here.
                     if (state.gatewayError != null &&
                         !state.hasActiveSession &&
-                        _commandKind(state) == null) ...[
+                        _commandKind(state) == null &&
+                        !(OnlineGate.offline &&
+                            _issueFor(state) != ConnectionIssue.charger)) ...[
                       LuxeConnectionNotice(
                         key: const ValueKey('charge-connection-notice'),
                         issue: _issueFor(state),
@@ -1449,6 +1456,8 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     Duration duration, {
     DateTime? stopAt,
   }) async {
+    // QA 161: ON needs the server; say so before the sheet.
+    if (!OnlineGate.allows('bật sạc')) return;
     // state.now only ticks during a session; the sheet needs the wall
     // clock (QA 128: "Tự ngắt lúc 02:53" shown at 02:40 for 30 minutes).
     final chosenStop = stopAt;
@@ -1517,6 +1526,7 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
   ) async {
     final preview = state.preview;
     if (preview == null) return;
+    if (!OnlineGate.allows('bật sạc')) return;
 
     final ceiling = preview.isTargetMode ? preview.safetyCeilingAt : null;
     final confirmed = await StartChargeConfirmationSheet.show(

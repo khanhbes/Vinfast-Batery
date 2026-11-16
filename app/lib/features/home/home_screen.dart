@@ -25,7 +25,9 @@ import 'widgets/recent_charging_chart.dart';
 import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 import '../maintenance/maintenance_screen.dart';
+import '../../core/services/app_connection.dart';
 import '../../core/widgets/debug_error_sheet.dart';
+import '../../core/widgets/offline_dock.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../battery_monitor/battery_monitor_screen.dart';
 import '../ai/services/learning_flow.dart';
@@ -551,8 +553,20 @@ class _InlineErrorBanner extends StatelessWidget {
     required this.onRetry,
   });
 
+  /// QA 161: offline, the same cloud as every page (reloads itself).
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => ValueListenableBuilder<AppLinkState>(
+    valueListenable: AppConnection.instance,
+    builder: (context, link, _) =>
+        AppConnection.instance.started && link.offline
+        ? OfflineRecovery(
+            onBack: onRetry,
+            child: LuxeOfflineEmpty(title: title, onRetry: onRetry),
+          )
+        : _banner(context),
+  );
+
+  Widget _banner(BuildContext context) {
     final friendly = AppErrorFormatter.format(error);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 8, 14),

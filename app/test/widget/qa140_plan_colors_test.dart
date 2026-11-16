@@ -19,6 +19,8 @@ const _emeraldAllowed = <String, int>{
   'core/widgets/luxe_submit_button.dart': 2,
   'core/widgets/global_charging_pill.dart': 2,
   'core/widgets/pinova_brand.dart': 2,
+  // QA 161: "Đã kết nối lại", the link verified back.
+  'core/widgets/offline_dock.dart': 2,
   // Status: model ready, reading locked, session outcome, confirmed card,
   // live charging, command steps, done states, charging dial.
   'features/achievements/models/achievement.dart': 1,

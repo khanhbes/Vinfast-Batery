@@ -64,8 +64,11 @@ void main() {
 
   test('the charging pill has its own strip above the tabs', () {
     final shell = File('lib/navigation/app_navigation.dart').readAsStringSync();
-    final body = shell.indexOf('body: Stack(');
-    final bar = shell.indexOf('bottomNavigationBar: Column(');
+    // QA 161: the page carries the offline stamp, the bar reports its height
+    // to the offline card.
+    final body = shell.indexOf('body: OfflineStamped(');
+    final bar = shell.indexOf('bottomNavigationBar: OfflineDockInset(');
+    expect(body, greaterThan(-1));
     final pill = shell.indexOf('GlobalChargingPill()');
     expect(bar, greaterThan(body));
     expect(pill, greaterThan(bar), reason: 'not floating over the page');

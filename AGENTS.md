@@ -350,6 +350,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
 - **QA 160 (16/11/2026) — quét: giữ ODO và nhiệt độ:**
   - Dấu mất chữ số đầu (`lostGlyph`) chỉ chặn %; `unreadGlyph` vẫn chặn mọi số. Kính từ số tốc độ phải thắng kính từ khung ngắm theo điểm `fitWindowScored` (hòa thì giữ số tốc độ).
   - Zoom chỉ theo khung có ODO hoặc nhiệt độ; đã zoom mà 5 khung liền mất cả hai thì về 1× cho tới hết lần quét. Nhật ký quét mỗi khung có `temp`, `glass`, `zoom`.
+- **QA 161 (16/11/2026, chủ app chọn) — mất kết nối:**
+  - Trạng thái kết nối chỉ lấy từ `AppConnection.instance` (kiểm tra `/api/ready` không kèm mã đăng nhập; `ApiService` báo `sawServer`/`missedServer`). Đừng thêm bộ kiểm tra riêng ở từng màn.
+  - Báo mất kết nối chỉ bằng thẻ nổi `OfflineDock` (không dải trên cùng, không thông báo trùng trong trang); trang giữ dữ liệu với `OfflineStamp`; trang chưa có dữ liệu dùng `ErrorState`/`LuxeOfflineEmpty`. Màn mới dùng `LuxeScaffold` có tiêu đề là có nhãn.
+  - Thao tác cần máy chủ gọi `OnlineGate.allows('…')` trước; Tắt sạc không bao giờ qua chốt này. Test thay `AppConnection.instance` bằng probe giả và mạng giả (`qa161_offline_test.dart`).
 
 ### 3.7. BatteryBot (trợ lý AI)
 

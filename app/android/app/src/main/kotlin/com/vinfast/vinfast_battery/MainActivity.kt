@@ -2,10 +2,12 @@ package com.vinfast.vinfast_battery
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.SoundPool
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import com.bes.vinbatery.R
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
@@ -89,6 +91,26 @@ class MainActivity : FlutterActivity() {
                 }
                 splashScreen.setSplashScreenTheme(style)
                 result.success(null)
+            }
+
+        // QA 161: "Cài đặt mạng" on the offline notice opens the phone's
+        // network settings; the owner changes them, the app never does.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.vinfast.battery/settings")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "network") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val opened = try {
+                    startActivity(
+                        Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                    true
+                } catch (_: Exception) {
+                    false
+                }
+                result.success(opened)
             }
 
         // QA 151: two short chimes (charge started / finished). Sonification

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/learned_models_provider.dart';
 import '../../core/widgets/luxe_connection_notice.dart';
+import '../../core/widgets/offline_dock.dart';
 import '../../core/providers/vehicle_providers.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/app_error_formatter.dart';
@@ -143,6 +144,7 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
   Future<void> _train(String model, String mode) async {
     // Collecting data is free; training the personal model is Ultra.
     if (!PremiumGate.check(context, ref, PremiumFeature.learningTrain)) return;
+    if (!OnlineGate.allows('huấn luyện')) return;
     if (mode == 'retrain') {
       final confirmed = await showLuxeConfirm(
         context,
@@ -340,6 +342,15 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
               )
             // Same notice as the rest of the app, retrying by itself: a
             // read during a slow app start failed once and stayed (QA 130).
+            // QA 161: offline, the same cloud as every page.
+            else if (_error != null && status == null && OnlineGate.offline)
+              OfflineRecovery(
+                onBack: _load,
+                child: LuxeOfflineEmpty(
+                  title: 'Chưa tải được dữ liệu học',
+                  onRetry: _load,
+                ),
+              )
             else if (_error != null && status == null)
               LuxeConnectionNotice(
                 key: const ValueKey('learning-connection-notice'),
