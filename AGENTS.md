@@ -358,6 +358,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Splash báo xong ở `BootstrapSplash.motionEnd` (4,2 giây), hồ sơ đọc sẵn bằng `AuthenticatedPrefetch` trong lúc vẽ logo. Đừng thêm việc chờ vào splash; việc nặng chạy sau khi vào app.
   - Thẻ mất kết nối có mặt Pinova Bot (`_BotBadge`), Bot nói ở ngôi "mình"; mặt chỉ động khi đổi biểu cảm hoặc đang thử lại.
   - Dung lượng pin còn lại: Wh/% gộp có trọng số (% tăng ≥ 20, độ tin đồng hồ, độ mới; bài kiểm tra ×2 trong 90 ngày; bỏ lần lệch). Mọi nơi hiển thị đi qua `HealthVerdict.of`; không viết `test ?? estimate`, không kẹp số ở 100. So cách tính bằng `web/scripts/qa162_health_replay.py` trên sổ sạc thật trước khi đổi.
+- **QA 163 (16/11/2026, chủ app chọn) — Mẹo nhỏ và Pinova Bot 3.2:**
+  - Kho mẹo một nguồn: sửa `web/assistant/tips_vi.json` thì chép y hệt sang `app/assets/tips/tips_vi.json` (có test). Mẹo có con số phải có nguồn; mẹo theo loại pin dùng `appliesTo`.
+  - Bong bóng mẹo: tối đa 1/ngày, không ở tab Sạc, cách bong bóng khác 2 giờ, theo công tắc trong Cài đặt Pinova Bot (`TipLibrary`, `TipPicker`). Chạm mở Mẹo nhỏ.
+  - Cài đặt Bot do máy chủ giữ (`memory.set_settings`); "điều Bot nên biết" luôn trong `<untrusted_context>`. Câu hỏi gợi ý là dòng "GỢI Ý:" máy chủ tách ra (`split_follow_ups`).
+  - Pinova Bot có phiên bản riêng: đổi Bot thì tăng `PinovaBotRelease.current` (app, thêm ghi chú vào `releases`) và `BOT_SERVER_VERSION` (máy chủ).
 
 ### 3.7. BatteryBot (trợ lý AI)
 

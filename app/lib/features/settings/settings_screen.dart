@@ -9,7 +9,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import '../../data/services/push_notification_service.dart';
 
-import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../core/providers/app_providers.dart';
@@ -20,6 +19,9 @@ import '../smart_charging/smart_charger_setup_hub_screen.dart';
 import 'appearance_sheet.dart';
 import 'appearance_screen.dart';
 import '../../core/providers/appearance_provider.dart';
+import '../ai/assistant_settings_screen.dart';
+import '../ai/bot_release.dart';
+import 'about_screen.dart';
 import 'personal_ai_settings_screen.dart';
 import 'personal_ai_training_data_screen.dart';
 import 'developer_ai_studio_screen.dart';
@@ -135,39 +137,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  /// Show About dialog with app info
-  void _showAboutDialog() {
-    showAboutDialog(
-      context: context,
-      applicationName: 'Pinova',
-      applicationVersion: _appVersion,
-      applicationLegalese: '© 2026 Pinova. Quản lý pin và sạc xe máy điện.',
-      applicationIcon: Container(
-        padding: EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: AppUiColors.of(context).primary.withAlpha(40),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.asset(
-            'assets/icons/app_icon.png',
-            width: 32,
-            height: 32,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.high,
-          ),
-        ),
-      ),
-      children: [
-        SizedBox(height: 12),
-        Text(
-          'Theo dõi sức khỏe pin, dự đoán thời gian sạc và lên kế hoạch chuyến đi với AI.',
-        ),
-      ],
-    );
-  }
-
   Future<void> _manualSync() async {
     setState(() => _isLoading = true);
     final result = await SyncService().performFullSync();
@@ -187,10 +156,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       // Task 125: profile, vehicles, Shelly, notification centre, guide and
       // sign-out live on the Settings tab; this page keeps system options
       // only (one row per destination).
-      if (BetaCapabilities.advancedAi) ...[
-        const LuxeSectionLabel('Trí tuệ nhân tạo (AI)'),
-        LuxeSettingsGroup(
-          children: [
+      const LuxeSectionLabel('Trí tuệ nhân tạo (AI)'),
+      LuxeSettingsGroup(
+        children: [
+          // QA 163: Pinova Bot's own settings.
+          LuxeSettingsRow(
+            key: const ValueKey('settings-pinova-bot'),
+            icon: Icons.smart_toy_rounded,
+            title: 'Pinova Bot',
+            subtitle: 'Giọng trả lời, mẹo mỗi ngày, bộ nhớ',
+            onTap: () => AssistantSettingsScreen.open(context),
+          ),
+          if (BetaCapabilities.advancedAi)
             LuxeSettingsRow(
               icon: Icons.psychology_alt_rounded,
               title: 'AI cá nhân',
@@ -199,9 +176,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   : null,
               onTap: _openPersonalAi,
             ),
-          ],
-        ),
-      ],
+        ],
+      ),
       const LuxeSectionLabel('Thông báo'),
       LuxeSettingsGroup(
         children: [
@@ -266,8 +242,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           LuxeSettingsRow(
             icon: Icons.info_outline_rounded,
             title: 'Giới thiệu',
-            subtitle: _appVersion,
-            onTap: _showAboutDialog,
+            // QA 163: the app's and Pinova Bot's versions, what is new.
+            subtitle: '$_appVersion · Pinova Bot ${PinovaBotRelease.current}',
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const AboutScreen()),
+            ),
           ),
         ],
       ),

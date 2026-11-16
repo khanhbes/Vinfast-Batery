@@ -1,7 +1,7 @@
 name: vinfast_battery
 description: "VinFast Battery - Quản lý pin xe máy điện VinFast"
 publish_to: 'none'
-version: 2.1.9+242
+version: 2.2.0+243
 
 environment:
   sdk: ^3.11.0
@@ -93,6 +93,7 @@ flutter:
     - assets/icons/
     - assets/vehicles/
     - assets/vinfast_specs_fallback.json
+    - assets/tips/
     - assets/fonts/
 
 flutter_launcher_icons:

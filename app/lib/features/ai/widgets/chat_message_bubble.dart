@@ -24,6 +24,7 @@ class ChatMessageBubble extends StatelessWidget {
     this.onConfirmAction,
     this.onCancelAction,
     this.onRetry,
+    this.onAskAgain,
     this.isActionLoading = false,
     this.showMeta = true,
   });
@@ -34,6 +35,9 @@ class ChatMessageBubble extends StatelessWidget {
   final void Function(FunctionCallAction action)? onConfirmAction;
   final void Function(FunctionCallAction action)? onCancelAction;
   final VoidCallback? onRetry;
+
+  /// QA 163: ask the same question again (the last answer only).
+  final VoidCallback? onAskAgain;
   final bool isActionLoading;
 
   /// Copy/share/feedback row; hidden for the greeting.
@@ -274,6 +278,13 @@ class ChatMessageBubble extends StatelessWidget {
                     tooltip: 'Chia sẻ',
                     onTap: _shareMessage,
                   ),
+                  if (onAskAgain != null)
+                    _BubbleActionButton(
+                      key: const ValueKey('bubble-ask-again'),
+                      icon: Icons.replay_rounded,
+                      tooltip: 'Hỏi lại',
+                      onTap: onAskAgain!,
+                    ),
                   _FeedbackButton(
                     icon: Icons.thumb_up_alt_rounded,
                     activeIcon: Icons.thumb_up_alt_rounded,
@@ -437,6 +448,7 @@ class ChatMessageBubble extends StatelessWidget {
 
 class _BubbleActionButton extends StatelessWidget {
   const _BubbleActionButton({
+    super.key,
     required this.icon,
     required this.tooltip,
     required this.onTap,

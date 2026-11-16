@@ -33,7 +33,10 @@ void main() {
     // Kiểm tra quick action chips
     expect(find.text('Xem pin ở đâu?'), findsOneWidget);
 
-    // Chạm vào chip để gửi câu hỏi
+    // Chạm vào chip để gửi câu hỏi. QA 163: situational starters come
+    // first, so this card may sit below the fold.
+    await tester.ensureVisible(find.text('Xem pin ở đâu?'));
+    await tester.pump();
     await tester.tap(find.text('Xem pin ở đâu?'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 700));

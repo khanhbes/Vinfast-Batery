@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/vehicle_model.dart';
+import '../../features/tips/tip.dart';
+import '../../features/tips/tip_library.dart';
 import '../providers/app_state_providers.dart';
 import '../providers/vehicle_context_provider.dart';
 import '../widgets/battery_bot_mascot.dart';
@@ -14,9 +16,23 @@ class AssistantContextCoordinator extends ChangeNotifier {
     this.cooldownDuration = const Duration(minutes: 15),
     this.bubbleDisplayDuration = const Duration(seconds: 6),
     this.idleDockAfter = const Duration(seconds: 6),
-  }) {
+    TipLibrary? tips,
+  }) : _tips = tips {
     _scheduleIdleDock();
   }
+
+  /// QA 163: the "Mẹo nhỏ" list and its daily switch.
+  final TipLibrary? _tips;
+  TipLibrary get tips => _tips ?? TipLibrary.instance;
+
+  /// The tip the bubble tells, so a tap opens it in "Mẹo nhỏ".
+  String? _bubbleTipId;
+  String? get bubbleTipId => _bubbleTipId;
+
+  /// The last bubble of any kind: a tip waits 2 hours after another one.
+  DateTime? _lastBubbleAt;
+  static const tipAfterOtherBubble = Duration(hours: 2);
+  static const tipBubbleDuration = Duration(seconds: 8);
 
   final Duration cooldownDuration;
   final Duration bubbleDisplayDuration;
@@ -112,10 +128,13 @@ class AssistantContextCoordinator extends ChangeNotifier {
     BatteryBotMood mood = BatteryBotMood.idle,
     List<String> chips = const [],
     Duration? duration,
+    String? tipId,
   }) {
     _bubbleTimer?.cancel();
     _bubbleText = text;
     _bubbleMood = mood;
+    _bubbleTipId = tipId;
+    _lastBubbleAt = DateTime.now();
     _quickActionChips = chips;
     _isBubbleVisible = true;
     // A bubble needs the full button to speak from; it tucks in again
@@ -166,8 +185,10 @@ class AssistantContextCoordinator extends ChangeNotifier {
       }
     }
 
-    // 2. Chào buổi sáng (06:00 - 08:59)
-    if (currentTime.hour >= 6 && currentTime.hour < 9) {
+    // 2. Chào buổi sáng (06:00 - 08:59), unless turned off (QA 163).
+    if (currentTime.hour >= 6 &&
+        currentTime.hour < 9 &&
+        (!tips.loaded || tips.morningEnabled)) {
       final dateKey =
           'morning_${currentTime.year}_${currentTime.month}_${currentTime.day}';
       if (_canTrigger(dateKey, currentTime)) {
@@ -193,7 +214,44 @@ class AssistantContextCoordinator extends ChangeNotifier {
     // No tip bubble on the Charge tab: it covered the % dial and repeated
     // the "80% · Bảo vệ pin · Khuyên dùng" chip right below it (QA 129).
 
+    // 3. QA 163 (owner's choice): one tip a day, for this moment and this
+    // battery, never on the Charge tab, 2 hours after another bubble.
+    final last = _lastBubbleAt;
+    if (currentTab != AppTab.charge &&
+        tips.loaded &&
+        tips.dailyEnabled &&
+        !tips.toldToday(currentTime) &&
+        (last == null || currentTime.difference(last) >= tipAfterOtherBubble)) {
+      final leadAcid = _leadAcid(vehicle);
+      final tip = TipPicker.pick(
+        tips.tips,
+        now: currentTime,
+        seen: tips.seen,
+        leadAcid: leadAcid,
+        batteryPercent: vehicle != null && vehicle.hasBatteryData
+            ? vehicle.currentBattery
+            : null,
+        charging: charging,
+      );
+      if (tip != null) {
+        unawaited(tips.markTold(currentTime));
+        showBubble(
+          'Mẹo: ${tip.title}',
+          mood: BatteryBotMood.happy,
+          tipId: tip.id,
+          duration: tipBubbleDuration,
+        );
+        return true;
+      }
+    }
+
     return false;
+  }
+
+  static bool? _leadAcid(VehicleModel? vehicle) {
+    final chemistry = vehicle?.batteryType?.trim() ?? '';
+    if (chemistry.isEmpty || chemistry.toLowerCase() == 'unknown') return null;
+    return isLeadAcidChemistry(chemistry);
   }
 
   bool _canTrigger(String key, DateTime now) {
@@ -229,6 +287,21 @@ final assistantContextCoordinatorProvider =
               .read(activeChargingSessionProvider)
               .sessions
               .any((s) => s.vehicleId == vehicle.vehicleId);
+
+      // QA 163: the daily tip needs the list; a tip can come once it is in.
+      // Not without Firebase (widget tests): no bubble timers left behind.
+      if (Firebase.apps.isNotEmpty) {
+        unawaited(
+          coordinator.tips.load().then((_) {
+            final vehicleContext = ref.read(vehicleContextProvider);
+            coordinator.evaluateContext(
+              vehicle: vehicleContext.vehicle,
+              currentTab: ref.read(currentTabProvider),
+              charging: charging(vehicleContext.vehicle),
+            );
+          }),
+        );
+      }
 
       ref.listen<int>(currentTabProvider, (_, nextTab) {
         final vehicleContext = ref.read(vehicleContextProvider);

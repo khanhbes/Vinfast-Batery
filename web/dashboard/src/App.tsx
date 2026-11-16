@@ -13,6 +13,7 @@ const VehicleCatalog = lazy(() => import('@/pages/VehicleCatalog'));
 const DeveloperHub = lazy(() => import('@/pages/DeveloperHub'));
 import ShellyGateway from '@/pages/ShellyGateway';
 import AssistantKnowledge from '@/pages/AssistantKnowledge';
+const AssistantTips = lazy(() => import('@/pages/AssistantTips'));
 const PremiumPlans = lazy(() => import('@/pages/PremiumPlans'));
 const SupportInbox = lazy(() => import('@/pages/SupportInbox'));
 import { PageLoadBoundary, PageLoading } from '@/components/PageLoadBoundary';
@@ -60,6 +61,7 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
               <Route path="/catalog" element={<VehicleCatalog />} />
               <Route path="/shelly" element={<ShellyGateway />} />
               <Route path="/assistant" element={<AssistantKnowledge />} />
+              <Route path="/assistant/tips" element={<AssistantTips />} />
               <Route path="/premium" element={<PremiumPlans />} />
               <Route path="/support" element={<SupportInbox />} />
               <Route path="/ai" element={<DevelopModeGate><AiCenter /></DevelopModeGate>} />

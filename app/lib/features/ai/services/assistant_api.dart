@@ -15,6 +15,67 @@ abstract final class AssistantLock {
   static final until = ValueNotifier<DateTime?>(null);
 }
 
+/// QA 163: what the last server turn said besides its text, for the sheet:
+/// the questions the owner may ask next and the messages left today.
+abstract final class AssistantSignals {
+  static final followUps = ValueNotifier<List<String>>(const []);
+  static final remainingToday = ValueNotifier<int?>(null);
+}
+
+/// QA 163: the owner's Pinova Bot settings (`/api/assistant/settings`).
+class AssistantSettings {
+  const AssistantSettings({
+    this.learningEnabled = true,
+    this.persona = 'companion',
+    this.length = 'medium',
+    this.callMe = '',
+    this.aboutMe = '',
+    this.followUps = true,
+    this.conciergeAllowed = false,
+    this.quotaUsed,
+    this.quotaLimit,
+    this.botVersion,
+    this.promptVersion,
+  });
+
+  final bool learningEnabled;
+
+  /// companion | concise | expert | concierge (Pro/Ultra)
+  final String persona;
+
+  /// short | medium | long
+  final String length;
+  final String callMe;
+  final String aboutMe;
+  final bool followUps;
+  final bool conciergeAllowed;
+  final int? quotaUsed;
+  final int? quotaLimit;
+  final String? botVersion;
+  final String? promptVersion;
+
+  int? get quotaLeft => quotaUsed == null || quotaLimit == null
+      ? null
+      : (quotaLimit! - quotaUsed!).clamp(0, quotaLimit!);
+
+  static AssistantSettings fromMap(Map<String, dynamic> data) {
+    final quota = data['quota'] is Map ? data['quota'] as Map : const {};
+    return AssistantSettings(
+      learningEnabled: data['learningEnabled'] != false,
+      persona: data['persona']?.toString() ?? 'companion',
+      length: data['length']?.toString() ?? 'medium',
+      callMe: data['callMe']?.toString() ?? '',
+      aboutMe: data['aboutMe']?.toString() ?? '',
+      followUps: data['followUps'] != false,
+      conciergeAllowed: data['conciergeAllowed'] == true,
+      quotaUsed: (quota['used'] as num?)?.toInt(),
+      quotaLimit: (quota['limit'] as num?)?.toInt(),
+      botVersion: data['botVersion']?.toString(),
+      promptVersion: data['promptVersion']?.toString(),
+    );
+  }
+}
+
 /// One server turn of BatteryBot v2 (Task 124).
 class AssistantTurn {
   const AssistantTurn({
@@ -25,7 +86,11 @@ class AssistantTurn {
     this.card,
     this.lockedUntil,
     this.emergency = false,
+    this.followUps = const [],
   });
+
+  /// QA 163: up to three questions the owner may ask next.
+  final List<String> followUps;
 
   /// QA 143: the server's fire/smoke/shock safety reply (SOS). Its text is
   /// always shown; the stop card is added only when there is a session.
@@ -216,8 +281,22 @@ class AssistantApi {
             )?.toLocal()
           : null,
       emergency: data['emergencyBypass'] == true,
+      followUps: [
+        for (final item in (data['followUps'] as List? ?? const []))
+          if (item is String && item.trim().isNotEmpty) item.trim(),
+      ].take(3).toList(),
     );
   }
+
+  /// QA 163: the owner's Pinova Bot settings and today's messages.
+  Future<AssistantSettings> settings() async =>
+      AssistantSettings.fromMap(await _call('GET', '/api/assistant/settings'));
+
+  /// Saves the given fields only; returns what the server now holds.
+  Future<AssistantSettings> updateSettings(Map<String, dynamic> patch) async =>
+      AssistantSettings.fromMap(
+        await _call('PUT', '/api/assistant/settings', body: patch),
+      );
 
   Future<AssistantMemorySnapshot> memory() async {
     final data = await _call('GET', '/api/assistant/memory');

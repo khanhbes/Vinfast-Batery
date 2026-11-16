@@ -18,6 +18,7 @@ import '../maintenance/maintenance_screen.dart';
 import '../more/widgets/luxe_tile_grid.dart';
 import '../settings/personal_ai_settings_screen.dart';
 import '../smart_charging/night_charging_screen.dart';
+import '../tips/tips_screen.dart';
 import '../trip_planner/trip_planner_wrapper.dart';
 
 /// Tab Tiện ích (QA 140): the features that used to sit in Cài đặt. Tiles
@@ -155,6 +156,22 @@ class UtilitiesScreen extends ConsumerWidget {
                           '${achievements.unlockedCount}/${achievementCatalog.length} huy hiệu',
                       accent: achievements.rank.rarity.accent,
                       onTap: () => push(const AchievementsScreen()),
+                    ),
+                  ],
+                ),
+              ),
+              // QA 163 (owner's choice): every tip for riding and charging.
+              const LuxeSectionLabel('MẸO & HƯỚNG DẪN'),
+              LuxeReveal(
+                index: 2,
+                child: LuxeTileGrid(
+                  tiles: [
+                    LuxeTile(
+                      key: const ValueKey('utilities-tips'),
+                      icon: Icons.lightbulb_rounded,
+                      title: 'Mẹo nhỏ',
+                      value: 'Đi xe tiết kiệm, sạc đúng cách, giữ pin bền',
+                      onTap: () => push(const TipsScreen()),
                     ),
                   ],
                 ),

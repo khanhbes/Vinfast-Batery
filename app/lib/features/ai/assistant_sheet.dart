@@ -1,3 +1,9 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import '../settings/about_screen.dart';
+import '../tips/tip.dart';
+import '../tips/tip_library.dart';
+import 'assistant_settings_screen.dart';
+import 'bot_release.dart';
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -13,7 +19,6 @@ import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/battery_bot_faq.dart';
 import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/battery_bot_mascot.dart';
-import '../settings/assistant_memory_screen.dart';
 import '../smart_charging/shelly_connect_screen.dart';
 import '../../data/services/shelly_connection_coordinator.dart';
 import 'dashboard_scan_screen.dart';
@@ -133,6 +138,14 @@ class _InteractiveAssistantSheetState
   VoiceInputService? _voiceService;
   bool _isListeningVoice = false;
 
+  /// QA 163: first open of Pinova Bot on this phone (the short intro), and
+  /// the bot version this phone last showed ("vừa được nâng cấp").
+  bool _introSeen = true;
+  bool _upgraded = false;
+
+  /// QA 163: the questions offered under a reply, by message id.
+  final Map<String, List<String>> _followUps = {};
+
   /// QA 151: the face in the header follows the conversation.
   BatteryBotMood get _headerMood {
     if (_isListeningVoice) return BatteryBotMood.listening;
@@ -147,6 +160,7 @@ class _InteractiveAssistantSheetState
   void initState() {
     super.initState();
     _ownerUid = _currentUid();
+    unawaited(_loadFirstRun());
     if (_restoreRecent()) {
       _scrollToBottom();
     } else {
@@ -745,13 +759,115 @@ class _InteractiveAssistantSheetState
     super.dispose();
   }
 
-  /// What BatteryBot remembers and the learning switch live on one screen
-  /// (Task 124 server memory); the old dialog described the retired
-  /// on-device tracker and a second switch (Task 125).
-  Future<void> _showPersonalization() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const AssistantMemoryScreen()),
-    );
+  Future<void> _loadFirstRun() async {
+    var introSeen = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      introSeen = prefs.getBool(AssistantSettingsScreen.introSeenKey) ?? false;
+    } on Object {
+      introSeen = true; // no storage: no intro to nag with
+    }
+    final seenVersion = await PinovaBotRelease.seen();
+    if (!mounted) return;
+    setState(() {
+      _introSeen = introSeen;
+      // A first-time owner gets the intro, not "upgraded".
+      _upgraded =
+          introSeen &&
+          seenVersion != null &&
+          seenVersion != PinovaBotRelease.current;
+    });
+    if (!introSeen || seenVersion == null) {
+      unawaited(PinovaBotRelease.markSeen());
+    }
+  }
+
+  Future<void> _finishIntro() async {
+    setState(() => _introSeen = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(AssistantSettingsScreen.introSeenKey, true);
+    } on Object {
+      // Shown again next time; harmless.
+    }
+  }
+
+  Future<void> _openUpgradeNotes() async {
+    setState(() => _upgraded = false);
+    await PinovaBotRelease.markSeen();
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const AboutScreen()));
+  }
+
+  /// QA 163: stop the reply being written; what came so far stays.
+  void _stopReply() {
+    if (!_isTyping) return;
+    unawaited(_streamSub?.cancel());
+    _streamSub = null;
+    final index = _messages.lastIndexWhere((m) => m.isStreaming);
+    setState(() {
+      _isTyping = false;
+      if (index >= 0) {
+        final text = _messages[index].content.trim();
+        _messages[index] = _messages[index].copyWith(
+          content: text.isEmpty ? 'Đã dừng trả lời.' : '$text\n\n(đã dừng)',
+          isStreaming: false,
+        );
+      }
+    });
+    _persistConversation();
+  }
+
+  /// QA 163: ask the last question again (the last reply is replaced).
+  void _askAgain(int index) {
+    if (_isTyping || index != _messages.length - 1) return;
+    final question = _messages
+        .take(index)
+        .lastWhere(
+          (m) => m.role == ChatRole.user,
+          orElse: () => ChatMessage(
+            id: '',
+            role: ChatRole.user,
+            content: '',
+            timestamp: DateTime.now(),
+          ),
+        );
+    if (question.content.trim().isEmpty) return;
+    final userIndex = _messages.lastIndexOf(question);
+    setState(() {
+      _followUps.remove(_messages[index].id);
+      _messages.removeRange(userIndex, _messages.length);
+    });
+    _handleSend(question.content);
+  }
+
+  /// QA 163: what a new owner is most likely to ask now, each with its own
+  /// icon (they used to be guessed from the words).
+  List<(String, IconData)> _starters({
+    required bool hasVehicle,
+    required int? battery,
+    required bool charging,
+  }) {
+    final shelly = ShellyConnectionCoordinator.shared.current;
+    final list = <(String, IconData)>[
+      if (charging) ('Khi nào sạc xong?', Icons.schedule_rounded),
+      if (!charging && battery != null && battery < 30)
+        ('Sạc lên 80% mất bao lâu?', Icons.bolt_rounded),
+      if (!shelly.isLinked) ('Kết nối Shelly', Icons.power_rounded),
+      ('Mẹo đi xe tiết kiệm pin', Icons.lightbulb_rounded),
+    ];
+    for (final (text, icon) in const [
+      ('Xem pin ở đâu?', Icons.battery_5_bar_rounded),
+      ('Làm sao dừng sạc?', Icons.power_settings_new_rounded),
+      ('Vì sao nút sạc bị khóa?', Icons.lock_rounded),
+      ('Kết nối Shelly', Icons.power_rounded),
+    ]) {
+      if (list.length >= 4) break;
+      if (list.every((item) => item.$1 != text)) list.add((text, icon));
+    }
+    return list.take(4).toList();
   }
 
   void _scrollToBottom() {
@@ -823,6 +939,7 @@ class _InteractiveAssistantSheetState
     if (text.isEmpty || _isTyping) return;
     final generation = _generation;
     _inputController.clear();
+    AssistantSignals.followUps.value = const [];
     if (_looksSensitive(text)) {
       setState(
         () => _messages.add(
@@ -964,6 +1081,10 @@ class _InteractiveAssistantSheetState
             action: shortcut?.name,
           );
         });
+        final ups = AssistantSignals.followUps.value;
+        if (ups.isNotEmpty && !basicMode) {
+          setState(() => _followUps[_messages[index].id] = ups);
+        }
         _persistConversation();
         _scrollToBottom();
       },
@@ -1131,7 +1252,8 @@ class _InteractiveAssistantSheetState
 
   Widget _bubble(int index, {bool showMeta = true}) {
     final message = _messages[index];
-    return ChatMessageBubble(
+    final last = index == _messages.length - 1;
+    final bubble = ChatMessageBubble(
       message: message,
       showMeta: showMeta,
       onFeedback: (rating) => _onFeedback(index, rating),
@@ -1140,6 +1262,39 @@ class _InteractiveAssistantSheetState
       onConfirmAction: (act) => _handleActionConfirm(index, act),
       onCancelAction: (act) => _handleActionCancel(index, act),
       onRetry: () => _handleRetry(index),
+      // QA 163: the last answer can be asked again.
+      onAskAgain: last && message.fromBot && !_isTyping && index > 0
+          ? () => _askAgain(index)
+          : null,
+    );
+    final ups = last && !_isTyping ? _followUps[message.id] : null;
+    if (ups == null || ups.isEmpty) return bubble;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        bubble,
+        Padding(
+          key: const ValueKey('assistant-follow-ups'),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final text in ups)
+                ActionChip(
+                  avatar: Icon(
+                    Icons.subdirectory_arrow_right_rounded,
+                    size: 16,
+                    color: context.planAccent,
+                  ),
+                  label: Text(text),
+                  materialTapTargetSize: MaterialTapTargetSize.padded,
+                  onPressed: () => _handleSend(text),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1353,17 +1508,18 @@ class _InteractiveAssistantSheetState
                                   ),
                                   onPressed: _showHistoryModal,
                                 ),
+                                // QA 163: one place for Pinova Bot's
+                                // settings (style, tips, memory).
                                 IconButton(
-                                  key: const Key(
-                                    'assistant_personalization_button',
-                                  ),
-                                  tooltip: 'Cá nhân hóa và dữ liệu học',
+                                  key: const Key('assistant_settings_button'),
+                                  tooltip: 'Cài đặt Pinova Bot',
                                   style: _glassIcon,
                                   icon: const Icon(
-                                    Icons.tune_rounded,
+                                    Icons.settings_rounded,
                                     size: 20,
                                   ),
-                                  onPressed: _showPersonalization,
+                                  onPressed: () =>
+                                      AssistantSettingsScreen.open(context),
                                 ),
                                 IconButton(
                                   key: const Key('assistant_new_chat_button'),
@@ -1409,12 +1565,56 @@ class _InteractiveAssistantSheetState
                                 children: [
                                   if (_activeSuggestion != null)
                                     _buildProactiveBanner(uiColors),
-                                  const _WelcomeHeader(),
+                                  if (_upgraded)
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        16,
+                                        4,
+                                        16,
+                                        4,
+                                      ),
+                                      child: LuxeNotice(
+                                        key: const ValueKey(
+                                          'assistant-upgraded',
+                                        ),
+                                        icon: Icons.new_releases_rounded,
+                                        message:
+                                            'Pinova Bot vừa được nâng cấp lên '
+                                            '${PinovaBotRelease.current}.',
+                                        action: TextButton(
+                                          key: const ValueKey(
+                                            'assistant-upgraded-open',
+                                          ),
+                                          onPressed: _openUpgradeNotes,
+                                          style: TextButton.styleFrom(
+                                            minimumSize: const Size(48, 48),
+                                          ),
+                                          child: const Text('Có gì mới'),
+                                        ),
+                                      ),
+                                    ),
+                                  if (_introSeen)
+                                    const _WelcomeHeader()
+                                  else
+                                    _BotIntro(onStart: _finishIntro),
                                   for (var i = 0; i < _messages.length; i++)
                                     _bubble(i, showMeta: false),
                                   _SuggestionCards(
-                                    suggestions: chips,
+                                    suggestions: _starters(
+                                      hasVehicle: vehicle != null,
+                                      battery:
+                                          vehicle != null &&
+                                              vehicle.hasBatteryData
+                                          ? vehicle.currentBattery
+                                          : null,
+                                      charging: chargingNow != null,
+                                    ),
                                     onSelect: _handleSend,
+                                  ),
+                                  _TodayTip(
+                                    onAsk: (title) => _handleSend(
+                                      'Giải thích thêm mẹo: $title',
+                                    ),
                                   ),
                                 ],
                               ),
@@ -1499,6 +1699,31 @@ class _InteractiveAssistantSheetState
                                     'cháy, khói vẫn được trả lời.',
                               ),
                             ),
+                    ),
+                    // QA 163: few messages left today: say so before they run out.
+                    ValueListenableBuilder<int?>(
+                      valueListenable: AssistantSignals.remainingToday,
+                      builder: (context, left, _) {
+                        final daily = ref.watch(
+                          entitlementProvider.select(
+                            (plan) => plan.assistantDaily,
+                          ),
+                        );
+                        if (left == null ||
+                            left > (daily * 0.2).ceil().clamp(2, 20)) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          key: const ValueKey('assistant-left-today'),
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+                          child: Text(
+                            left == 0
+                                ? 'Hôm nay đã hết lượt AI, Bot trả lời ở chế độ cơ bản.'
+                                : 'Hôm nay còn $left tin với Pinova Bot.',
+                            style: LuxeText.caption,
+                          ),
+                        );
+                      },
                     ),
                     // Input dock: one glass capsule holding field, mic and send.
                     Padding(
@@ -1631,6 +1856,24 @@ class _InteractiveAssistantSheetState
                               builder: (context, value, _) {
                                 final ready =
                                     value.text.trim().isNotEmpty && !_isTyping;
+                                // QA 163: while Pinova Bot answers, the
+                                // button stops the answer.
+                                if (_isTyping) {
+                                  return IconButton(
+                                    key: const Key('assistant_stop_button'),
+                                    tooltip: 'Dừng trả lời',
+                                    style: IconButton.styleFrom(
+                                      fixedSize: const Size(48, 48),
+                                      backgroundColor: LuxeColors.raisedHigh,
+                                      foregroundColor: LuxeColors.text,
+                                    ),
+                                    icon: const Icon(
+                                      Icons.stop_rounded,
+                                      size: 22,
+                                    ),
+                                    onPressed: _stopReply,
+                                  );
+                                }
                                 return IconButton(
                                   key: const Key('assistant_send_button'),
                                   tooltip: _isTyping
@@ -1710,24 +1953,194 @@ class _WelcomeHeader extends StatelessWidget {
   );
 }
 
+/// QA 163: the first time Pinova Bot opens on this phone, what it can do
+/// in three lines, then "Bắt đầu". It replaces the greeting once.
+class _BotIntro extends StatelessWidget {
+  const _BotIntro({required this.onStart});
+  final VoidCallback onStart;
+
+  static const _lines = <(IconData, String, String)>[
+    (
+      Icons.forum_rounded,
+      'Hỏi bằng lời thường',
+      'Pin, sạc, quãng đường, ổ Shelly, bảo dưỡng…',
+    ),
+    (
+      Icons.touch_app_rounded,
+      'Nhờ làm giúp',
+      'Bật hoặc dừng sạc, cập nhật % pin và ODO. Bot luôn hỏi lại trước khi làm.',
+    ),
+    (
+      Icons.lightbulb_rounded,
+      'Mẹo nhỏ mỗi ngày',
+      'Đi xe tiết kiệm, sạc đúng cách, giữ pin bền.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    key: const ValueKey('assistant-intro'),
+    padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+    child: LuxeGlass(
+      raised: true,
+      radius: 24,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Center(
+            child: BatteryBotMascot(
+              size: BatteryBotSize.sm,
+              mood: BatteryBotMood.greeting,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Center(
+            child: Text(
+              'Chào bạn, mình là Pinova Bot',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: LuxeColors.text,
+                fontSize: 19,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final (icon, title, body) in _lines)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(icon, size: 20, color: context.planAccent),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: LuxeText.item),
+                        Text(body, style: LuxeText.caption),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Text(
+            'Lịch sử chat lưu trên máy này. Mỗi ngày có số tin AI theo gói; '
+            'hết lượt Bot vẫn trả lời ở chế độ cơ bản.',
+            style: LuxeText.caption.copyWith(color: LuxeColors.dim),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              key: const ValueKey('assistant-intro-start'),
+              onPressed: onStart,
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              child: const Text('Bắt đầu'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+/// QA 163: today's tip under the starters, when the daily tip is on.
+class _TodayTip extends StatefulWidget {
+  const _TodayTip({required this.onAsk});
+  final ValueChanged<String> onAsk;
+
+  @override
+  State<_TodayTip> createState() => _TodayTipState();
+}
+
+class _TodayTipState extends State<_TodayTip> {
+  final _library = TipLibrary.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _library.addListener(_changed);
+    unawaited(_library.load());
+  }
+
+  @override
+  void dispose() {
+    _library.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_library.loaded || !_library.dailyEnabled) {
+      return const SizedBox.shrink();
+    }
+    final tip = TipPicker.pick(
+      _library.tips,
+      now: DateTime.now(),
+      seen: _library.seen,
+    );
+    if (tip == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          key: const ValueKey('assistant-today-tip'),
+          borderRadius: BorderRadius.circular(18),
+          onTap: () {
+            _library.markSeen(tip.id);
+            widget.onAsk(tip.title);
+          },
+          child: LuxeGlass(
+            quiet: true,
+            radius: 18,
+            padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.lightbulb_rounded,
+                  size: 20,
+                  color: context.planAccent,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('MẸO HÔM NAY', style: LuxeText.eyebrow),
+                      const SizedBox(height: 2),
+                      Text(tip.title, style: LuxeText.item),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: LuxeColors.platinumMid,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// One glass card per suggestion, shown under the greeting.
 class _SuggestionCards extends StatelessWidget {
   const _SuggestionCards({required this.suggestions, required this.onSelect});
-  final List<String> suggestions;
+
+  /// QA 163: each starter with its own icon.
+  final List<(String, IconData)> suggestions;
   final ValueChanged<String> onSelect;
-  static IconData _iconFor(String text) {
-    final t = text.toLowerCase();
-    if (t.contains('dừng') || t.contains('tắt')) {
-      return Icons.power_settings_new_rounded;
-    }
-    if (t.contains('shelly') || t.contains('kết nối')) {
-      return Icons.power_rounded;
-    }
-    if (t.contains('khóa')) return Icons.lock_outline_rounded;
-    if (t.contains('pin')) return Icons.battery_5_bar_rounded;
-    if (t.contains('lịch') || t.contains('giờ')) return Icons.schedule_rounded;
-    return Icons.auto_awesome_rounded;
-  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1743,7 +2156,7 @@ class _SuggestionCards extends StatelessWidget {
             type: MaterialType.transparency,
             child: InkWell(
               borderRadius: BorderRadius.circular(18),
-              onTap: () => onSelect(suggestions[i]),
+              onTap: () => onSelect(suggestions[i].$1),
               child: LuxeGlass(
                 radius: 18,
                 padding: const EdgeInsets.fromLTRB(14, 12, 12, 14),
@@ -1751,13 +2164,13 @@ class _SuggestionCards extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
-                      _iconFor(suggestions[i]),
+                      suggestions[i].$2,
                       size: 20,
                       color: context.planAccent,
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      suggestions[i],
+                      suggestions[i].$1,
                       style: const TextStyle(
                         color: LuxeColors.text,
                         fontSize: 14,

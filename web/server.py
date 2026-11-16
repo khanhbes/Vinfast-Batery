@@ -6997,6 +6997,9 @@ def _register_assistant():
 
     knowledge = KnowledgeBase(db)
     memory = AssistantMemory(db)
+    # QA 163: Mẹo nhỏ, for the app's screen and Pinova Bot.
+    from assistant.tips import TipStore
+    tips = TipStore(db)
     try:
         store = configured_store()
     except Exception:
@@ -7028,9 +7031,10 @@ def _register_assistant():
         # QA 135: % pin chai and the night plan for Pinova Bot.
         health_reader=service.battery_health if service else None,
         night_reader=service.night_plan if service else None,
+        tips=tips,
     )
     app.register_blueprint(create_assistant_blueprint(
-        engine=engine, memory=memory, knowledge=knowledge,
+        engine=engine, memory=memory, knowledge=knowledge, tips=tips,
         # QA 135: Free 10 / Pro 30 / Ultra 100 messages a day.
         quota=DailyQuota(store, limit_for=(lambda uid: billing.limit(uid, 'assistant_daily'))
                          if billing is not None else None),

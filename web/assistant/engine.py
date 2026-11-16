@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 from .gemini import GeminiClient, GeminiUnavailable
 from .knowledge import KnowledgeBase
 from .memory import CATEGORIES, AssistantMemory
+from .prompt_assembler import split_follow_ups
 from .trip_model import TripConditions, TripModelParams, catalog_km_per_pct, learned_km_per_pct, plan_trip
 
 _VN = timezone(timedelta(hours=7))
@@ -29,11 +30,16 @@ MAX_TURNS = 3
 # timeout and must not hold an API thread for minutes (Task 125).
 CHAT_DEADLINE_SECONDS = 28.0
 
+# QA 163: Pinova Bot's own version (the app shows it in Giới thiệu).
+BOT_SERVER_VERSION = "3.2.0"
+
 SCREENS = ["overview", "charge", "history", "settings", "maintenance", "achievements",
            "battery_monitor", "trip_planner", "notifications", "garage", "vehicle_specs",
            "shelly_setup", "assistant_memory", "session_detail",
            # QA 135
-           "premium", "help", "night_charging", "battery_health"]
+           "premium", "help", "night_charging", "battery_health",
+           # QA 163
+           "tips", "assistant_settings", "about"]
 SUPPORT_CATEGORIES = ["charging", "shelly", "scan", "battery", "billing", "account", "app", "other"]
 # Only features the app really has (QA 138: off-peak, sharing and the
 # monthly report are not built yet, so the bot must not offer them).
@@ -359,6 +365,7 @@ SCREEN_LABELS = {
     "assistant_memory": "Pinova Bot đang nhớ gì", "session_detail": "chi tiết phiên sạc",
     "premium": "Pinova Premium", "help": "Trợ giúp & khắc phục sự cố",
     "night_charging": "Sạc đêm an toàn", "battery_health": "Sức khỏe pin",
+    "tips": "Mẹo nhỏ", "assistant_settings": "Cài đặt Pinova Bot", "about": "Giới thiệu",
 }
 
 _VERDICT_TEXT = {"comfortable": "đủ pin, thoải mái", "tight": "đi được nhưng sát",
@@ -466,7 +473,8 @@ class AssistantEngine:
     def __init__(self, *, gemini: GeminiClient, knowledge: KnowledgeBase, memory: AssistantMemory,
                  live_reader=None, history_reader=None, clock=None, router=None, charge_estimator=None,
                  trip_params_reader=None, entitlements=None, health_reader=None,
-                 night_reader=None, config_store=None, conduct_store=None, mailer=None):
+                 night_reader=None, config_store=None, conduct_store=None, mailer=None,
+                 tips=None):
         from .conduct import ConductStore, SpamGuard
         from .config_store import PinovaConfigStore
         from .prompt_assembler import PromptAssembler
@@ -474,6 +482,8 @@ class AssistantEngine:
         self.gemini = gemini
         self.knowledge = knowledge
         self.memory = memory
+        # QA 163: the "Mẹo nhỏ" list, offered to the model when asked.
+        self.tips = tips
         self.live_reader = live_reader
         self.history_reader = history_reader
         self.clock = clock or (lambda: datetime.now(_VN))
@@ -512,8 +522,20 @@ class AssistantEngine:
 
     # -- prompt -------------------------------------------------------------
     def system_prompt(self, uid: str, message: str, context: dict, facts: list[dict], learning: bool,
-                      version_id: str | None = None) -> str:
+                      version_id: str | None = None, settings: dict | None = None) -> str:
         knowledge = self.knowledge.search(message, limit=4)
+        if self.tips is not None:
+            vehicle = context.get("vehicle") if isinstance(context.get("vehicle"), dict) else {}
+            chemistry = vehicle.get("batteryChemistry")
+            knowledge = knowledge + [
+                {"id": f"tip-{tip['id']}", "title": f"Mẹo: {tip['title']}", "body": tip["body"]}
+                for tip in self.tips.search(message, chemistry=str(chemistry) if chemistry else None)
+            ]
+        settings = dict(settings or {})
+        # A style of a plan the owner no longer has falls back to the default.
+        if (settings.get("persona") == "concierge" and self.entitlements is not None
+                and self.entitlements.tier(uid) == "free"):
+            settings["persona"] = "companion"
         version_cfg = self.config_store.get_version(version_id)
         assembled = self.prompt_assembler.assemble(
             version_config=version_cfg,
@@ -525,6 +547,7 @@ class AssistantEngine:
             knowledge_entries=knowledge,
             operational_rules_block=PERSONA,
             now_vn=self.clock(),
+            user_settings=settings,
         )
         self._last_prompt_trace = assembled
         return assembled["systemPrompt"]
@@ -910,7 +933,8 @@ class AssistantEngine:
         with ThreadPoolExecutor(max_workers=2) as pool:
             settings_job = pool.submit(self.memory.settings, uid)
             facts_job = pool.submit(self.memory.facts, uid)
-        learning = settings_job.result()["learningEnabled"] and not bool(context.get("learningOptOut"))
+        user_settings = settings_job.result()
+        learning = user_settings["learningEnabled"] and not bool(context.get("learningOptOut"))
         if kill_switch.get("mode") == "safe_mode":
             learning = False
         try:
@@ -918,7 +942,8 @@ class AssistantEngine:
         except Exception:
             facts = []
         timings["profile"] = int((time.perf_counter() - started) * 1000)
-        system = self.system_prompt(uid, message, context, facts, learning, version_id=version_id)
+        system = self.system_prompt(uid, message, context, facts, learning, version_id=version_id,
+                                    settings=user_settings)
         prompt_trace = dict(self._last_prompt_trace or {})
         contents = []
         for turn in (history or [])[-MAX_HISTORY:]:
@@ -1022,6 +1047,11 @@ class AssistantEngine:
             unscripted_escalated = True
             reply_text = reply_text.replace("[UNSCRIPTED_ESCALATE]", "").strip()
 
+        # QA 163: the questions the owner may ask next leave the reply.
+        reply_text, follow_ups = split_follow_ups(reply_text)
+        if not user_settings.get("followUps", True) or context.get("drivingMode"):
+            follow_ups = []
+
         # 6. Output Guardrail (QA 137 no '~' tilde + Driving Mode max 2 sentences)
         reply_text = sanitize_output_text(
             reply_text,
@@ -1044,7 +1074,8 @@ class AssistantEngine:
 
         timings["total"] = int((time.perf_counter() - started) * 1000)
         result = {"reply": reply_text[:4000], "actions": actions, "source": "gemini",
-                  "memoryChanged": bool(state.get("memoryChanged")), "timingsMs": timings}
+                  "memoryChanged": bool(state.get("memoryChanged")), "timingsMs": timings,
+                  "followUps": follow_ups, "botVersion": BOT_SERVER_VERSION}
         if unscripted_escalated:
             result["unscriptedEscalation"] = True
             if flagged_entry:

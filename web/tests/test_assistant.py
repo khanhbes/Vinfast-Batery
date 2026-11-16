@@ -45,8 +45,9 @@ def test_plain_answer_uses_knowledge_and_context_in_prompt():
     result = eng.chat("u1", "Xem lịch sử sạc ở đâu?", [], CONTEXT)
     timings = result.pop("timingsMs")
     assert {"profile", "model1", "total"} <= set(timings)
+    # QA 163: plus the follow-up questions and the bot version.
     assert result == {"reply": "Bạn mở tab **Lịch sử** nhé.", "actions": [], "source": "gemini",
-                      "memoryChanged": False}
+                      "memoryChanged": False, "followUps": [], "botVersion": "3.2.0"}
     system = eng.gemini.calls[0]["system"]
     assert "Lịch sử sạc" in system and '"batteryPercent": 40' in system
 
@@ -185,10 +186,10 @@ def test_memory_routes_list_delete_and_toggle():
     client, memory, _ = _client([])
     fact = memory.remember("u1", "Thích sạc buổi tối", "preference")
     data = client.get("/api/assistant/memory").get_json()["data"]
-    assert data["settings"] == {"learningEnabled": True} and data["facts"][0]["text"] == "Thích sạc buổi tối"
+    assert data["settings"]["learningEnabled"] is True and data["facts"][0]["text"] == "Thích sạc buổi tối"
     assert client.delete(f"/api/assistant/memory/{fact['id']}").get_json()["data"]["deleted"] is True
-    assert client.put("/api/assistant/settings", json={"learningEnabled": False}).get_json()["data"] == \
-        {"learningEnabled": False}
+    assert client.put("/api/assistant/settings", json={"learningEnabled": False}).get_json()["data"][
+        "learningEnabled"] is False
     assert memory.remember("u1", "Không được lưu") is None
 
 

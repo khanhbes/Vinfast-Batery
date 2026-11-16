@@ -1,3 +1,6 @@
+import '../../settings/about_screen.dart';
+import '../../tips/tips_screen.dart';
+import '../assistant_settings_screen.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -231,6 +234,10 @@ class AppAssistantActionHost implements AssistantActionHost {
       // QA 135
       'premium' => const PremiumScreen(),
       'help' => const HelpCenterScreen(),
+      // QA 163
+      'tips' => const TipsScreen(),
+      'assistant_settings' => const AssistantSettingsScreen(),
+      'about' => const AboutScreen(),
       'night_charging' =>
         vehicle == null
             ? null

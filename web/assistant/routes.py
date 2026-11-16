@@ -8,11 +8,17 @@ from flask import Blueprint, jsonify, request
 
 from .eval_runner import run_eval_suite, run_playground_turn
 from .gemini import GeminiUnavailable
+from .engine import BOT_SERVER_VERSION
 from .guardrails import check_emergency_sos
+from .memory import SettingsError
+from .tips import clean as clean_tip
+
+# A password or access code typed into a settings box (QA 163).
+_SECRET = re.compile(r"(mật khẩu|mat khau|password|passwd|token|api[ _-]?key|otp|mã pin)\s*[:=]", re.I)
 
 
 def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolver, require_admin, db=None,
-                               audit=None):
+                               audit=None, tips=None):
     bp = Blueprint("assistant", __name__)
 
     def fail(status, code, message, retryable=False):
@@ -90,15 +96,93 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
             return fail(401, "unauthorized", "Cần đăng nhập")
         return jsonify({"success": True, "data": {"deleted": memory.clear(uid)}})
 
+    def _settings_payload(uid: str) -> dict:
+        """QA 163: the owner's Pinova Bot settings, today's messages, versions."""
+        limit = quota.limit_for(uid)
+        used = quota.used_today(uid)
+        tier = engine.entitlements.tier(uid) if getattr(engine, "entitlements", None) else "ultra"
+        return {**memory.settings(uid),
+                "quota": {"used": used, "limit": limit, "left": max(0, limit - used)},
+                "conciergeAllowed": tier != "free",
+                "botVersion": BOT_SERVER_VERSION,
+                "promptVersion": engine.config_store.get_overview().get("activeVersionId")
+                if getattr(engine, "config_store", None) else None}
+
+    @bp.get("/api/assistant/settings")
+    def get_settings():
+        uid = user()
+        if not uid:
+            return fail(401, "unauthorized", "Cần đăng nhập")
+        return jsonify({"success": True, "data": _settings_payload(uid)})
+
     @bp.put("/api/assistant/settings")
     def put_settings():
         uid = user()
         if not uid:
             return fail(401, "unauthorized", "Cần đăng nhập")
         body = request.get_json(silent=True) or {}
-        if not isinstance(body.get("learningEnabled"), bool):
-            return fail(400, "invalidSettings", "Thiếu learningEnabled")
-        return jsonify({"success": True, "data": memory.set_learning(uid, body["learningEnabled"])})
+        # QA 163: style, length, how to be called, what to know, follow-ups;
+        # the old body (learningEnabled alone) still works.
+        patch = {key: body[key] for key in ("learningEnabled", "persona", "length", "callMe",
+                                            "aboutMe", "followUps") if key in body}
+        if not patch:
+            return fail(400, "invalidSettings", "Thiếu cài đặt")
+        if any(_SECRET.search(str(patch.get(key) or "")) for key in ("callMe", "aboutMe")):
+            return fail(400, "invalidSettings", "Đừng nhập mật khẩu hay mã truy cập vào đây.")
+        tier = engine.entitlements.tier(uid) if getattr(engine, "entitlements", None) else "ultra"
+        try:
+            memory.set_settings(uid, patch, allow_concierge=tier != "free")
+        except SettingsError as error:
+            if str(error) == "personaPlan":
+                return fail(403, "premiumRequired", "Giọng Lịch thiệp có ở gói Pro và Ultra.")
+            return fail(400, "invalidSettings", "Cài đặt không hợp lệ.")
+        return jsonify({"success": True, "data": _settings_payload(uid)})
+
+    # -- QA 163: Mẹo nhỏ ------------------------------------------------------
+    @bp.get("/api/tips")
+    def get_tips():
+        if not user():
+            return fail(401, "unauthorized", "Cần đăng nhập")
+        if tips is None:
+            return fail(503, "tipsUnavailable", "Chưa có mẹo.", retryable=True)
+        return jsonify({"success": True, "data": tips.listing()})
+
+    @bp.get("/api/admin/tips")
+    @require_admin
+    def admin_tips():
+        return jsonify({"success": True, "data": tips.admin_entries() if tips else []})
+
+    @bp.put("/api/admin/tips/<tip_id>")
+    @require_admin
+    def admin_put_tip(tip_id):
+        if tips is None or db is None:
+            return fail(503, "tipsUnavailable", "Chưa cấu hình kho mẹo.")
+        if not re.fullmatch(r"[a-z0-9-]{3,60}", tip_id or ""):
+            return fail(400, "invalidTip", "Mã mẹo chỉ gồm chữ thường, số và dấu gạch.")
+        body = request.get_json(silent=True) or {}
+        base = next((t for t in tips.admin_entries() if t["id"] == tip_id), None)
+        tip = clean_tip(tip_id, body, base)
+        if tip is None:
+            return fail(400, "invalidTip", "Cần tiêu đề, nội dung và nhóm hợp lệ.")
+        doc = {**tip, "enabled": body.get("enabled") is not False,
+               "updatedAt": datetime.now(timezone.utc).isoformat()}
+        db.collection(tips.COLLECTION).document(tip_id).set(doc)
+        tips.invalidate()
+        if audit:
+            audit("assistant_tip_put", {"tipId": tip_id})
+        return jsonify({"success": True, "data": doc})
+
+    @bp.delete("/api/admin/tips/<tip_id>")
+    @require_admin
+    def admin_hide_tip(tip_id):
+        if tips is None or db is None:
+            return fail(503, "tipsUnavailable", "Chưa cấu hình kho mẹo.")
+        db.collection(tips.COLLECTION).document(tip_id).set(
+            {"enabled": False, "updatedAt": datetime.now(timezone.utc).isoformat()}, merge=True)
+        tips.invalidate()
+        if audit:
+            audit("assistant_tip_hide", {"tipId": tip_id})
+        return jsonify({"success": True, "data": {"id": tip_id, "enabled": False}})
 
     # -- admin knowledge ----------------------------------------------------
     @bp.get("/api/admin/assistant/knowledge")

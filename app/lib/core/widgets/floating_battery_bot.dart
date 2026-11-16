@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/ai/assistant_sheet.dart';
+import '../../features/tips/tips_screen.dart';
 import '../providers/app_state_providers.dart';
 import '../services/assistant_context_coordinator.dart';
 import '../theme/luxe_theme.dart';
@@ -60,6 +61,21 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
     HapticFeedback.lightImpact();
     ref.read(assistantContextCoordinatorProvider).dismissBubble();
     InteractiveAssistantSheet.show(context, initialQuery: initialQuery);
+  }
+
+  /// QA 163: a tip bubble opens its tip in "Mẹo nhỏ" (not the chat).
+  void _openBubble(String text) {
+    final coordinator = ref.read(assistantContextCoordinatorProvider);
+    final tipId = coordinator.bubbleTipId;
+    if (tipId == null) {
+      _openSheet(initialQuery: text);
+      return;
+    }
+    HapticFeedback.lightImpact();
+    coordinator.dismissBubble();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => TipsScreen(highlightId: tipId)),
+    );
   }
 
   @override
@@ -182,8 +198,7 @@ class _FloatingBatteryBotState extends ConsumerState<FloatingBatteryBot>
                               children: [
                                 Expanded(
                                   child: GestureDetector(
-                                    onTap: () =>
-                                        _openSheet(initialQuery: bubbleText),
+                                    onTap: () => _openBubble(bubbleText),
                                     child: Text(
                                       bubbleText,
                                       style: const TextStyle(

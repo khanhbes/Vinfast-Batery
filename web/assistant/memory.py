@@ -43,6 +43,62 @@ def mask_pii_text(text: str) -> str:
     return out
 
 
+# QA 163: what the owner may set for Pinova Bot.
+PERSONAS = ("companion", "concise", "expert", "concierge")
+LENGTHS = ("short", "medium", "long")
+CALL_ME_MAX = 30
+ABOUT_ME_MAX = 500
+
+
+class SettingsError(ValueError):
+    pass
+
+
+def settings_view(data: dict) -> dict:
+    """The stored settings with their defaults."""
+    persona = data.get("persona") if data.get("persona") in PERSONAS else "companion"
+    length = data.get("length") if data.get("length") in LENGTHS else "medium"
+    return {
+        "learningEnabled": data.get("learningEnabled") is not False,
+        # Only a style the owner picked replaces the prompt version's.
+        "personaChosen": data.get("persona") in PERSONAS,
+        "persona": persona,
+        "length": length,
+        "callMe": str(data.get("callMe") or "")[:CALL_ME_MAX],
+        "aboutMe": str(data.get("aboutMe") or "")[:ABOUT_ME_MAX],
+        "followUps": data.get("followUps") is not False,
+    }
+
+
+def clean_settings(patch: dict, *, allow_concierge: bool) -> dict:
+    """The writable part of ``patch``; raises SettingsError on a bad value."""
+    out: dict = {}
+    for key in ("learningEnabled", "followUps"):
+        if key in patch:
+            if not isinstance(patch[key], bool):
+                raise SettingsError(key)
+            out[key] = patch[key]
+    if "persona" in patch:
+        if patch["persona"] not in PERSONAS:
+            raise SettingsError("persona")
+        if patch["persona"] == "concierge" and not allow_concierge:
+            raise SettingsError("personaPlan")
+        out["persona"] = patch["persona"]
+    if "length" in patch:
+        if patch["length"] not in LENGTHS:
+            raise SettingsError("length")
+        out["length"] = patch["length"]
+    for key, limit in (("callMe", CALL_ME_MAX), ("aboutMe", ABOUT_ME_MAX)):
+        if key in patch:
+            value = patch[key]
+            if not isinstance(value, str) or len(value.strip()) > limit:
+                raise SettingsError(key)
+            out[key] = " ".join(value.split()) if key == "callMe" else value.strip()
+    if not out:
+        raise SettingsError("empty")
+    return out
+
+
 class AssistantMemory:
     def __init__(self, db=None):
         self.db = db
@@ -129,7 +185,23 @@ class AssistantMemory:
         else:
             with self._lock:
                 data = dict(self._local_settings.get(uid, {}))
-        return {"learningEnabled": data.get("learningEnabled") is not False}
+        return settings_view(data)
+
+    def set_settings(self, uid: str, patch: dict, *, allow_concierge: bool) -> dict:
+        """QA 163: the owner's Pinova Bot settings (style, length, how to be
+        called, what the bot should know, follow-up questions). Unknown or
+        out-of-range values are refused before anything is written."""
+        payload = clean_settings(patch, allow_concierge=allow_concierge)
+        payload["updatedAt"] = datetime.now(timezone.utc)
+        if self.db is not None:
+            (self.db.collection("users").document(uid).collection("assistant")
+             .document("settings").set(payload, merge=True))
+        else:
+            with self._lock:
+                self._local_settings.setdefault(uid, {}).update(payload)
+                if "learningEnabled" in payload and uid in self._admin_profiles:
+                    self._admin_profiles[uid]["consentGranted"] = payload["learningEnabled"]
+        return self.settings(uid)
 
     def set_learning(self, uid: str, enabled: bool) -> dict:
         payload = {"learningEnabled": bool(enabled), "updatedAt": datetime.now(timezone.utc)}

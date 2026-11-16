@@ -143,6 +143,11 @@ class HybridAssistantEngine implements LocalChatEngine {
     }
     if (turn.memoryChanged) onMemoryChanged?.call();
     if (turn.lockedUntil != null) AssistantLock.until.value = turn.lockedUntil;
+    // QA 163: the sheet shows these under the reply and above the input.
+    AssistantSignals.followUps.value = turn.followUps;
+    if (turn.remainingToday != null) {
+      AssistantSignals.remainingToday.value = turn.remainingToday;
+    }
     _remember('user', message);
     _remember('assistant', turn.reply);
     if (turn.emergency) {
@@ -170,6 +175,8 @@ class HybridAssistantEngine implements LocalChatEngine {
     String message,
     AssistantUnavailable error,
   ) async {
+    AssistantSignals.followUps.value = const [];
+    if (error.quota) AssistantSignals.remainingToday.value = 0;
     // QA 143: fire and smoke get the safety steps offline too, with the
     // stop card when a verified session can be stopped.
     if (EmergencyText.matches(message)) {

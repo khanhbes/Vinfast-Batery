@@ -13,6 +13,7 @@ import {
   Bot,
   Crown,
   LifeBuoy,
+  Lightbulb,
 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -64,6 +65,7 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
         label: 'AI & Thương mại',
         items: [
           { icon: Bot, label: 'Pinova', path: '/assistant' },
+          { icon: Lightbulb, label: 'Mẹo nhỏ', path: '/assistant/tips' },
           { icon: BrainCircuit, label: 'Mô hình AI', path: '/ai' },
           { icon: Crown, label: 'Gói & Khuyến mại', path: '/premium' },
           { icon: LifeBuoy, label: 'Hỗ trợ', path: '/support', badgeCount: pendingTickets > 0 ? pendingTickets : undefined },
