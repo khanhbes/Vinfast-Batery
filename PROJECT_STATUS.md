@@ -12,6 +12,26 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 162. Task Completion Log — Splash nhanh hơn, Pinova Bot trong thẻ mất kết nối, Dung lượng pin còn lại chính xác hơn (16/11/2026, chủ app chọn: giữ hoạt ảnh và bỏ chờ; mặt Bot và Bot nói; bài kiểm tra pin gộp với các lần sạc và nặng ký hơn; số vượt danh định hiện đúng số đo) — Code + test xong, APK 2.1.9+242, **máy chủ chưa deploy, chưa thử trên máy**
+
+**Splash:** hoạt ảnh 5 000 ms nhưng chuyển động thật hết ở 4 200 ms (vệt sạc), và hồ sơ `users/{uid}` chỉ được đọc sau khi splash xong (thêm một nhịp đứng yên rồi 560 ms chuyển cảnh, tổng khoảng 6–7 giây). Nay `BootstrapSplash` báo xong ở `motionEnd` (0,84), hoạt ảnh không đổi; `AuthenticatedPrefetch` đọc hồ sơ và nháp khảo sát ngay khi khôi phục được phiên, trong lúc logo đang vẽ, `_AuthenticatedRoot` lấy lại một lần. Kỳ vọng khoảng 4,8 giây khi Firestore trả lời trong 4,2 giây. `StartupClock` ghi `[Startup] splash drawn …ms` và `first screen ready …ms` vào log (bản debug/profile) để đo trên máy.
+
+**Thẻ mất kết nối (QA 161):** mặt Pinova Bot (`BatteryBotMascot` dạng avatar) thay đám mây: lo lắng khi mất kết nối, đang nghĩ khi đang thử lại, vui khi "Đã kết nối lại", buồn ở trang chưa có dữ liệu; góc có dấu wifi/đám mây champagne. Dòng phụ do Bot nói ("Mình vẫn giữ dữ liệu đã lưu cho bạn xem. Có mạng là mình tự kết nối lại."). Mặt chỉ chuyển động khi đổi biểu cảm hoặc đang thử lại thật.
+
+**Dung lượng pin còn lại (`charge_model.battery_health`):**
+- Trên sổ sạc thật của chủ app (12 lần), từng lần sạc cho ra 85,5% đến 121,5%: đồng hồ hụt rồi bù giữa hai lần sạc đầy. Hai lần ngay sau sạc đầy: 98,9% và 98,3%.
+- Cách mới: mọi lần sạc riêng biệt (cả sổ dài), chỉ lần tăng từ 20%; trọng số = % tăng × độ tin đồng hồ (QA 158: lần đầu sau sạc đầy cao, hai lần sau vừa, sau đó thấp) × độ mới (nửa đời 180 ngày); bài kiểm tra pin tin cao, nhân đôi trong 90 ngày; bỏ lần lệch quá max(3×MAD, 6 điểm); kết quả là Wh/% gộp. Sai số = độ tản / √số lần hiệu dụng (mỗi lần tối thiểu 3 điểm) cộng sàn 1,5 điểm; bỏ quá 25% trọng số thì độ tản tính cả lần bị bỏ. `confidence` theo sai số. Thêm `charges` (20 lần gần nhất, dùng hay không và vì sao; Free không có), `trust` ở mỗi điểm xu hướng.
+- Kiểm trên sổ thật (`web/scripts/qa162_health_replay.py`, chỉ đọc): cũ 99,1%, mới 98,8% ±2,2; mỗi lần sạc mới làm số đổi trung bình 0,1 (cũ 0,3), lớn nhất 0,4 (cũ 0,6); hai nửa dữ liệu lệch 0,3 (cũ 1,1). Bốn lần thấp tin bị bỏ là lệch.
+- Các test khóa số cũ (99,4% / 2385 Wh) đổi sang 99,0% / 2375 (hoặc 2376) Wh; ý giữ nguyên: huấn luyện, lớp AI, bù lệch không làm số này đổi.
+
+**Hiển thị:** một nguồn `HealthVerdict.of` cho trang Sức khỏe pin, ô số liệu và thẻ ở Tổng quan, ô Tiện ích (trước mỗi nơi một kiểu: trang không kẹp 104%, Tổng quan kẹp 100%; ngưỡng nhãn khác nhau; Tổng quan còn "tin cậy cao"). Số hiện đúng số đo (vòng tối đa 100%); nhãn chung "Pin còn như mới / còn tốt / đã chai, nên theo dõi / chai nhiều, nên đưa xe đi kiểm tra"; "Đã chai khoảng X%" chỉ khi X lớn hơn sai số, không thì "Chưa thấy chai rõ (trong sai số ±N%)"; "Dựa trên N lần sạc · sai số ±U% · có bài kiểm tra"; dung lượng ghi dạng khoảng. Mục mới "Từng lần sạc" (Pro/Ultra) như lịch sử phiên của Battery Guru; biểu đồ làm mờ điểm đọc lúc đồng hồ ít tin.
+
+**Kiểm thử:** Flutter 1535 passed, 216 skipped, 0 failed; backend 978 passed, 15 skipped; flutter analyze sạch. Test mới `web/tests/test_qa162_battery_health.py`, `app/test/widget/qa162_health_display_test.dart`; `qa161_offline_test.dart` có thêm mặt Bot; `one_line_splash_test.dart` đổi mốc 5 000 → 4 200 ms.
+
+**Cần chủ app:** deploy API để trang Sức khỏe pin dùng cách tính mới (app đọc được máy chủ cũ); cài 2.1.9; nếu cắm máy thì `adb logcat | grep Startup` cho số đo khởi động.
+
+---
+
 ## 161. Task Completion Log — "Chưa liên lạc được máy chủ" khi máy chủ vẫn chạy; giao diện mất kết nối thống nhất (16/11/2026, chủ app: "đang không kết nối được máy chủ, sửa lỗi… khi mất kết nối sẽ có pop up nổi… kèm thao tác… các trang đều thống nhất 1 kiểu hiển thị"; chọn: thẻ nổi phía dưới, trang giữ dữ liệu và ghi rõ là cũ) — Code + test xong, APK 2.1.8+241, **chưa thử trên máy**
 
 **Kiểm tra máy chủ:** cùng lúc chủ app thấy dải "Chưa liên lạc được máy chủ", `/api/health` và `/api/ready` trả 200 (Firebase sẵn sàng, AI `degraded`), kể cả khi gửi kèm mã đăng nhập sai; APK có đúng địa chỉ máy chủ. Lỗi nằm ở cách app tự kiểm tra: `InternetConnectionNotice` gọi hai địa chỉ này qua `ApiService` và chờ lấy mã đăng nhập Firebase trước; lấy mã chậm (làm mới phiên) quá 7 giây là bị tính như máy chủ chết. Chưa có nhật ký từ điện thoại để khẳng định đây là nguyên nhân duy nhất; thẻ mới ghi lý do để lần sau biết ngay.

@@ -26,6 +26,8 @@ import '../../data/repositories/smart_charger_repository.dart';
 import '../../data/models/smart_charger_binding.dart';
 import '../../main.dart' show firebaseInitErrorProvider;
 import '../../navigation/app_navigation.dart';
+import '../../core/services/startup_clock.dart';
+import 'authenticated_prefetch.dart';
 import 'getting_started_screen.dart';
 import 'onboarding_chat_screen.dart';
 import '../../core/providers/firebase_ready_provider.dart';
@@ -149,6 +151,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       await _authSubscription?.cancel();
       _authStream = FirebaseAuth.instance.authStateChanges();
       _authSubscription = _authStream!.listen((user) {
+        // QA 162: read the profile while the splash is still drawing.
+        AuthenticatedPrefetch.start(user?.uid);
         ShellyConnectionCoordinator.shared.activateAccount(user?.uid);
         _authUser = user;
         _authResolved = true;
@@ -177,6 +181,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       if (restoredUser == null && _wasAuthenticated && !_explicitSignedOut) {
         restoredUser = FirebaseAuth.instance.currentUser;
         if (restoredUser != null) {
+          AuthenticatedPrefetch.start(restoredUser.uid);
           await SessionService().markAuthenticated();
           _wasAuthenticated = true;
           _explicitSignedOut = false;
@@ -671,6 +676,16 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
     // Resolve the UID-scoped local draft independently from the profile read.
     // Production rules or a transient Firestore failure must not hide a
     // finalized local-first draft and send the user back to step one.
+    // QA 162: the reads AuthGate started during the splash, when they are
+    // this account's.
+    if (_profileFuture == null && _draftUid == null) {
+      final early = AuthenticatedPrefetch.take(currentUser.uid);
+      if (early != null) {
+        _draftUid = currentUser.uid;
+        _draftFuture = early.draft;
+        _profileFuture = early.profile;
+      }
+    }
     if (_draftUid != currentUser.uid) {
       _draftUid = currentUser.uid;
       _draftFuture = OnboardingDraftRepository().load(currentUser.uid);
@@ -699,6 +714,7 @@ class _AuthenticatedRootState extends ConsumerState<_AuthenticatedRoot>
         // hold the brand frame (identical to the finished splash) instead of
         // a spinner, then hand over once with the splash exit.
         final held = inputs == null;
+        if (!held) StartupClock.mark('first screen ready');
         return AnimatedSwitcher(
           duration: reducedMotion
               ? Duration.zero

@@ -24,34 +24,37 @@ void main() {
     ),
   );
 
-  testWidgets('full 5s timeline completes once and holds visible final brand', (
-    tester,
-  ) async {
-    var calls = 0;
-    await tester.pumpWidget(host(done: () => calls++));
-    await tester.pump(); // Establish the ticker frame before advancing time.
-    await tester.pump(const Duration(milliseconds: 4999));
-    expect(calls, 0);
-    await tester.pump(const Duration(milliseconds: 1));
-    await tester.pump(
-      const Duration(milliseconds: 16),
-    ); // Completion is delivered on the next frame.
-    expect(calls, 1);
-    await tester.pump(const Duration(seconds: 5));
-    expect(calls, 1);
-    expect(find.text('Đang kết nối…'), findsOneWidget);
-    expect(find.text('technical message must not leak'), findsNothing);
-    // Only the owner's logo layers (QA 133), nothing else.
-    expect(find.byKey(const ValueKey('splash-logo-metal')), findsOneWidget);
-    expect(find.byType(LinearProgressIndicator), findsNothing);
-    final name = find.byKey(const ValueKey('pinova-wordmark'));
-    final opacity = tester.widget<Opacity>(
-      find.ancestor(of: name, matching: find.byType(Opacity)).first,
-    );
-    expect(opacity.opacity, 1);
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox());
-  });
+  // QA 162: the hand-over comes when the motion ends (4200 ms of the 5000 ms
+  // timeline), not after the stillness that closes it.
+  testWidgets(
+    'the timeline hands over once its motion ends and holds the brand',
+    (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(host(done: () => calls++));
+      await tester.pump(); // Establish the ticker frame before advancing time.
+      await tester.pump(const Duration(milliseconds: 4150));
+      expect(calls, 0);
+      await tester.pump(const Duration(milliseconds: 60));
+      await tester.pump(
+        const Duration(milliseconds: 16),
+      ); // Completion is delivered on the next frame.
+      expect(calls, 1);
+      await tester.pump(const Duration(seconds: 5));
+      expect(calls, 1);
+      expect(find.text('Đang kết nối…'), findsOneWidget);
+      expect(find.text('technical message must not leak'), findsNothing);
+      // Only the owner's logo layers (QA 133), nothing else.
+      expect(find.byKey(const ValueKey('splash-logo-metal')), findsOneWidget);
+      expect(find.byType(LinearProgressIndicator), findsNothing);
+      final name = find.byKey(const ValueKey('pinova-wordmark'));
+      final opacity = tester.widget<Opacity>(
+        find.ancestor(of: name, matching: find.byType(Opacity)).first,
+      );
+      expect(opacity.opacity, 1);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'reduced motion fades for 1s rather than completing immediately',

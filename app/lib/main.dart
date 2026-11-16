@@ -8,6 +8,7 @@ import 'dart:ui';
 
 import 'app.dart';
 import 'data/services/notification_service.dart';
+import 'core/services/startup_clock.dart';
 import 'core/constants/app_constants.dart';
 import 'core/widgets/app_popup.dart';
 import 'core/services/app_error_reporter.dart';
@@ -84,6 +85,7 @@ void main() async {
       // Binding and runApp must share the same zone. Initializing the binding
       // outside runZonedGuarded caused Flutter's startup "Zone mismatch".
       WidgetsFlutterBinding.ensureInitialized();
+      StartupClock.start(); // QA 162
       // Khởi động Firebase trong nền (AuthGate sẽ await phối hợp hiển thị splash/retry)
       // Kiểm tra session tracking chưa kết thúc (crash recovery)
       // Khởi tạo Notification Service trong nền (không chặn first frame)

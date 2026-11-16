@@ -26,6 +26,10 @@ class BatteryHealth {
     this.full = true,
     this.uncertaintyPct,
     this.baseline,
+    this.lowPct,
+    this.highPct,
+    this.trendWeak = const [],
+    this.charges = const [],
   });
 
   final double? nominalCapacityWh;
@@ -44,6 +48,22 @@ class BatteryHealth {
 
   /// QA 152: the first charges against the latest ones.
   final HealthBaseline? baseline;
+
+  /// QA 162: the range the capacity left most likely sits in (% of rated).
+  final double? lowPct;
+  final double? highPct;
+
+  /// QA 162: per trend point, read long after a full charge (fainter).
+  final List<bool> trendWeak;
+
+  /// QA 162: the latest charges, each with why it counts or not (Pro/Ultra).
+  final List<HealthCharge> charges;
+
+  /// The test was done in the last 90 days (it then counts double).
+  bool get testRecent {
+    final at = test?.at;
+    return at != null && DateTime.now().difference(at).inDays <= 90;
+  }
 
   static BatteryHealth fromMap(Map<String, dynamic> map) => BatteryHealth(
     nominalCapacityWh: (map['nominalCapacityWh'] as num?)?.toDouble(),
@@ -65,7 +85,160 @@ class BatteryHealth {
       _ => null,
     },
     baseline: HealthBaseline.fromMap(map['baseline']),
+    lowPct: switch (map['spread']) {
+      {'lowPct': final num v} => v.toDouble(),
+      _ => null,
+    },
+    highPct: switch (map['spread']) {
+      {'highPct': final num v} => v.toDouble(),
+      _ => null,
+    },
+    trendWeak: [
+      for (final p in (map['trend'] as List? ?? const []))
+        if (p is Map && p['sohPct'] is num) p['trust'] == 'low',
+    ],
+    charges: [
+      for (final c in (map['charges'] as List? ?? const []))
+        ?HealthCharge.fromMap(c),
+    ],
   );
+}
+
+/// One charge in "Từng lần sạc" (QA 162, like a battery app's session list).
+class HealthCharge {
+  const HealthCharge({
+    required this.startPct,
+    required this.endPct,
+    required this.used,
+    this.at,
+    this.sohPct,
+    this.trust,
+    this.reason,
+    this.test = false,
+  });
+
+  final DateTime? at;
+  final double startPct;
+  final double endPct;
+  final double? sohPct;
+  final String? trust;
+  final bool used;
+
+  /// short | outlier | censored | old (when not used).
+  final String? reason;
+  final bool test;
+
+  /// Why this charge is not in the result, or how much it was trusted.
+  String get note => switch ((used, reason)) {
+    (false, 'short') => 'Quá ngắn để tính',
+    (false, 'outlier') => 'Lệch nhiều so với các lần khác, không tính',
+    (false, 'censored') => 'Sạc đầy không có tín hiệu đầy, không tính',
+    (false, 'old') => 'Đã cũ, không tính',
+    _ when test => 'Bài kiểm tra pin',
+    _ when trust == 'high' => 'Ngay sau lần sạc đầy, tin cậy nhất',
+    _ when trust == 'low' => 'Lâu chưa sạc đầy, đồng hồ ít tin cậy',
+    _ => 'Đã tính',
+  };
+
+  static HealthCharge? fromMap(Object? raw) {
+    if (raw is! Map || raw['startPct'] is! num || raw['endPct'] is! num) {
+      return null;
+    }
+    return HealthCharge(
+      at: DateTime.tryParse(raw['at']?.toString() ?? '')?.toLocal(),
+      startPct: (raw['startPct'] as num).toDouble(),
+      endPct: (raw['endPct'] as num).toDouble(),
+      sohPct: (raw['sohPct'] as num?)?.toDouble(),
+      trust: raw['trust']?.toString(),
+      used: raw['used'] == true,
+      reason: raw['reason']?.toString(),
+      test: raw['test'] == true,
+    );
+  }
+}
+
+/// QA 162: one reading of the capacity left for every place that shows it
+/// (Sức khỏe pin, the Overview card and strip, the Utilities tile): the
+/// same number, label and basis everywhere. The server's estimate already
+/// includes the guided test (it counts double while recent); a figure above
+/// the rating is shown as measured (owner's choice).
+class HealthVerdict {
+  const HealthVerdict({
+    required this.pct,
+    required this.label,
+    required this.detail,
+    required this.basis,
+    required this.short,
+    this.capacityText,
+  });
+
+  /// % of the rated capacity, as measured (may pass 100).
+  final double pct;
+
+  /// "Pin còn như mới" … "Pin chai nhiều, nên đưa xe đi kiểm tra".
+  final String label;
+
+  /// "Đã chai khoảng 6%" / "Chưa thấy chai rõ (trong sai số ±2%)".
+  final String detail;
+
+  /// "Dựa trên 8 lần sạc · sai số ±2% · có bài kiểm tra".
+  final String basis;
+
+  /// "8 lần sạc · ±2%" for small places.
+  final String short;
+
+  /// "khoảng 2 330–2 420 Wh / 2 400 Wh danh định".
+  final String? capacityText;
+
+  static double _tens(double wh) => (wh / 10).round() * 10.0;
+
+  static HealthVerdict? of(BatteryHealth health) {
+    final v = health.estimate;
+    final nominal = health.nominalCapacityWh;
+    if (v == null || nominal == null) return null;
+    final pct = v.sohPct;
+    final uncertainty = health.uncertaintyPct;
+    final margin = uncertainty ?? 3;
+    final label = pct >= 100 - margin
+        ? 'Pin còn như mới'
+        : pct >= 80
+        ? 'Pin còn tốt'
+        : pct >= 70
+        ? 'Pin đã chai, nên theo dõi'
+        : 'Pin chai nhiều, nên đưa xe đi kiểm tra';
+    final fade = 100 - pct;
+    final detail = pct > 100
+        ? 'Bằng hoặc hơn danh định. Pin mới thường đo được hơn danh định '
+              'một chút.'
+        : fade > margin
+        ? 'Đã chai khoảng ${fade.round()}%'
+        : 'Chưa thấy chai rõ (trong sai số ±${margin.round().clamp(1, 99)}%)';
+    final n = v.samples ?? 0;
+    final plusMinus = uncertainty == null
+        ? null
+        : '±${uncertainty.round().clamp(1, 99)}%';
+    final basis = [
+      'Dựa trên $n lần sạc',
+      if (plusMinus != null) 'sai số $plusMinus',
+      if (health.testRecent) 'có bài kiểm tra',
+    ].join(' · ');
+    final short = ['$n lần sạc', ?plusMinus].join(' · ');
+    final low = health.lowPct, high = health.highPct;
+    final capacityText = low != null && high != null && high > low
+        ? 'khoảng ${groupThousands(_tens(nominal * low / 100))}–'
+              '${groupThousands(_tens(nominal * high / 100))} Wh / '
+              '${groupThousands(nominal)} Wh danh định'
+        : 'khoảng ${groupThousands(v.capacityWh)} Wh / '
+              '${groupThousands(nominal)} Wh danh định';
+    return HealthVerdict(
+      pct: pct,
+      label: label,
+      detail: detail,
+      basis: basis,
+      short: short,
+      capacityText: capacityText,
+    );
+  }
 }
 
 /// How the estimate moved since the app started following this battery.
@@ -216,11 +389,10 @@ class _Body extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final best = health.test ?? health.estimate;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Hero(health: health, value: best),
+        _Hero(health: health),
         if (health.baseline case final baseline?) ...[
           const SizedBox(height: 10),
           LuxeNotice(
@@ -234,7 +406,12 @@ class _Body extends StatelessWidget {
           HealthTrendChart(
             points: health.trend,
             estimate: health.estimate?.sohPct,
+            weak: health.trendWeak,
           ),
+        ],
+        if (health.full && health.charges.isNotEmpty) ...[
+          const LuxeSectionLabel('Từng lần sạc'),
+          _ChargeList(charges: health.charges),
         ],
         const LuxeSectionLabel('Bài kiểm tra pin'),
         if (health.full)
@@ -263,8 +440,11 @@ class _Body extends StatelessWidget {
         const LuxeNotice(
           message:
               'Xe không gửi dữ liệu pin cho app, nên đây là ước tính từ điện năng '
-              'ổ Shelly đo và % bạn đọc trên đồng hồ (hiệu suất sạc khoảng 90%). '
-              'Pin mới thường 95–100%; dưới 70% nên đưa xe đi kiểm tra.',
+              'ổ Shelly đo và % bạn đọc trên đồng hồ. Mỗi lần sạc tăng từ 20% '
+              'trở lên được tính, lần ngay sau một lần sạc đầy được tin nhất, '
+              'lần lệch nhiều bị bỏ. Hiệu suất sạc giả định 90% nên con số có '
+              'thể lệch vài %; mức thay đổi theo thời gian đáng tin hơn. Sạc đầy '
+              'định kỳ giúp số chính xác hơn. Dưới 70% nên đưa xe đi kiểm tra.',
         ),
       ],
     );
@@ -272,13 +452,11 @@ class _Body extends StatelessWidget {
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.health, required this.value});
+  const _Hero({required this.health});
   final BatteryHealth health;
-  final HealthValue? value;
 
   @override
   Widget build(BuildContext context) {
-    final v = value;
     if (health.nominalCapacityWh == null) {
       return const LuxeNotice(
         icon: Icons.info_outline_rounded,
@@ -288,7 +466,8 @@ class _Hero extends StatelessWidget {
             'được sức khỏe pin.',
       );
     }
-    if (v == null) {
+    final verdict = HealthVerdict.of(health);
+    if (verdict == null) {
       // QA 143: a Free plan has no test to point to, and the estimate comes
       // from energy the Shelly outlet measured.
       return LuxeNotice(
@@ -296,15 +475,16 @@ class _Hero extends StatelessWidget {
         icon: Icons.hourglass_empty_rounded,
         color: LuxeColors.champagne,
         message: health.full
-            ? 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly, nhập % trên '
-                  'đồng hồ xe (hoặc làm bài kiểm tra bên dưới) để app ước tính.'
-            : 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly, nhập % trên '
-                  'đồng hồ xe để app ước tính.',
+            ? 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly (tăng từ 20% trở '
+                  'lên), nhập % trên đồng hồ xe hoặc làm bài kiểm tra bên dưới '
+                  'để app ước tính.'
+            : 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly (tăng từ 20% trở '
+                  'lên), nhập % trên đồng hồ xe để app ước tính.',
       );
     }
-    final fade = (100 - v.sohPct).clamp(0, 100);
-    // QA 152: the same glass as every other card (it was a flat dark box),
-    // raised because it is what this screen is about.
+    // QA 152: the same glass as every other card, raised because it is what
+    // this screen is about. QA 162: the measured % (it may pass 100), the
+    // ring full at 100.
     return LuxeGlass(
       raised: true,
       radius: 26,
@@ -312,11 +492,11 @@ class _Hero extends StatelessWidget {
       child: Row(
         children: [
           LuxeRing(
-            value: (v.sohPct / 100).clamp(0.0, 1.0),
+            value: (verdict.pct / 100).clamp(0.0, 1.0),
             size: 104,
             color: LuxeColors.platinum,
             child: Text(
-              '${v.sohPct.round()}%',
+              '${verdict.pct.round()}%',
               key: const ValueKey('health-soh'),
               style: const TextStyle(
                 color: LuxeColors.text,
@@ -331,35 +511,67 @@ class _Hero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  fade < 1
-                      ? 'Pin gần như mới'
-                      : 'Đã chai khoảng ${fade.round()}%',
+                  verdict.label,
+                  key: const ValueKey('health-label'),
                   style: LuxeText.item,
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Còn khoảng ${groupThousands(v.capacityWh)} Wh / '
-                  '${groupThousands(health.nominalCapacityWh!)} Wh danh định',
+                  verdict.detail,
+                  key: const ValueKey('health-detail'),
                   style: LuxeText.caption,
                 ),
+                if (verdict.capacityText case final capacity?) ...[
+                  const SizedBox(height: 2),
+                  Text('Còn $capacity', style: LuxeText.caption),
+                ],
                 const SizedBox(height: 8),
-                LuxeTag(
-                  health.test != null
-                      ? 'Từ bài kiểm tra'
-                      // QA 152: the count and how far the number may be
-                      // off. "Tin cậy cao" stood next to charges that
-                      // differed by 15%.
-                      : health.uncertaintyPct == null
-                      ? '${v.confidenceLabel} · ${v.samples ?? 0} lần sạc'
-                      : '${v.samples ?? 0} lần sạc · sai số khoảng '
-                            '±${health.uncertaintyPct!.round().clamp(1, 99)}%',
-                  color: LuxeColors.platinumMid,
-                ),
+                LuxeTag(verdict.basis, color: LuxeColors.platinumMid),
               ],
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// QA 162: the latest charges, newest first, each with its own figure and
+/// why it counts or not.
+class _ChargeList extends StatelessWidget {
+  const _ChargeList({required this.charges});
+  final List<HealthCharge> charges;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = charges.reversed.take(10).toList();
+    String date(DateTime? d) => d == null ? '' : '${d.day}/${d.month} · ';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LuxeSettingsGroup(
+          children: [
+            for (final c in shown)
+              LuxeSettingsRow(
+                key: ValueKey('health-charge-${c.at?.millisecondsSinceEpoch}'),
+                icon: c.used
+                    ? Icons.check_circle_rounded
+                    : Icons.do_not_disturb_on_rounded,
+                accent: c.used ? LuxeColors.platinum : LuxeColors.dim,
+                title:
+                    '${date(c.at)}${c.startPct.round()}% → ${c.endPct.round()}%'
+                    '${c.sohPct == null ? '' : ' · ${c.sohPct!.round()}%'}',
+                subtitle: c.note,
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Số sau mỗi lần sạc là dung lượng lần đó cho ra. Đồng hồ xe trôi dần '
+          'giữa hai lần sạc đầy, nên lần ngay sau sạc đầy được tin nhất.',
+          style: LuxeText.caption,
+        ),
+      ],
     );
   }
 }

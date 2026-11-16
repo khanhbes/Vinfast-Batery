@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/services/app_connection.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
+import 'package:vinfast_battery/core/widgets/battery_bot_mascot.dart';
 import 'package:vinfast_battery/core/widgets/error_state.dart';
 import 'package:vinfast_battery/core/widgets/luxe_kit.dart';
 import 'package:vinfast_battery/core/widgets/offline_dock.dart';
@@ -161,6 +162,9 @@ void main() {
       expect(find.textContaining('Lý do: hết thời gian chờ.'), findsOneWidget);
       expect(find.text('Thử lại'), findsOneWidget);
       expect(find.text('Cài đặt mạng'), findsNothing);
+      // QA 162: Pinova Bot tells it.
+      expect(find.byType(BatteryBotMascot), findsOneWidget);
+      expect(find.textContaining('Mình chưa gọi được máy chủ'), findsOneWidget);
       // The page keeps its content, marked as old.
       expect(find.byKey(const ValueKey('offline-stamp')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -199,6 +203,7 @@ void main() {
     AppConnection.instance.sawServer();
     await settle(tester);
     expect(find.text('Đã kết nối lại'), findsOneWidget);
+    expect(find.byType(BatteryBotMascot), findsOneWidget);
     await tester.pump(OfflineDock.recoveredFor);
     await settle(tester);
     expect(find.text('Đã kết nối lại'), findsNothing);

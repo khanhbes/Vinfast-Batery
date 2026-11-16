@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../services/startup_clock.dart';
 import 'pinova_brand.dart';
 import '../../core/theme/luxe_theme.dart';
 
@@ -17,6 +18,10 @@ import '../../core/theme/luxe_theme.dart';
 /// and the drawn "PINOVA" wordmark settles (QA 133, 20/10/2026).
 /// After the timeline the mark keeps a slow, subtle breath while AuthGate
 /// resolves startup, so a hold never looks frozen or needs a spinner.
+/// QA 162: the motion itself ends at 4200 ms (the emerald charge); the
+/// splash says it is done then ([motionEnd]) instead of after the 800 ms of
+/// stillness that close the timeline, and AuthGate loads the profile while
+/// the mark is drawn.
 /// ============================================================================
 
 /// Finite PLATINUM animation; AuthGate owns startup work and navigation.
@@ -29,6 +34,10 @@ class BootstrapSplash extends StatefulWidget {
   });
   static const background = Color(0xFF050506);
   static const duration = Duration(milliseconds: 5000);
+
+  /// Where the last movement ends on the timeline (the charge, 0.60–0.84):
+  /// [onFinished] fires here, 4200 ms in.
+  static const motionEnd = 0.84;
 
   /// Exit used by route owners when the splash hands over to the app: the
   /// mark drifts forward while it fades, the destination settles in beneath.
@@ -74,6 +83,7 @@ class _BootstrapSplashState extends State<BootstrapSplash>
   Timer? _slowTimer;
 
   bool _hasFiredHapticFill = false;
+  bool _announced = false;
   bool _hasFiredHapticGlint = false;
 
   Animation<double> _interval(
@@ -176,14 +186,26 @@ class _BootstrapSplashState extends State<BootstrapSplash>
           if (status == AnimationStatus.completed && !_finished) {
             _finished = true;
             _startBreath();
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) widget.onFinished?.call();
-            });
+            // Reduced motion holds at 0.81 and never reaches motionEnd.
+            _announce();
           }
         });
     _ctrl.addListener(_handleMilestoneHaptics);
+    _ctrl.addListener(() {
+      if (_ctrl.value >= BootstrapSplash.motionEnd) _announce();
+    });
     _slowTimer = Timer(const Duration(seconds: 8), () {
       if (mounted) setState(() => _slow = true);
+    });
+  }
+
+  /// Once: the brand is fully drawn, the app may take over.
+  void _announce() {
+    if (_announced) return;
+    _announced = true;
+    StartupClock.mark('splash drawn');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onFinished?.call();
     });
   }
 

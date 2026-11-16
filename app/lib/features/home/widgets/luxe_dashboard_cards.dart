@@ -320,7 +320,8 @@ class LuxeStatsStrip extends ConsumerWidget {
     final health = allowed && v != null
         ? ref.watch(batteryHealthProvider(v.vehicleId)).valueOrNull
         : null;
-    final capacity = (health?.test ?? health?.estimate)?.sohPct;
+    // QA 162: the same reading as Sức khỏe pin (as measured, may pass 100).
+    final capacity = health == null ? null : HealthVerdict.of(health)?.pct;
     final cells = [
       (
         Icons.speed_rounded,
@@ -333,11 +334,7 @@ class LuxeStatsStrip extends ConsumerWidget {
         'km / 1% pin',
       ),
       capacity != null
-          ? (
-              Icons.battery_std_rounded,
-              '${capacity.clamp(0, 100).round()}%',
-              'dung lượng',
-            )
+          ? (Icons.battery_std_rounded, '${capacity.round()}%', 'dung lượng')
           : (
               Icons.battery_std_rounded,
               v?.hasSohData == true ? '${v!.stateOfHealth.round()}%' : '—',
@@ -444,7 +441,7 @@ class LuxeBatteryCapacityCard extends ConsumerWidget {
         caption: 'Chưa tải được ước tính. Chạm để xem chi tiết.',
       ),
       data: (health) {
-        final best = health.test ?? health.estimate;
+        final verdict = HealthVerdict.of(health);
         if (health.nominalCapacityWh == null) {
           return const _CapacityShell(
             value: null,
@@ -452,26 +449,20 @@ class LuxeBatteryCapacityCard extends ConsumerWidget {
             caption: 'Xe chưa có dung lượng danh định trong danh mục.',
           );
         }
-        if (best == null) {
+        if (verdict == null) {
           return const _CapacityShell(
             value: null,
             title: 'Chưa đủ dữ liệu',
             caption: 'Sau mỗi lần sạc, nhập % trên đồng hồ xe để app ước tính.',
           );
         }
-        final pct = best.sohPct.clamp(0.0, 100.0);
+        // QA 162: one label and basis with Sức khỏe pin ("tin cậy cao"
+        // only counted charges).
         return _CapacityShell(
-          value: pct,
-          title: pct >= 95
-              ? 'Pin gần như mới'
-              : pct >= 80
-              ? 'Pin còn tốt'
-              : pct >= 70
-              ? 'Pin đã chai, nên theo dõi'
-              : 'Pin chai nhiều, nên kiểm tra',
+          value: verdict.pct,
+          title: verdict.label,
           caption:
-              'Còn khoảng ${pct.round()}% dung lượng · '
-              '${health.test != null ? 'theo bài kiểm tra' : '${best.confidenceLabel.toLowerCase()}, ${best.samples ?? 0} lần sạc'}',
+              'Còn khoảng ${verdict.pct.round()}% dung lượng · ${verdict.short}',
         );
       },
     );
@@ -517,7 +508,7 @@ class _CapacityShell extends StatelessWidget {
                     : const Duration(milliseconds: 1300),
                 curve: LuxeMotion.enter,
                 builder: (context, t, _) => CustomPaint(
-                  painter: _RingPainter(t),
+                  painter: _RingPainter(t.clamp(0.0, 1.0)),
                   child: Center(
                     child: Text(
                       v == null ? '—' : '${(t * 100).round()}%',

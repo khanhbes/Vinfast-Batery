@@ -8,6 +8,7 @@ import '../services/app_connection.dart';
 import '../services/system_settings.dart';
 import '../theme/luxe_theme.dart';
 import 'app_popup.dart';
+import 'battery_bot_mascot.dart';
 import 'luxe_connection_notice.dart' show ConnectionIssue;
 
 /// QA 161 (owner's choice, 16/11/2026): one way to be offline, on every
@@ -229,18 +230,18 @@ class _OfflineCard extends StatelessWidget {
     final (title, detail, icon) = syncPending
         ? (
             'Đang chờ đồng bộ thông tin xe',
-            'Thông tin bạn khai sẽ được gửi khi máy chủ nhận.',
+            'Mình sẽ gửi thông tin bạn đã khai ngay khi máy chủ nhận.',
             Icons.cloud_upload_rounded,
           )
         : internet
         ? (
             'Mất kết nối Internet',
-            'Bạn vẫn xem được dữ liệu đã lưu trên máy.',
+            'Mình vẫn giữ dữ liệu đã lưu cho bạn xem. Có mạng là mình tự kết nối lại.',
             Icons.wifi_off_rounded,
           )
         : (
             'Chưa liên lạc được máy chủ',
-            'Vẫn xem được dữ liệu đã lưu. Bật sạc tạm khóa, tắt sạc vẫn gửi được.',
+            'Mình chưa gọi được máy chủ. Bạn vẫn xem được dữ liệu đã lưu; bật sạc tạm khóa, tắt sạc vẫn gửi được.',
             Icons.cloud_off_rounded,
           );
     final reason = link.reason;
@@ -271,7 +272,16 @@ class _OfflineCard extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _CloudOrb(icon: icon, size: 40),
+                      // QA 162: Pinova Bot tells it (owner's choice).
+                      _BotBadge(
+                        mood: retrying
+                            ? BatteryBotMood.thinking
+                            : syncPending
+                            ? BatteryBotMood.idle
+                            : BatteryBotMood.worried,
+                        icon: icon,
+                        size: 44,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Padding(
@@ -412,11 +422,7 @@ class _OfflinePill extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.cloud_off_rounded,
-                    size: 18,
-                    color: LuxeColors.champagne,
-                  ),
+                  const _BotBadge(mood: BatteryBotMood.worried, size: 24),
                   const SizedBox(width: 8),
                   Flexible(
                     child: Text(
@@ -464,11 +470,7 @@ class _RecoveredPill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
-                Icons.cloud_done_rounded,
-                size: 18,
-                color: LuxeColors.emerald,
-              ),
+              const _BotBadge(mood: BatteryBotMood.celebrating, size: 24),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
@@ -489,25 +491,64 @@ class _RecoveredPill extends StatelessWidget {
   );
 }
 
-/// The offline cloud: a dark well with a champagne ring (a caution, not
-/// an error: nothing is broken on the phone).
-class _CloudOrb extends StatelessWidget {
-  const _CloudOrb({required this.icon, required this.size});
+/// QA 162 (owner's choice): Pinova Bot on the offline notices, its face
+/// for the state (worried, thinking while a retry runs, celebrating when
+/// back, sorry on an empty page). [icon], when set, sits on a small
+/// champagne mark at its corner so what is wrong still reads at a glance.
+/// The face only moves on a change of mood (one reaction) or while
+/// thinking, which is a real retry.
+class _BotBadge extends StatelessWidget {
+  const _BotBadge({required this.mood, required this.size, this.icon});
 
-  final IconData icon;
+  final BatteryBotMood mood;
   final double size;
+  final IconData? icon;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      color: LuxeColors.surface,
-      border: Border.all(color: LuxeColors.champagne.withValues(alpha: 0.4)),
-    ),
-    child: Icon(icon, size: size * 0.48, color: LuxeColors.champagne),
-  );
+  Widget build(BuildContext context) {
+    final mark = icon;
+    return Semantics(
+      label: 'Pinova Bot',
+      child: SizedBox.square(
+        dimension: size,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: BatteryBotMascot(
+                displayMode: BatteryBotDisplayMode.avatar,
+                size: BatteryBotSize.avatar,
+                customWidth: size,
+                mood: mood,
+                enableFloating: false,
+              ),
+            ),
+            if (mark != null)
+              Positioned(
+                right: -3,
+                bottom: -3,
+                child: Container(
+                  width: size * 0.42,
+                  height: size * 0.42,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: LuxeColors.surface,
+                    border: Border.all(
+                      color: LuxeColors.champagne.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Icon(
+                    mark,
+                    size: size * 0.24,
+                    color: LuxeColors.champagne,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// "Ngoại tuyến · cập nhật lúc 14:05" at the top of a page while offline;
@@ -598,7 +639,11 @@ class _LuxeOfflineEmptyState extends State<LuxeOfflineEmpty> {
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const _CloudOrb(icon: Icons.cloud_off_rounded, size: 60),
+        const _BotBadge(
+          mood: BatteryBotMood.sorry,
+          icon: Icons.cloud_off_rounded,
+          size: 60,
+        ),
         const SizedBox(height: 16),
         Text(
           widget.title ?? 'Chưa tải được dữ liệu',

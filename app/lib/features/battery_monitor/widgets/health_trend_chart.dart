@@ -19,13 +19,22 @@ import '../../../core/widgets/luxe_kit.dart';
 /// running median of five charges, and a dashed line marks the estimate the
 /// screen reports.
 class HealthTrendChart extends StatelessWidget {
-  const HealthTrendChart({super.key, required this.points, this.estimate});
+  const HealthTrendChart({
+    super.key,
+    required this.points,
+    this.estimate,
+    this.weak = const [],
+  });
 
   /// (when, % of rated capacity), oldest first.
   final List<(DateTime?, double)> points;
 
   /// The reported estimate (% of rated capacity), drawn as a dashed line.
   final double? estimate;
+
+  /// QA 162: per point, read when the gauge was little to be trusted (long
+  /// after a full charge): drawn fainter.
+  final List<bool> weak;
 
   /// Median of each charge with its two neighbours on either side.
   static List<double> runningMedian(List<double> values) => [
@@ -48,6 +57,10 @@ class HealthTrendChart extends StatelessWidget {
     final clean = [
       for (final p in points)
         if (p.$2.isFinite) p,
+    ];
+    final faint = [
+      for (var i = 0; i < points.length; i++)
+        if (points[i].$2.isFinite) i < weak.length && weak[i],
     ];
     if (clean.length < 2) return const SizedBox.shrink();
     final values = [for (final p in clean) p.$2];
@@ -80,6 +93,7 @@ class HealthTrendChart extends StatelessWidget {
                   textScale: scaler.scale(10) / 10,
                   estimate: estimate,
                   reveal: t,
+                  weak: faint,
                 ),
               ),
             ),
@@ -109,6 +123,7 @@ class HealthTrendChart extends StatelessWidget {
           Text(
             'Mỗi điểm là một lần sạc. Đồng hồ xe chỉ hiện số tròn nên từng '
             'điểm lệch vài %; hãy nhìn đường liền (trung vị 5 lần sạc)'
+            '${faint.contains(true) ? ', điểm mờ là lúc lâu chưa sạc đầy' : ''}'
             '${estimate == null ? '' : ', nét đứt là ước tính hiện tại'}'
             '${over ? '. Điểm rỗng là lần đo vượt 100%' : ''}.',
             key: const ValueKey('health-trend-note'),
@@ -128,9 +143,11 @@ class _TrendPainter extends CustomPainter {
     required this.textScale,
     this.estimate,
     this.reveal = 1,
+    this.weak = const [],
   });
 
   final double? estimate;
+  final List<bool> weak;
 
   /// 0–1: how much of the line is drawn.
   final double reveal;
@@ -193,7 +210,9 @@ class _TrendPainter extends CustomPainter {
         dots[i],
         3,
         Paint()
-          ..color = LuxeColors.platinumMid.withValues(alpha: 0.6)
+          ..color = LuxeColors.platinumMid.withValues(
+            alpha: i < weak.length && weak[i] ? 0.25 : 0.6,
+          )
           ..style = clipped ? PaintingStyle.stroke : PaintingStyle.fill
           ..strokeWidth = 1.4,
       );
@@ -237,5 +256,6 @@ class _TrendPainter extends CustomPainter {
       old.low != low ||
       old.high != high ||
       old.estimate != estimate ||
+      old.weak != weak ||
       old.reveal != reveal;
 }

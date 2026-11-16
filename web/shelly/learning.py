@@ -440,7 +440,7 @@ class VehicleLearningMixin:
         learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
         nominal = _float(vehicle.get("nominalCapacityWh"), 1, 1e6)
         result = charge_model.battery_health([*learned.samples, *learned.pending], nominal,
-                                             history=learned.ledger)
+                                             history=learned.ledger, now=self.clock())
         result.update({
             "vehicleId": vehicle_id,
             "vehicleSohPct": _float(vehicle.get("stateOfHealth"), 1, 120),
@@ -452,6 +452,7 @@ class VehicleLearningMixin:
             result["trend"] = []
             result["test"] = None
             result["baseline"] = None
+            result["charges"] = []
         return result
 
     def charge_assessment(self, uid: str, vehicle_id: str) -> dict:

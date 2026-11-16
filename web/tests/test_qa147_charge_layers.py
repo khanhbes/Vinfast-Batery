@@ -291,7 +291,7 @@ def test_remaining_capacity_ignores_every_layer():
                                         base=BASE, now=NOW + timedelta(days=200))
     assert updated.layer == "ai"
     assert charge_model.battery_health([*updated.samples, *updated.pending], 2400) == before
-    assert before["estimate"]["sohPct"] == 99.4 and before["estimate"]["capacityWh"] == 2385
+    assert before["estimate"]["sohPct"] == 99.0 and before["estimate"]["capacityWh"] == 2376  # QA 162
 
 
 def test_ledger_keeps_more_than_the_training_window():

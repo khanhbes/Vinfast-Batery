@@ -257,7 +257,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - `_robust_wh` là trung vị trọng số theo % đã nạp × độ mới; không kẹp min theo mẫu 100 %. Sai số hiện cho user qua `honest_mae`.
   - Tag theo dữ liệu sạc, không theo tuổi xe: `Đang học` tới khi đủ 5 lần sạc và tổng ≥ 100 %; đủ dữ liệu mà công tắc tự huấn luyện đang tắt thì `bấm Huấn luyện` hoặc `bật Tự huấn luyện`. Nút Huấn luyện vẫn chỉ Ultra; Wh/1% tự học ở mọi gói (QA 148).
   - Đồng hồ xe có lúc hụt rồi bù ở lần sau; bù lệch (`gauge_offset_pct`, `charge.shadow`) chỉ vào điểm ngắt qua lớp ở QA 147.
-  - `battery_health` (Dung lượng pin còn lại) tách khỏi mô hình: đổi cách huấn luyện không được làm số này đổi (test khóa 99,4 % / 2385 Wh). Đừng đổi nhãn/`censored` của mẫu nếu chưa xét ảnh hưởng tới nó.
+  - `battery_health` (Dung lượng pin còn lại) tách khỏi mô hình: đổi cách huấn luyện không được làm số này đổi (test khóa số; từ QA 162 là 99,0 % / 2375 Wh). Đừng đổi nhãn/`censored` của mẫu nếu chưa xét ảnh hưởng tới nó.
   - Dung lượng danh định chỉ dùng để hiển thị, tính sức khỏe pin và làm điểm xuất phát của xe chưa học; xe đã học giữ Wh/%. App đọc qua `VehicleModel.capacityWhFrom`.
 
 - **QA 147 (04/11/2026, chủ app chọn) — dự đoán % sạc nhiều lớp (`shelly/charge_ai.py`):**
@@ -354,6 +354,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Trạng thái kết nối chỉ lấy từ `AppConnection.instance` (kiểm tra `/api/ready` không kèm mã đăng nhập; `ApiService` báo `sawServer`/`missedServer`). Đừng thêm bộ kiểm tra riêng ở từng màn.
   - Báo mất kết nối chỉ bằng thẻ nổi `OfflineDock` (không dải trên cùng, không thông báo trùng trong trang); trang giữ dữ liệu với `OfflineStamp`; trang chưa có dữ liệu dùng `ErrorState`/`LuxeOfflineEmpty`. Màn mới dùng `LuxeScaffold` có tiêu đề là có nhãn.
   - Thao tác cần máy chủ gọi `OnlineGate.allows('…')` trước; Tắt sạc không bao giờ qua chốt này. Test thay `AppConnection.instance` bằng probe giả và mạng giả (`qa161_offline_test.dart`).
+- **QA 162 (16/11/2026, chủ app chọn):**
+  - Splash báo xong ở `BootstrapSplash.motionEnd` (4,2 giây), hồ sơ đọc sẵn bằng `AuthenticatedPrefetch` trong lúc vẽ logo. Đừng thêm việc chờ vào splash; việc nặng chạy sau khi vào app.
+  - Thẻ mất kết nối có mặt Pinova Bot (`_BotBadge`), Bot nói ở ngôi "mình"; mặt chỉ động khi đổi biểu cảm hoặc đang thử lại.
+  - Dung lượng pin còn lại: Wh/% gộp có trọng số (% tăng ≥ 20, độ tin đồng hồ, độ mới; bài kiểm tra ×2 trong 90 ngày; bỏ lần lệch). Mọi nơi hiển thị đi qua `HealthVerdict.of`; không viết `test ?? estimate`, không kẹp số ở 100. So cách tính bằng `web/scripts/qa162_health_replay.py` trên sổ sạc thật trước khi đổi.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

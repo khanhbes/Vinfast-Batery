@@ -35,7 +35,7 @@ class UtilitiesScreen extends ConsumerWidget {
     final health = selectedId.isEmpty
         ? null
         : ref.watch(batteryHealthProvider(selectedId)).valueOrNull;
-    final healthPct = (health?.test ?? health?.estimate)?.sohPct;
+    final healthPct = health == null ? null : HealthVerdict.of(health)?.pct;
 
     void push(Widget page) => Navigator.push(
       context,
@@ -74,7 +74,7 @@ class UtilitiesScreen extends ConsumerWidget {
                       title: 'Sức khỏe pin',
                       value: healthPct == null
                           ? 'Dung lượng còn lại và dấu hiệu chai'
-                          : 'Còn khoảng ${healthPct.clamp(0, 100).round()}% '
+                          : 'Còn khoảng ${healthPct.round()}% '
                                 'dung lượng',
                       onTap: () {
                         final id = vehicleId();

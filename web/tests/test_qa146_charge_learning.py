@@ -156,7 +156,8 @@ def test_one_odd_reading_does_not_look_like_wear():
 
 def test_remaining_capacity_is_not_touched_by_training():
     before = charge_model.battery_health(SAMPLES, 2400)
-    assert before["estimate"] == {"sohPct": 99.4, "capacityWh": 2385, "samples": 7, "confidence": "high"}
+    # QA 162: pooled by % gained and gauge trust (was the median, 99.4 %).
+    assert (before["estimate"]["sohPct"], before["estimate"]["capacityWh"]) == (99.0, 2375)
     assert before["test"] is None
     trained, _ = charge_model.train(_profile(), base_wh_per_pct=BASE_2400, now=NOW)
     after = charge_model.battery_health([*trained.samples, *trained.pending], 2400)
@@ -184,8 +185,8 @@ def test_correcting_the_capacity_only_moves_what_depends_on_it():
     # The measured Wh/% is unchanged; only the % of the nominal capacity moves.
     health_old = charge_model.battery_health(SAMPLES, 2600)["estimate"]
     health_new = charge_model.battery_health(SAMPLES, 2400)["estimate"]
-    assert health_old["capacityWh"] == health_new["capacityWh"] == 2385
-    assert health_old["sohPct"] == pytest.approx(91.7) and health_new["sohPct"] == pytest.approx(99.4)
+    assert health_old["capacityWh"] == health_new["capacityWh"] == 2375
+    assert health_old["sohPct"] == pytest.approx(91.3) and health_new["sohPct"] == pytest.approx(99.0)
 
 
 def test_the_fit_barely_depends_on_the_capacity():

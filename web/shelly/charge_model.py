@@ -397,6 +397,21 @@ HEALTH_TREND_POINTS = 40
 HEALTH_BASELINE_CHARGES = 6
 HEALTH_BASELINE_MIN_CHARGES = 12
 HEALTH_BASELINE_MIN_DAYS = 60
+# QA 162: which charges the capacity left is computed from, and how.
+HEALTH_MIN_GAIN_PCT = 20.0
+HEALTH_WINDOW_DAYS = 120
+HEALTH_WINDOW_CHARGES = 20
+HEALTH_HALF_LIFE_DAYS = 180
+HEALTH_TEST_FRESH_DAYS = 90
+HEALTH_TEST_BOOST = 2.0
+HEALTH_OUTLIER_FLOOR_PCT = 6.0
+# The gauge is read in whole %: the result is never surer than this.
+HEALTH_READING_FLOOR_PCT = 1.5
+# The least scatter assumed for one charge (owner's charges right after a
+# full one: 98.9 and 98.3; a few charges later: up to ±4).
+HEALTH_CHARGE_SCATTER_PCT = 3.0
+# Above this share of the weight left out as outliers, they widen the error.
+HEALTH_MAX_DROPPED_SHARE = 0.25
 
 
 def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
@@ -406,7 +421,8 @@ def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
 
 def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
                    efficiency: float = DEFAULT_EFFICIENCY, *,
-                   history: list[dict] | None = None) -> dict:
+                   history: list[dict] | None = None,
+                   now: datetime | None = None) -> dict:
     """% of the nominal capacity the battery still holds (QA 135).
 
     ``estimate``: from every charge with a confirmed end % (median of the
@@ -422,11 +438,21 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
     the first ones in ``history`` (the long ledger): a change over months
     does not depend on the assumed charger efficiency, which the absolute
     number does. ``trend`` uses ``history`` too when it reaches further back.
+
+    QA 162 (owner's choice): ``estimate`` is no longer the median of the
+    last ten charges. On the owner's ledger single charges gave 85 % to
+    121 %: the gauge falls behind and catches up between full charges. Each
+    charge that gained at least 20 % now counts by % gained × how far the
+    gauge could be trusted (the first charge after a full one most) × how
+    recent it is; the guided test counts double for 90 days; charges far
+    from the others are left out; the result is the pooled Wh/% of the rest.
+    ``uncertaintyPct`` comes from their scatter and the whole-% reading.
+    ``charges`` lists the latest ones with why each was or was not used.
     """
     nominal = _positive(nominal_capacity_wh)
     result: dict = {"nominalCapacityWh": nominal, "efficiency": efficiency,
                     "estimate": None, "test": None, "trend": [],
-                    "spread": None, "baseline": None}
+                    "spread": None, "baseline": None, "charges": []}
     if nominal is None:
         return result
 
@@ -437,25 +463,55 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
         [item for item in samples
          if not item.get("censored") and _positive(item.get("whPerPct"))],
         key=lambda item: str(item.get("at") or ""))
-    if exact:
-        recent = exact[-HEALTH_RECENT_SAMPLES:]
-        wh = _median([float(item["whPerPct"]) for item in recent])
-        capacity = _implied_capacity(wh, efficiency)
-        n = len(recent)
+    # QA 162: every distinct charge (the long ledger too), each with how far
+    # the gauge could be trusted when it was read.
+    merged: dict[str, dict] = {}
+    for index, item in enumerate([*(history or []), *samples]):
+        merged[str(item.get("sessionId") or f"_{index}")] = item
+    charges = sorted(merged.values(), key=lambda item: str(item.get("at") or ""))
+    trusts = _health_trusts(charges)
+    rows = _health_rows(charges, trusts, efficiency, soh, now=now)
+    result["charges"] = [row["public"] for row in rows[-HEALTH_WINDOW_CHARGES:]]
+    used = [row for row in rows if row["public"]["used"]]
+    if used:
+        weight = sum(row["weight"] for row in used)
+        pooled = (sum(row["weight"] * row["energyWh"] for row in used)
+                  / sum(row["weight"] * row["gain"] for row in used))
+        capacity = _implied_capacity(pooled, efficiency)
+        middle = soh(capacity)
+        effective = weight ** 2 / sum(row["weight"] ** 2 for row in used)
+        scatter = math.sqrt(sum(row["weight"] * (row["soh"] - middle) ** 2 for row in used) / weight)
+        # Many charges far from the rest: the gauge is not settled, and the
+        # result is not as sure as the ones left make it look.
+        dropped = [row for row in rows if row.get("dropped")]
+        dropped_weight = sum(row["dropped"] for row in dropped)
+        if dropped_weight > HEALTH_MAX_DROPPED_SHARE * (weight + dropped_weight):
+            scatter = math.sqrt(
+                (sum(row["weight"] * (row["soh"] - middle) ** 2 for row in used)
+                 + sum(row["dropped"] * (row["soh"] - middle) ** 2 for row in dropped))
+                / (weight + dropped_weight))
+        # A few charges that happen to agree say little: one charge alone is
+        # never taken as closer than HEALTH_CHARGE_SCATTER_PCT.
+        per_charge = max(scatter, HEALTH_CHARGE_SCATTER_PCT)
+        uncertainty = math.sqrt((per_charge / math.sqrt(effective)) ** 2
+                                + HEALTH_READING_FLOOR_PCT ** 2)
         result["estimate"] = {
-            "sohPct": soh(capacity), "capacityWh": round(capacity),
-            "samples": n, "confidence": "high" if n >= 6 else "medium" if n >= 3 else "low",
+            "sohPct": middle, "capacityWh": round(capacity),
+            "samples": len(used), "effectiveCharges": round(effective, 1),
+            "confidence": ("high" if uncertainty <= 2.5 and effective >= 3
+                           else "medium" if uncertainty <= 4 and effective >= 1.5
+                           else "low"),
+            "method": "pooled-trust",
         }
-        values = [soh(_implied_capacity(float(item["whPerPct"]), efficiency)) for item in recent]
-        middle = _median(values)
-        scatter = 1.4826 * _median([abs(value - middle) for value in values])
         result["spread"] = {
-            # Typical distance of one charge from the middle, in SoH points.
+            # Typical distance of one charge from the result, in SoH points.
             "perChargePct": round(scatter, 1),
-            # How far the median itself may be off (standard error).
-            "uncertaintyPct": round(1.2533 * scatter / math.sqrt(n), 1),
-            "lowPct": min(values), "highPct": max(values),
+            # How far the result itself may be off.
+            "uncertaintyPct": round(uncertainty, 1),
+            "lowPct": round(middle - uncertainty, 1),
+            "highPct": round(middle + uncertainty, 1),
         }
+    if exact:
         seen = {str(item.get("sessionId") or "") for item in exact}
         long = sorted(
             [*exact, *[item for item in (history or [])
@@ -463,7 +519,9 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
                        and str(item.get("sessionId") or "") not in seen]],
             key=lambda item: str(item.get("at") or ""))
         result["trend"] = [
-            {"at": item.get("at"), "sohPct": soh(_implied_capacity(float(item["whPerPct"]), efficiency))}
+            {"at": item.get("at"),
+             "sohPct": soh(_implied_capacity(float(item["whPerPct"]), efficiency)),
+             "trust": trusts.get(str(item.get("sessionId") or ""), "low")}
             for item in long[-(HEALTH_TREND_POINTS if history else 12):]
         ]
         result["baseline"] = _health_baseline(long, soh, efficiency)
@@ -479,6 +537,110 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
                           "startPct": start, "energyWh": round(float(last["energyWh"])),
                           "at": last.get("at"), "sessionId": last.get("sessionId")}
     return result
+
+
+def _health_anchor(item: dict) -> bool:
+    """A charge that ended full: the gauge is right again after it."""
+    return (item.get("labelSource") == "taper_full"
+            or float(item.get("actualEndPct") or 0) >= GAUGE_RESET_END_PCT)
+
+
+def _health_trusts(charges: list[dict]) -> dict[str, str]:
+    """How far the gauge could be trusted at each charge (QA 158 levels): the
+    stored level when there is one, else from its place after the last full
+    charge (the first one after it high, the next two medium, then low; low
+    before any full charge)."""
+    trusts: dict[str, str] = {}
+    since_full: int | None = None
+    for item in charges:
+        stored = item.get("trust")
+        if stored in TRUST_WEIGHT:
+            level = stored
+        elif since_full is None:
+            level = "low"
+        elif since_full < TRUST_LIMITS["highSessions"]:
+            level = "high"
+        elif since_full < TRUST_LIMITS["mediumSessions"]:
+            level = "medium"
+        else:
+            level = "low"
+        trusts[str(item.get("sessionId") or "")] = level
+        if _health_anchor(item):
+            since_full = 0
+        elif since_full is not None:
+            since_full += 1
+    return trusts
+
+
+def _health_rows(charges: list[dict], trusts: dict[str, str], efficiency: float,
+                 soh, *, now: datetime | None) -> list[dict]:
+    """Each charge with its weight and why it is (not) part of the estimate."""
+    dated = [_parse_at(item.get("at")) for item in charges]
+    latest = now or max((at for at in dated if at is not None), default=None)
+    rows: list[dict] = []
+    for item, at in zip(charges, dated):
+        start = float(item.get("startPct") or 0)
+        energy = _positive(item.get("energyWh"))
+        stored = _positive(item.get("whPerPct"))
+        if item.get("actualEndPct") is None and stored and energy:
+            end = start + energy / stored  # an older record without its end %
+        else:
+            end = float(item.get("actualEndPct") or 0)
+        gain = end - start
+        test = (item.get("labelSource") == "taper_full"
+                and start <= HEALTH_TEST_MAX_START_PCT)
+        trust = "high" if test else trusts.get(str(item.get("sessionId") or ""), "low")
+        age = (latest - at).total_seconds() / 86400 if latest and at else 0.0
+        value = (soh(_implied_capacity(energy / gain, efficiency))
+                 if energy and gain > 0 else None)
+        if item.get("censored") and item.get("labelSource") != "taper_full":
+            reason = "censored"
+        elif value is None or gain < HEALTH_MIN_GAIN_PCT:
+            reason = "short"
+        elif age > HEALTH_WINDOW_DAYS:
+            reason = "old"
+        else:
+            reason = None
+        weight = 0.0
+        if reason is None:
+            weight = gain * TRUST_WEIGHT[trust] * 0.5 ** (max(0.0, age) / HEALTH_HALF_LIFE_DAYS)
+            if test and age <= HEALTH_TEST_FRESH_DAYS:
+                weight *= HEALTH_TEST_BOOST
+        rows.append({
+            "weight": weight, "gain": gain, "energyWh": energy or 0.0, "soh": value,
+            "public": {"at": item.get("at"), "startPct": start, "endPct": end,
+                       "sohPct": value, "trust": trust, "test": test,
+                       "used": reason is None, "reason": reason},
+        })
+    # Only the latest charges count, then the ones far from the rest leave.
+    eligible = [row for row in rows if row["public"]["used"]]
+    for row in eligible[:-HEALTH_WINDOW_CHARGES]:
+        row["public"].update(used=False, reason="old")
+        row["weight"] = 0.0
+    eligible = eligible[-HEALTH_WINDOW_CHARGES:]
+    if len(eligible) >= 3:
+        middle = _weighted_median([(row["soh"], row["weight"]) for row in eligible])
+        mad = _weighted_median([(abs(row["soh"] - middle), row["weight"]) for row in eligible])
+        limit = max(3 * 1.4826 * mad, HEALTH_OUTLIER_FLOOR_PCT)
+        for row in eligible:
+            if abs(row["soh"] - middle) > limit:
+                row["public"].update(used=False, reason="outlier")
+                row["dropped"] = row["weight"]
+                row["weight"] = 0.0
+    return rows
+
+
+def _weighted_median(pairs: list[tuple[float, float]]) -> float:
+    pairs = sorted((value, weight) for value, weight in pairs if weight > 0)
+    if not pairs:
+        return 0.0
+    half = sum(weight for _, weight in pairs) / 2
+    running = 0.0
+    for value, weight in pairs:
+        running += weight
+        if running >= half:
+            return value
+    return pairs[-1][0]
 
 
 def _health_baseline(charges: list[dict], soh, efficiency: float) -> dict | None:

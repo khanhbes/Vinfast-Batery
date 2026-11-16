@@ -181,7 +181,7 @@ def test_a_first_training_worse_than_the_catalog_keeps_the_catalog():
 
 def test_health_reads_none_of_this():
     result = charge_model.battery_health(SAMPLES, 2400)
-    assert result["estimate"]["sohPct"] == 99.4 and result["estimate"]["capacityWh"] == 2385
+    assert result["estimate"]["sohPct"] == 99.0 and result["estimate"]["capacityWh"] == 2376  # QA 162
 
 
 # ── capacity ───────────────────────────────────────────────────────────────
