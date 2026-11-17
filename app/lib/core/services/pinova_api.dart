@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -112,7 +113,13 @@ class PinovaApi {
     Map<String, dynamic> decoded;
     try {
       decoded = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-    } on Object {
+    } on Object catch (error) {
+      // QA 164: what failed (type and position only, never the body).
+      debugPrint(
+        '[PinovaApi] ${uri.path} ${response.statusCode} unreadable: '
+        '${error.runtimeType}'
+        '${error is FormatException ? ' @${error.offset}: ${error.message}' : ''}',
+      );
       throw PinovaApiException(
         'http${response.statusCode}',
         status: response.statusCode,

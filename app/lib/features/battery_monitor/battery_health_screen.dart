@@ -500,7 +500,14 @@ final batteryHealthProvider = FutureProvider.autoDispose
       final data = await PinovaApi().get(
         '/api/learning/${Uri.encodeComponent(vehicleId)}/health',
       );
-      return BatteryHealth.fromMap(data);
+      try {
+        return BatteryHealth.fromMap(data);
+      } on Object catch (error, stack) {
+        // QA 164: a reading the app cannot read is logged (type and place).
+        debugPrint('[BatteryHealth] unreadable: $error');
+        debugPrint('$stack');
+        rethrow;
+      }
     });
 
 /// % pin chai (QA 135, Pro): how much of its rated capacity the battery
