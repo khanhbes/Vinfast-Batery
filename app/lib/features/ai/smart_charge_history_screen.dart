@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -1846,8 +1847,12 @@ class _DetailState extends State<SmartChargeSessionDetailScreen> {
         style: TextButton.styleFrom(foregroundColor: LuxeColors.danger),
       ),
       const SizedBox(height: 10),
-      const Text(
-        'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
+      Text(
+        DevViewScope.pick(
+          context,
+          'Các chỉ số pin là ước tính.',
+          'Các chỉ số pin là ước tính, không phải dữ liệu BMS. Dung lượng khả dụng chỉ hiện khi phiên đủ chất lượng.',
+        ),
         textAlign: TextAlign.center,
         style: TextStyle(color: LuxeColors.dim, fontSize: 12.5, height: 1.45),
       ),

@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -1335,25 +1336,27 @@ class _TripResultCard extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _TripEnergyBar(start: startSoc, end: arrival, color: color),
-          const SizedBox(height: 12),
-          Text(switch (plan.source) {
-            TripKmSource.model =>
-              // Say why this differs from the Overview average (QA 129:
-              // 1.36 here vs 1.21 there read as two models).
-              'Mô hình đã huấn luyện từ ${plan.modelSamples} chuyến của bạn. '
-                  'Ở điều kiện này (khoảng ${plan.avgSpeedKmh.round()} km/h, '
-                  '${plan.payloadKg.round()} kg): '
-                  'khoảng ${(plan.kmPerPct / (TripEnergyModel.refToMean * plan.factor)).toStringAsFixed(2)} km cho 1%; '
-                  'trung bình các chuyến của bạn: '
-                  '${plan.kmPerPct.toStringAsFixed(2)} km cho 1% (số ở Tổng quan).',
-            TripKmSource.personal =>
-              'Dựa trên $personalPairs lần sạc có ODO của xe bạn '
-                  '(khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%).',
-            TripKmSource.catalog =>
-              'Hãng công bố khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1% ở 30 km/h. '
-                  'Mức hao ở trên đã tính theo tốc độ, tải và thời tiết bạn chọn nên có thể khác số này. '
-                  'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
-          }, style: LuxeText.caption.copyWith(fontSize: 12.5)),
+          // QA 165: how the figure was made, in "Chế độ develop".
+          if (DevViewScope.on(context)) const SizedBox(height: 12),
+          if (DevViewScope.on(context))
+            Text(switch (plan.source) {
+              TripKmSource.model =>
+                // Say why this differs from the Overview average (QA 129:
+                // 1.36 here vs 1.21 there read as two models).
+                'Mô hình đã huấn luyện từ ${plan.modelSamples} chuyến của bạn. '
+                    'Ở điều kiện này (khoảng ${plan.avgSpeedKmh.round()} km/h, '
+                    '${plan.payloadKg.round()} kg): '
+                    'khoảng ${(plan.kmPerPct / (TripEnergyModel.refToMean * plan.factor)).toStringAsFixed(2)} km cho 1%; '
+                    'trung bình các chuyến của bạn: '
+                    '${plan.kmPerPct.toStringAsFixed(2)} km cho 1% (số ở Tổng quan).',
+              TripKmSource.personal =>
+                'Dựa trên $personalPairs lần sạc có ODO của xe bạn '
+                    '(khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1%).',
+              TripKmSource.catalog =>
+                'Hãng công bố khoảng ${plan.kmPerPct.toStringAsFixed(2)} km cho 1% ở 30 km/h. '
+                    'Mức hao ở trên đã tính theo tốc độ, tải và thời tiết bạn chọn nên có thể khác số này. '
+                    'Ghi chuyến đi hoặc nhập ODO để AI học theo xe của bạn.',
+            }, style: LuxeText.caption.copyWith(fontSize: 12.5)),
           if (plan.suggestions.isNotEmpty) ...[
             const SizedBox(height: 14),
             const Divider(height: 1),

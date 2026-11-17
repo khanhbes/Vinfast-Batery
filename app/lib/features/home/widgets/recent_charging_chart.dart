@@ -286,7 +286,7 @@ class _EmptyWeek extends StatelessWidget {
         SizedBox(width: 12),
         Expanded(
           child: Text(
-            'Chưa có phiên sạc nào trong 7 ngày qua. Số liệu lấy từ các phiên sạc đã hoàn tất trên tài khoản.',
+            'Chưa có phiên sạc nào trong 7 ngày qua.',
             style: LuxeText.caption,
           ),
         ),

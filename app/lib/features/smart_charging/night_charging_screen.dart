@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -345,9 +346,13 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 40),
         children: [
-          const Text(
-            'Sạc đến mức vừa đủ ngay trước khi bạn thức dậy: pin không nằm '
-            'ở mức cao suốt đêm, và ổ sạc được giám sát chặt hơn ban ngày.',
+          Text(
+            DevViewScope.pick(
+              context,
+              'Sạc vừa đủ trước giờ bạn thức dậy.',
+              'Sạc đến mức vừa đủ ngay trước khi bạn thức dậy: pin không nằm '
+                  'ở mức cao suốt đêm, và ổ sạc được giám sát chặt hơn ban ngày.',
+            ),
             style: LuxeText.body,
           ),
           const SizedBox(height: 16),
@@ -486,9 +491,12 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                     key: const ValueKey('night-nudge-switch'),
                     icon: Icons.nightlight_round,
                     title: 'Gợi ý vào buổi tối',
-                    subtitle:
-                        'Từ 21 giờ, Tổng quan hỏi có hẹn sạc đêm không khi pin '
-                        'từ 75% trở xuống',
+                    subtitle: DevViewScope.pick(
+                      context,
+                      'Nhắc lúc 21 giờ khi pin thấp',
+                      'Từ 21 giờ, Tổng quan hỏi có hẹn sạc đêm không khi pin '
+                          'từ 75% trở xuống',
+                    ),
                     trailing: LuxeSwitch(
                       value: _nudge,
                       semanticLabel: 'Gợi ý sạc đêm vào buổi tối',
@@ -503,11 +511,14 @@ class _NightChargingScreenState extends ConsumerState<NightChargingScreen> {
                 key: ValueKey('night-safety'),
                 icon: Icons.shield_moon_rounded,
                 color: context.planAccent,
-                message:
-                    'Ban đêm ngắt ngay khi ổ trên 60 °C (ban ngày 75 °C), khi '
-                    'công suất cao bất thường, hoặc khi sạc kéo dài quá dự '
-                    'đoán; mọi điện thoại của tài khoản nhận cảnh báo kêu như '
-                    'báo thức. Ổ Shelly vẫn có hẹn giờ tự tắt.',
+                message: DevViewScope.pick(
+                  context,
+                  'Tự ngắt khi ổ nóng hoặc bất thường, và báo thức cho bạn.',
+                  'Ban đêm ngắt ngay khi ổ trên 60 °C (ban ngày 75 °C), khi '
+                      'công suất cao bất thường, hoặc khi sạc kéo dài quá dự '
+                      'đoán; mọi điện thoại của tài khoản nhận cảnh báo kêu như '
+                      'báo thức. Ổ Shelly vẫn có hẹn giờ tự tắt.',
+                ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),

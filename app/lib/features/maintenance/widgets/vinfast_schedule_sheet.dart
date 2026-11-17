@@ -1,3 +1,4 @@
+import '../../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -35,7 +36,10 @@ class VisitProposal {
 /// QA 155: the book plans visits (1 000 km, then every 5 000 km or 6
 /// months), not twenty separate items. This used to create one milestone
 /// per item at intervals the book does not have.
-VisitProposal proposeVisit(int currentOdo, List<MaintenanceTaskModel> existing) {
+VisitProposal proposeVisit(
+  int currentOdo,
+  List<MaintenanceTaskModel> existing,
+) {
   MaintenanceTaskModel? open;
   MaintenanceTaskModel? last;
   for (final t in existing) {
@@ -52,10 +56,7 @@ VisitProposal proposeVisit(int currentOdo, List<MaintenanceTaskModel> existing) 
   );
   final lastDate = last?.completedDate?.toLocal();
   return VisitProposal(
-    milestones: [
-      first,
-      if (first <= currentOdo) VinFastSchedule.after(first),
-    ],
+    milestones: [first, if (first <= currentOdo) VinFastSchedule.after(first)],
     currentOdo: currentOdo,
     open: open,
     suggestedDate: last == null || lastDate == null
@@ -302,10 +303,14 @@ class _VisitSheetState extends State<VisitSheet> {
               for (final w in entry.value) _WorkRow(work: w, first: first),
             ],
             const SizedBox(height: 14),
-            const Text(
-              'Theo ${VinFastSchedule.source}. Dòng xe khác có thể khác đôi '
-              'chút, hãy đối chiếu sổ của xe bạn. Sổ tay khuyên làm sớm hơn '
-              'khi thường đi đường ẩm ướt, bụi, ngập nước, dốc hoặc đường xấu.',
+            Text(
+              DevViewScope.pick(
+                context,
+                'Theo ${VinFastSchedule.source}.',
+                'Theo ${VinFastSchedule.source}. Dòng xe khác có thể khác đôi '
+                    'chút, hãy đối chiếu sổ của xe bạn. Sổ tay khuyên làm sớm hơn '
+                    'khi thường đi đường ẩm ướt, bụi, ngập nước, dốc hoặc đường xấu.',
+              ),
               style: LuxeText.caption,
             ),
             if (_error != null) ...[

@@ -1,3 +1,4 @@
+import 'core/services/dev_view.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -170,9 +171,12 @@ class _VinFastBatteryAppState extends State<VinFastBatteryApp> {
         // QA 140: a short animation once when the plan changes.
         // QA 161: one floating offline card over every page.
         child: OfflineDock(
-          child: ready
-              ? PlanTransitionHost(child: child ?? const SizedBox.shrink())
-              : child ?? const SizedBox.shrink(),
+          // QA 165: every screen reads "Chế độ develop" from here.
+          child: DevViewScope(
+            child: ready
+                ? PlanTransitionHost(child: child ?? const SizedBox.shrink())
+                : child ?? const SizedBox.shrink(),
+          ),
         ),
       ),
       home: const AuthGate(),

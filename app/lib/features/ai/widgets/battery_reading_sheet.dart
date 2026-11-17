@@ -1,3 +1,4 @@
+import '../../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -369,15 +370,19 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
             ),
           ),
           const SizedBox(height: 14),
-          const LuxeNotice(
+          LuxeNotice(
             icon: Icons.lock_outline_rounded,
-            message:
-                // QA 143: the scan has a server fallback (QA 135).
-                'Ảnh được đọc trên điện thoại. Khi máy không đọc được, một ảnh '
-                'đen trắng vùng đồng hồ được gửi lên máy chủ để AI đọc và '
-                'không được lưu lại. Hai lần nhập '
-                'có cả % và ODO (không sạc ở giữa) thành một chuyến đi để AI '
-                'học hao pin của xe bạn.',
+            message: DevViewScope.pick(
+              context,
+              // The short one still says where the photo may go.
+              'Ảnh đọc trên điện thoại; khi cần, máy chủ đọc giúp và không lưu.',
+              // QA 143: the scan has a server fallback (QA 135).
+              'Ảnh được đọc trên điện thoại. Khi máy không đọc được, một ảnh '
+                  'đen trắng vùng đồng hồ được gửi lên máy chủ để AI đọc và '
+                  'không được lưu lại. Hai lần nhập '
+                  'có cả % và ODO (không sạc ở giữa) thành một chuyến đi để AI '
+                  'học hao pin của xe bạn.',
+            ),
           ),
           const SizedBox(height: 18),
           if (_saveError != null) ...[

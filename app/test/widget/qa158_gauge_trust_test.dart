@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/services/dev_view.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
 import 'package:vinfast_battery/data/models/smart_charging_session.dart';
 import 'package:vinfast_battery/data/models/vehicle_learning_status.dart';
@@ -28,6 +29,9 @@ Future<void> _pump(WidgetTester tester, Widget child, double scale) async {
 }
 
 void main() {
+  // QA 165: these check the full ("Chế độ develop") text.
+  setUp(() => DevView.instance.debugSet(unlocked: true, on: true));
+  tearDown(() => DevView.instance.debugSet(unlocked: false, on: false));
   group('GaugeTrust', () {
     test('reads the server and says what to expect', () {
       final medium = GaugeTrust.fromJson({

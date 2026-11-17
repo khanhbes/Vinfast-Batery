@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/services/dev_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
 import 'package:vinfast_battery/data/models/personal_charging_profile.dart';
@@ -61,6 +62,9 @@ class _Service implements ServerSmartChargerService {
 }
 
 void main() {
+  // QA 165: these check the full ("Chế độ develop") text.
+  setUp(() => DevView.instance.debugSet(unlocked: true, on: true));
+  tearDown(() => DevView.instance.debugSet(unlocked: false, on: false));
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   group('tag text', () {

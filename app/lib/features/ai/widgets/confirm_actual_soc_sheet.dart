@@ -1,3 +1,4 @@
+import '../../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -396,13 +397,16 @@ class _ConfirmActualSocSheetState extends State<ConfirmActualSocSheet> {
             ],
           ],
           const SizedBox(height: 14),
-          const LuxeNotice(
+          LuxeNotice(
             icon: Icons.school_rounded,
             color: LuxeColors.steel,
-            message:
-                'Không nhập cũng được, xe vẫn tự ngắt. Xe không có kết nối pin, '
-                'nên số bạn đọc trên đồng hồ giúp lần sau ngắt sát mục tiêu '
-                'hơn. ODO giúp dự đoán quãng đường cho từng % pin.',
+            message: DevViewScope.pick(
+              context,
+              'Không bắt buộc. Nhập số trên đồng hồ để lần sau sạc chính xác hơn.',
+              'Không nhập cũng được, xe vẫn tự ngắt. Xe không có kết nối pin, '
+                  'nên số bạn đọc trên đồng hồ giúp lần sau ngắt sát mục tiêu '
+                  'hơn. ODO giúp dự đoán quãng đường cho từng % pin.',
+            ),
           ),
           const SizedBox(height: 18),
           if (_saveError != null) ...[

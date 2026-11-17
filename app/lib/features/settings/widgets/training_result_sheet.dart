@@ -1,3 +1,4 @@
+import '../../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
@@ -116,7 +117,11 @@ class TrainingResultSheet extends StatelessWidget {
             _ErrorBars(evaluation: e),
             const SizedBox(height: 14),
             Text(
-              _howTested(e),
+              // QA 165: the scoring method is for "Chế độ develop".
+              DevViewScope.on(context)
+                  ? _howTested(e)
+                  : '${e.next.n} ${e.unit == 'used' ? 'chuyến' : 'lần sạc'} '
+                        'kiểm tra',
               key: const ValueKey('training-method'),
               style: LuxeText.caption.copyWith(fontSize: 12.5),
             ),

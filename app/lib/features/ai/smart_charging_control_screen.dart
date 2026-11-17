@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -714,11 +715,14 @@ class _ScreenState extends ConsumerState<SmartChargingControlScreen>
     } else if (timedFromForecast) {
       label =
           'SẠC HẸN GIỜ ${formatChargeDuration(forecastDuration!).toUpperCase()}';
+      final dev = DevViewScope.on(context);
       note = targetLocked
-          ? 'Sạc đến % tự ngắt thuộc gói Pro. Gói Free sạc hẹn giờ đúng '
-                'thời gian dự đoán, Shelly tự ngắt.'
-          : powerSource == null || powerW == null
-          ? 'Ước tính tham khảo · Shelly tự ngắt theo hẹn giờ'
+          ? dev
+                ? 'Sạc đến % tự ngắt thuộc gói Pro. Gói Free sạc hẹn giờ đúng '
+                      'thời gian dự đoán, Shelly tự ngắt.'
+                : 'Sạc đến % tự ngắt thuộc gói Pro.'
+          : !dev || powerSource == null || powerW == null
+          ? 'Ước tính · Shelly tự ngắt theo hẹn giờ'
           : 'Ước tính theo ${powerSource.label} (khoảng ${powerW.round()} W) · '
                 'Shelly tự ngắt theo hẹn giờ';
     } else {

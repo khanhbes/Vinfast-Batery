@@ -122,3 +122,22 @@ class DevOnly extends ConsumerWidget {
       ? child
       : (fallback ?? const SizedBox.shrink());
 }
+
+/// QA 165: "Chế độ develop" for any widget with a context (no Riverpod
+/// needed): `DevViewScope.on(context)` rebuilds the caller when it changes.
+/// Without a scope (tests) it reads [DevView.instance].
+class DevViewScope extends InheritedNotifier<DevView> {
+  DevViewScope({super.key, required super.child, DevView? view})
+    : super(notifier: (view ?? DevView.instance)..load());
+
+  static bool on(BuildContext context) =>
+      context
+          .dependOnInheritedWidgetOfExactType<DevViewScope>()
+          ?.notifier
+          ?.on ??
+      DevView.instance.on;
+
+  /// The full text in "Chế độ develop", the short one otherwise.
+  static String pick(BuildContext context, String short, String full) =>
+      on(context) ? full : short;
+}

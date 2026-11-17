@@ -368,6 +368,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Mẹo trong ngày chỉ qua `TipLibrary.today` (cố định trong ngày); đừng gọi `TipPicker.pick` trực tiếp cho "Mẹo hôm nay".
   - Pinova Bot stream: `engine.chat(on_event=)`, chữ qua `VisibleText` (không lộ "GỢI Ý:" hay nhãn); kết quả `done` mới là câu chính thức. Thêm thao tác relay mới thì sửa cả APIM bicep lẫn `web/gemini_relay`.
   - Chat mới gọi `startConversation(const [])`, mở chat cũ gọi với tin của nó; ảnh gửi một lần qua `AssistantSignals.attachImage`, không lưu ảnh ở đâu cả. Giọng nói chỉ qua `VoiceBridge` (Android, không xin quyền micro).
+- **QA 165 (17/11/2026, chủ app chọn) — chữ tối giản, chi tiết ở "Chế độ develop":**
+  - Mặc định chỉ hiện số, nhãn, một câu và thao tác; giải thích cách tính, nguồn số, sai số, tham số mô hình chỉ khi `DevViewScope.on(context)` (hoặc `ref.watch(devViewProvider).on`, `DevOnly`). Câu có hai mức dùng `DevViewScope.pick(context, ngắn, đầy đủ)`.
+  - Không bao giờ ẩn sau develop: lỗi, thao tác, xác nhận, cảnh báo an toàn, quyền riêng tư, thanh toán. Bản ngắn của câu quyền riêng tư vẫn phải nói đúng (ví dụ ảnh có thể lên máy chủ).
+  - Test kiểm phần đầy đủ phải bật `DevView.instance.debugSet(unlocked: true, on: true)` và tắt lại ở tearDown.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

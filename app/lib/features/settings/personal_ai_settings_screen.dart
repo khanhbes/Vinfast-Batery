@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -322,14 +323,17 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
           children: [
-            const LuxeReveal(
+            LuxeReveal(
               child: LuxePageHeaderText(
                 eyebrow: 'AI cá nhân',
                 title: 'Mô hình riêng cho xe',
-                caption:
-                    'App tự thu thập dữ liệu sạc và chuyến đi của xe này, và tự '
-                    'cập nhật ước tính sạc khi đủ dữ liệu mới. Dữ liệu chỉ dùng '
-                    'cho xe này.',
+                caption: DevViewScope.pick(
+                  context,
+                  'App tự học từ các lần sạc và chuyến đi của xe này.',
+                  'App tự thu thập dữ liệu sạc và chuyến đi của xe này, và tự '
+                      'cập nhật ước tính sạc khi đủ dữ liệu mới. Dữ liệu chỉ dùng '
+                      'cho xe này.',
+                ),
               ),
             ),
             const SizedBox(height: 22),
@@ -366,10 +370,13 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                 LuxeNotice(
                   key: const ValueKey('learning-train-ultra'),
                   icon: Icons.workspace_premium_rounded,
-                  message:
-                      'Ước tính sạc tự học theo xe ở mọi gói. Nút Huấn luyện, '
-                      'bù lệch đồng hồ và AI nhỏ có trong gói Ultra. Dữ liệu vẫn '
-                      'của bạn: xem, tắt hoặc xóa ở cuối trang.',
+                  message: DevViewScope.pick(
+                    context,
+                    'Nút Huấn luyện có trong gói Ultra.',
+                    'Ước tính sạc tự học theo xe ở mọi gói. Nút Huấn luyện, '
+                        'bù lệch đồng hồ và AI nhỏ có trong gói Ultra. Dữ liệu vẫn '
+                        'của bạn: xem, tắt hoặc xóa ở cuối trang.',
+                  ),
                   action: PlanTag(
                     tier: PremiumFeature.learningTrain.tier,
                     semanticLabel: 'Xem gói Ultra để huấn luyện AI cá nhân',
@@ -397,10 +404,13 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                   ),
                   learned: _chargeLearned(status.charge),
                   tag: status.chargeLearningTag,
-                  sources:
-                      'Học từ % bạn đọc trên đồng hồ sau sạc và lúc app tự nhận '
-                      'biết pin đầy (công suất dưới 40 W suốt 5 phút).'
-                      '${_autoNote(status.charge) ?? ''}',
+                  sources: DevViewScope.pick(
+                    context,
+                    'Học từ % bạn đọc sau mỗi lần sạc.',
+                    'Học từ % bạn đọc trên đồng hồ sau sạc và lúc app tự nhận '
+                        'biết pin đầy (công suất dưới 40 W suốt 5 phút).'
+                        '${_autoNote(status.charge) ?? ''}',
+                  ),
                   busy: _training == 'charge',
                   enabled: consent && _training == null && trainAllowed,
                   onTrain: () => _train('charge', 'finetune'),
@@ -468,9 +478,12 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                       ? context.planAccent
                       : null,
                   title: 'Tự huấn luyện khi đủ dữ liệu',
-                  subtitle:
-                      'Tự cập nhật ước tính sạc, chỉ dùng bản mới khi không kém '
-                      'bản cũ. Tắt để tự bấm Huấn luyện.',
+                  subtitle: DevViewScope.pick(
+                    context,
+                    'Tự cập nhật ước tính sạc',
+                    'Tự cập nhật ước tính sạc, chỉ dùng bản mới khi không kém '
+                        'bản cũ. Tắt để tự bấm Huấn luyện.',
+                  ),
                   trailing: LuxeSwitch(
                     value: consent && (status?.autoTrain ?? true),
                     semanticLabel: 'Tự huấn luyện khi đủ dữ liệu',
@@ -482,14 +495,16 @@ class _PersonalAiSettingsState extends ConsumerState<PersonalAiSettingsScreen> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            const LuxeNotice(
-              icon: Icons.info_outline_rounded,
-              message:
-                  'Mọi kết quả vẫn là ước tính. Huấn luyện không bao giờ làm kém '
-                  'đi: app chỉ dùng bản mới khi sai số không tăng. Sạc vẫn có hẹn '
-                  'giờ an toàn trên ổ và tự ngắt khi pin đầy.',
-            ),
+            if (DevViewScope.on(context)) ...[
+              const SizedBox(height: 12),
+              const LuxeNotice(
+                icon: Icons.info_outline_rounded,
+                message:
+                    'Mọi kết quả vẫn là ước tính. Huấn luyện không bao giờ làm kém '
+                    'đi: app chỉ dùng bản mới khi sai số không tăng. Sạc vẫn có hẹn '
+                    'giờ an toàn trên ổ và tự ngắt khi pin đầy.',
+              ),
+            ],
             const SizedBox(height: 24),
             LuxeDangerButton(
               label: 'Xóa model & dữ liệu cá nhân',

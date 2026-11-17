@@ -146,4 +146,25 @@ void main() {
       expect(find.text('TỪNG LẦN SẠC'), findsOneWidget);
     });
   }
+
+  testWidgets('DevViewScope picks the short or the full text, live', (
+    tester,
+  ) async {
+    final view = DevView()..debugSet(unlocked: true, on: false);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DevViewScope(
+          view: view,
+          child: Builder(
+            builder: (context) =>
+                Text(DevViewScope.pick(context, 'ngắn', 'đầy đủ')),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('ngắn'), findsOneWidget);
+    await view.setOn(true);
+    await tester.pump();
+    expect(find.text('đầy đủ'), findsOneWidget);
+  });
 }

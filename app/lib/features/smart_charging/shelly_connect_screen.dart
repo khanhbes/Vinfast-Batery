@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'dart:async';
 
 import 'dart:math' as math;
@@ -1285,7 +1286,11 @@ class _ShellyConnectScreenState extends ConsumerState<ShellyConnectScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Để tránh tai nạn chập cháy và đảm bảo an toàn pin xe, ứng dụng sẽ chạy một bài kiểm tra relay 5 giây không tải trước khi kích hoạt điều khiển.',
+              DevViewScope.pick(
+                context,
+                'App kiểm tra an toàn ổ 5 giây (chưa cắm xe) trước khi dùng.',
+                'Để tránh tai nạn chập cháy và đảm bảo an toàn pin xe, ứng dụng sẽ chạy một bài kiểm tra relay 5 giây không tải trước khi kích hoạt điều khiển.',
+              ),
               style: TextStyle(
                 color: LuxeColors.muted,
                 fontSize: 13,

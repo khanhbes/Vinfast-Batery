@@ -1,3 +1,4 @@
+import '../../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/luxe_theme.dart';
@@ -53,7 +54,9 @@ class FullChargeNudge extends StatelessWidget {
           key: const ValueKey('full-charge-nudge'),
           icon: Icons.battery_charging_full_rounded,
           color: LuxeColors.champagne,
-          message: anchored
+          message: !DevViewScope.on(context)
+              ? 'Sạc đầy một lần để đồng hồ xe chính xác lại.'
+              : anchored
               ? 'Đã $chargesSinceFull lần sạc chưa đầy. Đồng hồ xe lệch dần giữa hai '
                     'lần sạc đầy, nên dự đoán % lần này có thể lệch nhiều hơn. Sạc '
                     'đầy một lần để đồng hồ chỉnh lại.'

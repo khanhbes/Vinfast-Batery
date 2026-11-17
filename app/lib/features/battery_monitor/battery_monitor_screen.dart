@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -313,10 +314,14 @@ class _CurrentBatteryCard extends StatelessWidget {
             ),
           ]),
           const SizedBox(height: 12),
-          const Text(
-            'Xe không kết nối pin (BMS) với app nên không có dữ liệu từng '
-            'cell. % pin, ODO và nhiệt độ pin (nếu đồng hồ xe hiển thị) là số '
-            'bạn nhập hoặc quét ở Tổng quan → "Cập nhật % pin & ODO".',
+          Text(
+            DevViewScope.pick(
+              context,
+              'Số bạn nhập hoặc quét từ đồng hồ xe.',
+              'Xe không kết nối pin (BMS) với app nên không có dữ liệu từng '
+                  'cell. % pin, ODO và nhiệt độ pin (nếu đồng hồ xe hiển thị) là số '
+                  'bạn nhập hoặc quét ở Tổng quan → "Cập nhật % pin & ODO".',
+            ),
             style: LuxeText.caption,
           ),
         ],
@@ -410,15 +415,16 @@ class _EstimateCard extends StatelessWidget {
                 'Sạc đầy 100%',
                 chargeText(100),
               ),
-              const SizedBox(height: 10),
-              Text(
-                learnedCharge
-                    ? 'Cùng mô hình với tab Sạc pin: ${whPerPct.toStringAsFixed(1)} Wh cho 1% '
-                          'và khoảng ${learnedPower.round()} W học từ các lần sạc của xe bạn.'
-                    : 'Chưa học từ lần sạc nào: dùng ${power.source.label} '
-                          '(khoảng ${power.watts.round()} W), sai số rộng hơn.',
-                style: LuxeText.caption,
-              ),
+              if (DevViewScope.on(context)) const SizedBox(height: 10),
+              if (DevViewScope.on(context))
+                Text(
+                  learnedCharge
+                      ? 'Cùng mô hình với tab Sạc pin: ${whPerPct.toStringAsFixed(1)} Wh cho 1% '
+                            'và khoảng ${learnedPower.round()} W học từ các lần sạc của xe bạn.'
+                      : 'Chưa học từ lần sạc nào: dùng ${power.source.label} '
+                            '(khoảng ${power.watts.round()} W), sai số rộng hơn.',
+                  style: LuxeText.caption,
+                ),
             ],
           ),
         ),

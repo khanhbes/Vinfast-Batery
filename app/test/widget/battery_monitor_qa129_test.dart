@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/services/dev_view.dart';
 import 'package:vinfast_battery/core/providers/learned_models_provider.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
 import 'package:vinfast_battery/data/models/vehicle_model.dart';
@@ -10,6 +11,9 @@ import 'package:vinfast_battery/features/battery_monitor/battery_monitor_screen.
 /// QA 129: the Battery monitor showed a hard-coded 25 °C, six "N/A" tiles,
 /// "Good" and a catalog charge time that disagreed with the Charge tab.
 void main() {
+  // QA 165: these check the full ("Chế độ develop") text.
+  setUp(() => DevView.instance.debugSet(unlocked: true, on: true));
+  tearDown(() => DevView.instance.debugSet(unlocked: false, on: false));
   final vehicle = VehicleModel(
     vehicleId: 'car',
     vehicleName: 'VinFast Feliz',

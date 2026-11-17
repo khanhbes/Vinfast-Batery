@@ -1,3 +1,4 @@
+import '../../../core/services/dev_view.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -711,7 +712,11 @@ class LuxeEfficiencyNote extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  fromRides
+                  !DevViewScope.on(context)
+                      ? (fromRides
+                            ? 'Từ ${learned!.samples} chuyến của bạn'
+                            : 'Theo thông số dòng xe')
+                      : fromRides
                       ? 'Trung bình trên ${learned!.samples} chuyến thật của bạn; mọi màn ước tính quãng đường dùng cùng số này.'
                       : 'Thông số dòng xe dùng để ước tính quãng đường. Không phải hiệu suất đo thực tế hay điểm đánh giá lái xe.',
                   style: LuxeText.caption,

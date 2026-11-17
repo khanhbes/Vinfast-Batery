@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,10 +52,14 @@ class AppearanceScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
         children: [
-          const Text(
-            'Chọn cách hiển thị Tổng quan, tab Sạc pin và cách bật sạc. '
-            'Lựa chọn lưu theo tài khoản: các điện thoại đăng nhập cùng tài '
-            'khoản hiển thị giống nhau.',
+          Text(
+            DevViewScope.pick(
+              context,
+              'Lưu theo tài khoản, mọi điện thoại giống nhau.',
+              'Chọn cách hiển thị Tổng quan, tab Sạc pin và cách bật sạc. '
+                  'Lựa chọn lưu theo tài khoản: các điện thoại đăng nhập cùng tài '
+                  'khoản hiển thị giống nhau.',
+            ),
             style: LuxeText.caption,
           ),
           if (!layoutsAllowed) ...[
@@ -81,10 +86,13 @@ class AppearanceScreen extends ConsumerWidget {
                   key: const ValueKey('appearance-ultra-effects'),
                   icon: Icons.auto_awesome_rounded,
                   title: 'Màu Aurora chuyển động',
-                  subtitle:
-                      'Nền, nút và tag Ultra đổi màu chậm. Tắt để giữ màu '
-                      'đứng yên và tiết kiệm pin. Luôn đứng yên khi điện '
-                      'thoại bật Giảm chuyển động.',
+                  subtitle: DevViewScope.pick(
+                    context,
+                    'Màu Ultra đổi chậm',
+                    'Nền, nút và tag Ultra đổi màu chậm. Tắt để giữ màu '
+                        'đứng yên và tiết kiệm pin. Luôn đứng yên khi điện '
+                        'thoại bật Giảm chuyển động.',
+                  ),
                   trailing: Switch(
                     value: effects,
                     onChanged: notifier.setUltraEffects,
@@ -106,9 +114,12 @@ class AppearanceScreen extends ConsumerWidget {
                     key: const ValueKey('appearance-sound'),
                     icon: Icons.music_note_rounded,
                     title: 'Âm thanh khi sạc',
-                    subtitle:
-                        'Tiếng chuông ngắn khi ổ Shelly bật và khi sạc xong. '
-                        'Tự im khi điện thoại ở chế độ im lặng.',
+                    subtitle: DevViewScope.pick(
+                      context,
+                      'Chuông ngắn khi bắt đầu và khi sạc xong',
+                      'Tiếng chuông ngắn khi ổ Shelly bật và khi sạc xong. '
+                          'Tự im khi điện thoại ở chế độ im lặng.',
+                    ),
                     trailing: Switch(
                       value: on,
                       onChanged: LuxeFeedback.setSound,
