@@ -39,6 +39,8 @@ def main():
     paths = [WEB / name for name in FLAT]
     paths += list((WEB / "shelly").rglob("*.py"))
     paths += list((WEB / "assistant").rglob("*.py"))
+    # QA 163: the tips list ships with the assistant.
+    paths += list((WEB / "assistant").rglob("*.json"))
     paths += list((WEB / "billing").rglob("*.py"))
     paths += list((WEB / "support").rglob("*.py"))
     paths += list((WEB / "scan").rglob("*.py"))

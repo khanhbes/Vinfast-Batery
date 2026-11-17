@@ -40,8 +40,10 @@ def _client(eng, memory, *, uid="u1", db=None, tips=None):
 
 def test_one_tip_list_for_the_app_and_the_bot():
     server = (ROOT / "web/assistant/tips_vi.json").read_bytes()
-    app = (ROOT / "app/assets/tips/tips_vi.json").read_bytes()
-    assert server == app, "copy web/assistant/tips_vi.json to app/assets/tips/"
+    app = ROOT / "app/assets/tips/tips_vi.json"
+    # The API test image has no app folder; the repo always compares.
+    if app.parent.parent.exists():
+        assert server == app.read_bytes(), "copy web/assistant/tips_vi.json to app/assets/tips/"
     data = json.loads(server)
     ids = [tip["id"] for tip in data["tips"]]
     assert len(ids) == len(set(ids)) >= 30
@@ -88,6 +90,55 @@ def test_tips_route():
     body = client.get("/api/tips").get_json()["data"]
     assert len(body["tips"]) >= 30 and body["categories"][0]["id"] == "drive"
     assert _client(eng, memory, uid=None).get("/api/tips").status_code == 401
+
+
+def test_admin_tips_crud_and_audit():
+    store_docs = {}
+    audits = []
+
+    class _Doc:
+        def __init__(self, doc_id):
+            self.doc_id = doc_id
+
+        def set(self, data, merge=False):
+            if merge and self.doc_id in store_docs:
+                store_docs[self.doc_id] = {**store_docs[self.doc_id], **data}
+            else:
+                store_docs[self.doc_id] = dict(data)
+
+    class _Col:
+        def document(self, doc_id):
+            return _Doc(doc_id)
+
+        def limit(self, _n):
+            return self
+
+        def stream(self):
+            return [SimpleNamespace(id=k, to_dict=lambda v=v: v) for k, v in store_docs.items()]
+
+    db = SimpleNamespace(collection=lambda _name: _Col())
+    eng, memory, _ = _engine([])
+    app = Flask(__name__)
+    app.register_blueprint(create_assistant_blueprint(
+        engine=eng, memory=memory, quota=DailyQuota(limit=10), knowledge=eng.knowledge,
+        auth_resolver=lambda: ("admin-1", "a@test", "admin"), require_admin=lambda f: f,
+        db=db, tips=TipStore(db),
+        audit=lambda action, entity, entity_id, uid, email="", details=None: audits.append(
+            (action, entity, entity_id, uid, email, details)
+        ),
+    ))
+    client = app.test_client()
+    listed = client.get("/api/admin/tips").get_json()["data"]
+    assert len(listed) >= 35
+    put_res = client.put("/api/admin/tips/app-custom-tip", json={
+        "category": "app", "title": "Mẹo kiểm tra mới", "body": "Kiểm tra dây sạc trước khi cắm.",
+        "appliesTo": "all", "when": "any", "tags": ["kiểm tra"], "source": {"name": "Pinova"},
+    })
+    assert put_res.status_code == 200
+    assert audits[-1][0] == "assistant_tip_put" and audits[-1][1] == "assistantTips"
+    del_res = client.delete("/api/admin/tips/app-custom-tip")
+    assert del_res.status_code == 200 and del_res.get_json()["data"]["enabled"] is False
+    assert audits[-1][0] == "assistant_tip_hide" and audits[-1][2] == "app-custom-tip"
 
 
 # -- the owner's settings ----------------------------------------------------
