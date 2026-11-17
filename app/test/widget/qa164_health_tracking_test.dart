@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/services/dev_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
 import 'package:vinfast_battery/core/utils/number_text.dart';
@@ -77,7 +78,12 @@ Future<void> _pump(
 }
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  // QA 165: these check the full ("Chế độ develop") text.
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    DevView.instance.debugSet(unlocked: true, on: true);
+  });
+  tearDown(() => DevView.instance.debugSet(unlocked: false, on: false));
 
   group('HealthVerdict (QA 164)', () {
     test('the main figure is against the start once it is fixed', () {
@@ -136,7 +142,7 @@ void main() {
       expect(v.unit, 'dung lượng hãng');
       expect(
         v.building,
-        'Đang lập mốc theo dõi · Cần thêm 2 lần sạc và 10 ngày',
+        'Đang lập mốc theo dõi · Cần thêm 2 lần sạc và 10 ngày để bắt đầu theo dõi',
       );
       // The error shown includes the charger efficiency.
       expect(v.basis, 'Dựa trên 8 lần sạc · sai số ±4%');

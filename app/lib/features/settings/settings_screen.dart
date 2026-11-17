@@ -1,3 +1,4 @@
+import '../../core/services/dev_view.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -234,6 +235,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: _getAppearanceValue(),
             onTap: _showAppearanceSheet,
           ),
+          // QA 165: shown once unlocked by seven taps on the version.
+          if (ref.watch(devViewProvider).unlocked)
+            LuxeSettingsRow(
+              key: const ValueKey('settings-dev-view'),
+              icon: Icons.code_rounded,
+              title: 'Chế độ develop',
+              subtitle: 'Hiện chi tiết kỹ thuật ở các màn',
+              trailing: LuxeSwitch(
+                value: ref.watch(devViewProvider).on,
+                onChanged: DevView.instance.setOn,
+                semanticLabel: 'Chế độ develop',
+              ),
+            ),
         ],
       ),
       const LuxeSectionLabel('Hỗ trợ'),
@@ -287,12 +301,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       const SizedBox(height: 30),
       Semantics(
         button: true,
-        label: BetaCapabilities.developerMode
-            ? 'Phiên bản $_appVersion. Chạm bảy lần để mở Developer Mode'
-            : 'Phiên bản $_appVersion',
+        label: 'Phiên bản $_appVersion',
         child: GestureDetector(
+          key: const ValueKey('settings-version'),
           behavior: HitTestBehavior.opaque,
-          onTap: BetaCapabilities.developerMode ? _handleVersionTap : null,
+          onTap: _handleVersionTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Center(
@@ -396,6 +409,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _handleVersionTap() async {
+    // QA 165: seven taps on the version unlock "Chế độ develop" (detail).
+    SettingsScreenTaps.announce(DevView.instance.tapVersion());
     if (!BetaCapabilities.developerMode) return;
     if (_developerUnlocked) return;
     _versionTapCount += 1;

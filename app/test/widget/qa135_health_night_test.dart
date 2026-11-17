@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vinfast_battery/core/services/dev_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vinfast_battery/core/services/pinova_api.dart';
 import 'package:vinfast_battery/core/theme/luxe_theme.dart';
@@ -85,7 +86,12 @@ class _FakeNight extends NightChargingApi {
 }
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  // QA 165: these check the full ("Chế độ develop") text.
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    DevView.instance.debugSet(unlocked: true, on: true);
+  });
+  tearDown(() => DevView.instance.debugSet(unlocked: false, on: false));
 
   test('health parses the estimate, test and trend', () {
     expect(_health.estimate!.sohPct, 90);

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/dev_view.dart';
+
 import '../../core/providers/app_providers.dart';
 import '../../core/services/pinova_api.dart';
 import '../../core/theme/luxe_theme.dart';
@@ -274,6 +276,14 @@ class HealthVerdict {
   /// What [pct] is measured against, under the number.
   String get unit => relative ? 'so với lúc đầu' : 'dung lượng hãng';
 
+  /// QA 165: the one line the owner's view shows under the label.
+  String get brief {
+    final b = building;
+    if (stale) return detail;
+    if (b != null) return b.replaceFirst('Đang lập mốc theo dõi · ', '');
+    return detail;
+  }
+
   /// "Pin còn như mới" … "Pin chai nhiều, nên đưa xe đi kiểm tra".
   final String label;
 
@@ -339,7 +349,9 @@ class HealthVerdict {
           ? null
           : [
               'Đang lập mốc theo dõi',
-              if (tracking.needText.isNotEmpty) tracking.needText,
+              tracking.needText.isNotEmpty
+                  ? '${tracking.needText} để bắt đầu theo dõi'
+                  : 'Sắp bắt đầu theo dõi',
             ].join(' · '),
     );
   }
@@ -566,19 +578,24 @@ class BatteryHealthScreen extends ConsumerWidget {
   }
 }
 
-class _Body extends StatelessWidget {
+class _Body extends ConsumerWidget {
   const _Body({required this.health, required this.vehicleId});
   final BatteryHealth health;
   final String vehicleId;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // QA 165 (owner's choice): as little text as possible; "Chế độ develop"
+    // adds how the figure was made.
+    final dev = ref.watch(devViewProvider).on;
+    final monthly = (health.tracking?.monthly.length ?? 0) >= 2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _Hero(health: health),
+        _Hero(health: health, dev: dev),
+        if (dev) _TechnicalDetail(health: health),
         if (health.baseline case final baseline?
-            when health.tracking?.ready != true) ...[
+            when dev && health.tracking?.ready != true) ...[
           const SizedBox(height: 10),
           LuxeNotice(
             key: const ValueKey('health-baseline'),
@@ -587,30 +604,33 @@ class _Body extends StatelessWidget {
           ),
         ],
         // QA 164: the battery's life, month by month (Pro/Ultra).
-        if ((health.tracking?.monthly.length ?? 0) >= 2) ...[
+        if (monthly) ...[
           const LuxeSectionLabel('Theo tháng'),
           HealthTrendChart(
             key: const ValueKey('health-monthly'),
             points: [for (final (at, v) in health.tracking!.monthly) (at, v)],
             estimate: health.tracking!.relativePct,
             monthly: true,
+            showNote: dev,
           ),
         ],
-        if (health.trend.length >= 2) ...[
+        // One chart for the owner: the months once there are some.
+        if (health.trend.length >= 2 && (dev || !monthly)) ...[
           const LuxeSectionLabel('Theo từng lần sạc'),
           HealthTrendChart(
             points: health.trend,
             estimate: health.estimate?.sohPct,
             weak: health.trendWeak,
+            showNote: dev,
           ),
         ],
-        if (health.full && health.charges.isNotEmpty) ...[
+        if (dev && health.full && health.charges.isNotEmpty) ...[
           const LuxeSectionLabel('Từng lần sạc'),
           _ChargeList(charges: health.charges),
         ],
         const LuxeSectionLabel('Bài kiểm tra pin'),
         if (health.full)
-          _TestCard(health: health, vehicleId: vehicleId)
+          _TestCard(health: health, vehicleId: vehicleId, dev: dev)
         else
           PremiumLocked(
             feature: PremiumFeature.batteryHealth,
@@ -618,9 +638,7 @@ class _Body extends StatelessWidget {
             reserveTagSpace: true,
             child: const LuxeNotice(
               icon: Icons.science_rounded,
-              message:
-                  'Theo dõi dung lượng qua từng lần sạc và bài kiểm tra pin '
-                  'một lần sạc.',
+              message: 'Đo dung lượng thật trong một lần sạc.',
             ),
           ),
         const SizedBox(height: 12),
@@ -632,27 +650,29 @@ class _Body extends StatelessWidget {
           label: const Text('Đánh giá tổng quát cách sạc'),
         ),
         const SizedBox(height: 16),
-        const LuxeNotice(
-          key: ValueKey('health-method'),
-          message:
-              'Xe không gửi dữ liệu pin cho app, nên app tính từ điện năng ổ '
-              'Shelly đo và % bạn đọc trên đồng hồ. Mỗi lần sạc tăng từ 20% trở '
-              'lên được tính, lần ngay sau một lần sạc đầy được tin nhất, lần '
-              'lệch nhiều so với các lần quanh nó bị bỏ. Số chính so với những '
-              'tháng đầu app theo dõi pin này, nên không phụ thuộc hiệu suất bộ '
-              'sạc; dung lượng theo Wh giả định hiệu suất 90% nên khoảng của nó '
-              'rộng hơn. App giữ số theo từng tháng suốt đời pin. Sạc đầy định '
-              'kỳ giúp số chính xác hơn. Dưới 70% dung lượng hãng nên đưa xe đi '
-              'kiểm tra.',
-        ),
+        if (dev)
+          const LuxeNotice(
+            key: ValueKey('health-method'),
+            message:
+                'Xe không gửi dữ liệu pin cho app, nên app tính từ điện năng ổ '
+                'Shelly đo và % bạn đọc trên đồng hồ. Mỗi lần sạc tăng từ 20% trở '
+                'lên được tính, lần ngay sau một lần sạc đầy được tin nhất, lần '
+                'lệch nhiều so với các lần quanh nó bị bỏ. Số chính so với những '
+                'tháng đầu app theo dõi pin này, nên không phụ thuộc hiệu suất bộ '
+                'sạc; dung lượng theo Wh giả định hiệu suất 90% nên khoảng của nó '
+                'rộng hơn. App giữ số theo từng tháng suốt đời pin. Sạc đầy định '
+                'kỳ giúp số chính xác hơn. Dưới 70% dung lượng hãng nên đưa xe đi '
+                'kiểm tra.',
+          ),
       ],
     );
   }
 }
 
 class _Hero extends StatelessWidget {
-  const _Hero({required this.health});
+  const _Hero({required this.health, this.dev = false});
   final BatteryHealth health;
+  final bool dev;
 
   static String _month(DateTime? at) {
     final d = at?.toLocal();
@@ -678,7 +698,9 @@ class _Hero extends StatelessWidget {
         key: const ValueKey('health-need-data'),
         icon: Icons.hourglass_empty_rounded,
         color: LuxeColors.champagne,
-        message: health.full
+        message: !dev
+            ? 'Chưa đủ dữ liệu. Sạc qua ổ Shelly rồi nhập % trên đồng hồ xe.'
+            : health.full
             ? 'Chưa đủ dữ liệu. Sau mỗi lần sạc qua ổ Shelly (tăng từ 20% trở '
                   'lên), nhập % trên đồng hồ xe hoặc làm bài kiểm tra bên dưới '
                   'để app ước tính.'
@@ -737,45 +759,122 @@ class _Hero extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  verdict.detail,
+                  dev ? verdict.detail : verdict.brief,
                   key: const ValueKey('health-detail'),
                   style: LuxeText.caption,
                 ),
-                if (verdict.capacityText case final capacity?) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    verdict.relative
-                        ? 'Dung lượng ước tính $capacity'
-                        : 'Còn $capacity',
-                    key: const ValueKey('health-capacity'),
-                    style: LuxeText.caption,
-                  ),
-                ],
-                if (verdict.building case final building?) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    building,
-                    key: const ValueKey('health-building'),
-                    style: LuxeText.caption,
-                  ),
-                ],
-                if (verdict.stale) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Lâu chưa có lần sạc qua ổ Shelly để tính, đây là số '
-                    '${_month(health.estimate?.at)}',
-                    key: const ValueKey('health-stale'),
-                    style: LuxeText.caption.copyWith(
-                      color: LuxeColors.champagne,
+                if (dev) ...[
+                  if (verdict.capacityText case final capacity?) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      verdict.relative
+                          ? 'Dung lượng ước tính $capacity'
+                          : 'Còn $capacity',
+                      key: const ValueKey('health-capacity'),
+                      style: LuxeText.caption,
                     ),
-                  ),
+                  ],
+                  if (verdict.building case final building?) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      building,
+                      key: const ValueKey('health-building'),
+                      style: LuxeText.caption,
+                    ),
+                  ],
+                  if (verdict.stale) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      'Lâu chưa có lần sạc qua ổ Shelly để tính, đây là số '
+                      '${_month(health.estimate?.at)}',
+                      key: const ValueKey('health-stale'),
+                      style: LuxeText.caption.copyWith(
+                        color: LuxeColors.champagne,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  LuxeTag(verdict.basis, color: LuxeColors.platinumMid),
                 ],
-                const SizedBox(height: 8),
-                LuxeTag(verdict.basis, color: LuxeColors.platinumMid),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// QA 165: what "Chế độ develop" adds: the inputs and errors behind the
+/// figure, in the server's own terms.
+class _TechnicalDetail extends StatelessWidget {
+  const _TechnicalDetail({required this.health});
+  final BatteryHealth health;
+
+  String _pct(double? v) => v == null ? '—' : '${v.toStringAsFixed(1)}%';
+
+  @override
+  Widget build(BuildContext context) {
+    final e = health.estimate;
+    final t = health.tracking;
+    final rows = <(String, String)>[
+      if (e != null) ...[
+        (
+          'Dung lượng / danh định',
+          '${_pct(e.sohPct)} · ${e.capacityWh.round()} Wh',
+        ),
+        (
+          'Sai số đo · gồm hiệu suất',
+          '±${_pct(health.uncertaintyPct)} · ±${_pct(health.totalPct)}',
+        ),
+        ('Khoảng (đo)', '${_pct(health.lowPct)} – ${_pct(health.highPct)}'),
+        ('Lần sạc dùng · độ tin', '${e.samples ?? 0} · ${e.confidence ?? '—'}'),
+        if (e.stale)
+          ('Số cũ', '${e.at?.toLocal().month}/${e.at?.toLocal().year}'),
+      ],
+      if (t != null && t.ready) ...[
+        ('So với mốc', '${_pct(t.relativePct)} ±${_pct(t.uncertaintyPct)}'),
+        ('Mốc', t.sinceText),
+        ('Số tháng trong sổ', '${t.monthly.length}'),
+      ],
+      if (t != null && !t.ready)
+        ('Lập mốc', 'cần ${t.needCharges} lần sạc · ${t.needDays} ngày'),
+      ('Danh định', '${health.nominalCapacityWh?.round() ?? '—'} Wh'),
+      ('Hiệu suất giả định', '90% (87–93%)'),
+      if (health.test case final test?)
+        (
+          'Bài kiểm tra',
+          '${_pct(test.sohPct)} từ ${test.startPct?.round() ?? '?'}%',
+        ),
+    ];
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: LuxeGlass(
+        key: const ValueKey('health-technical'),
+        quiet: true,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('CHI TIẾT KỸ THUẬT', style: LuxeText.eyebrow),
+            const SizedBox(height: 6),
+            for (final (k, v) in rows)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  spacing: 12,
+                  children: [
+                    Text(k, style: LuxeText.caption),
+                    Text(
+                      v,
+                      style: LuxeText.caption.copyWith(color: LuxeColors.text),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -822,9 +921,14 @@ class _ChargeList extends StatelessWidget {
 }
 
 class _TestCard extends ConsumerWidget {
-  const _TestCard({required this.health, required this.vehicleId});
+  const _TestCard({
+    required this.health,
+    required this.vehicleId,
+    this.dev = false,
+  });
   final BatteryHealth health;
   final String vehicleId;
+  final bool dev;
 
   /// QA 141: step 3 opens the Charge tab with 100% already set.
   void _chargeToFull(BuildContext context, WidgetRef ref) {
@@ -854,15 +958,27 @@ class _TestCard extends ConsumerWidget {
     ];
     return LuxeSettingsGroup(
       children: [
-        for (final (i, (text, icon)) in steps.indexed)
+        // QA 165: the owner's view is one row that starts the test.
+        if (!dev)
           LuxeSettingsRow(
-            key: i == 2 ? const ValueKey('health-test-charge') : null,
-            icon: icon,
-            title: '${i + 1}. $text',
-            onTap: i == 2 && vehicleId.isNotEmpty
+            key: const ValueKey('health-test-charge'),
+            icon: Icons.battery_charging_full_rounded,
+            title: 'Làm bài kiểm tra pin',
+            subtitle: 'Đi xe xuống ≤ $max% rồi sạc đầy',
+            onTap: vehicleId.isNotEmpty
                 ? () => _chargeToFull(context, ref)
                 : null,
           ),
+        if (dev)
+          for (final (i, (text, icon)) in steps.indexed)
+            LuxeSettingsRow(
+              key: i == 2 ? const ValueKey('health-test-charge') : null,
+              icon: icon,
+              title: '${i + 1}. $text',
+              onTap: i == 2 && vehicleId.isNotEmpty
+                  ? () => _chargeToFull(context, ref)
+                  : null,
+            ),
         if (test != null)
           LuxeSettingsRow(
             key: const ValueKey('health-test-result'),

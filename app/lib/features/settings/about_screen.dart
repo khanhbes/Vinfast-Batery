@@ -1,3 +1,5 @@
+import '../../core/services/dev_view.dart';
+import '../../core/widgets/app_popup.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/services/installed_version.dart';
@@ -67,12 +69,24 @@ class _AboutScreenState extends State<AboutScreen> {
         Center(
           child: FutureBuilder<String?>(
             future: installedVersion,
-            builder: (context, snapshot) => Text(
-              snapshot.data == null
-                  ? 'Quản lý pin và sạc xe máy điện'
-                  : 'Phiên bản ${snapshot.data}',
-              key: const ValueKey('about-app-version'),
-              style: LuxeText.caption,
+            // QA 165: seven taps on the version unlock "Chế độ develop".
+            builder: (context, snapshot) => GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () =>
+                  SettingsScreenTaps.announce(DevView.instance.tapVersion()),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                child: Text(
+                  snapshot.data == null
+                      ? 'Quản lý pin và sạc xe máy điện'
+                      : 'Phiên bản ${snapshot.data}',
+                  key: const ValueKey('about-app-version'),
+                  style: LuxeText.caption,
+                ),
+              ),
             ),
           ),
         ),
@@ -238,4 +252,16 @@ class _AboutScreenState extends State<AboutScreen> {
       ],
     ),
   );
+}
+
+/// QA 165: what a tap on the version says on its way to "Chế độ develop".
+abstract final class SettingsScreenTaps {
+  static void announce(int? left) {
+    if (left == null) return;
+    if (left == 0) {
+      AppPopup.showSuccess('Đã bật chế độ develop');
+    } else if (left <= 3) {
+      AppPopup.showInfo('Chạm thêm $left lần để bật chế độ develop');
+    }
+  }
 }

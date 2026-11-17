@@ -25,7 +25,11 @@ class HealthTrendChart extends StatelessWidget {
     this.estimate,
     this.weak = const [],
     this.monthly = false,
+    this.showNote = true,
   });
+
+  /// QA 165: the explanation under the chart ("Chế độ develop" only).
+  final bool showNote;
 
   /// QA 164: one point per month (already pooled), against the battery's
   /// own start: the line goes through the points, dates are month/year.
@@ -132,22 +136,23 @@ class HealthTrendChart extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            monthly
-                ? 'Mỗi điểm là một tháng, gộp các lần sạc trong tháng, so với '
-                      'lúc bắt đầu theo dõi (100%)'
-                      '${estimate == null ? '' : '; nét đứt là số hiện tại'}'
-                      '${over ? '. Điểm rỗng là tháng đo cao hơn lúc đầu' : ''}.'
-                : 'Mỗi điểm là một lần sạc. Đồng hồ xe chỉ hiện số tròn nên '
-                      'từng điểm lệch vài %; hãy nhìn đường liền (trung vị 5 lần '
-                      'sạc)'
-                      '${faint.contains(true) ? ', điểm mờ là lúc lâu chưa sạc đầy' : ''}'
-                      '${estimate == null ? '' : ', nét đứt là ước tính hiện tại'}'
-                      '${over ? '. Điểm rỗng là lần đo vượt 100%' : ''}.',
-            key: const ValueKey('health-trend-note'),
-            style: LuxeText.caption,
-          ),
+          if (showNote) const SizedBox(height: 6),
+          if (showNote)
+            Text(
+              monthly
+                  ? 'Mỗi điểm là một tháng, gộp các lần sạc trong tháng, so với '
+                        'lúc bắt đầu theo dõi (100%)'
+                        '${estimate == null ? '' : '; nét đứt là số hiện tại'}'
+                        '${over ? '. Điểm rỗng là tháng đo cao hơn lúc đầu' : ''}.'
+                  : 'Mỗi điểm là một lần sạc. Đồng hồ xe chỉ hiện số tròn nên '
+                        'từng điểm lệch vài %; hãy nhìn đường liền (trung vị 5 lần '
+                        'sạc)'
+                        '${faint.contains(true) ? ', điểm mờ là lúc lâu chưa sạc đầy' : ''}'
+                        '${estimate == null ? '' : ', nét đứt là ước tính hiện tại'}'
+                        '${over ? '. Điểm rỗng là lần đo vượt 100%' : ''}.',
+              key: const ValueKey('health-trend-note'),
+              style: LuxeText.caption,
+            ),
         ],
       ),
     );
