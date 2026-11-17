@@ -90,6 +90,23 @@ def main() -> None:
         if first is not None and second is not None:
             print(f"  Hai nửa dữ liệu ({name}): {first} và {second}, lệch {abs(first - second):.1f}")
 
+    # QA 164: against the battery's own start, and month by month.
+    full = charge_model.battery_health(charges, nominal, history=charges)
+    tracking, spread = full["tracking"], full["spread"] or {}
+    print()
+    print("So với lúc bắt đầu theo dõi (QA 164):")
+    if tracking["status"] == "ready":
+        print(f"  {tracking['relativePct']}% ±{tracking['uncertaintyPct']} "
+              f"(mốc {str(tracking['since'])[:10]} → {str(tracking['until'])[:10]}, "
+              f"{tracking['referenceCharges']} lần sạc)")
+        for month in tracking["monthly"]:
+            print(f"  {month['month']}: {month['relativePct']}% ({month['charges']} lần sạc)")
+    else:
+        print(f"  Đang lập mốc: cần thêm {tracking['needCharges']} lần sạc, {tracking['needDays']} ngày")
+    if spread:
+        print(f"  Dung lượng tuyệt đối: ±{spread['uncertaintyPct']} đo được, "
+              f"±{spread.get('totalPct')} khi tính cả hiệu suất bộ sạc 87–93%")
+
 
 if __name__ == "__main__":
     main()

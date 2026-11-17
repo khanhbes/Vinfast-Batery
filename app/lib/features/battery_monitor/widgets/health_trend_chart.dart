@@ -24,7 +24,12 @@ class HealthTrendChart extends StatelessWidget {
     required this.points,
     this.estimate,
     this.weak = const [],
+    this.monthly = false,
   });
+
+  /// QA 164: one point per month (already pooled), against the battery's
+  /// own start: the line goes through the points, dates are month/year.
+  final bool monthly;
 
   /// (when, % of rated capacity), oldest first.
   final List<(DateTime?, double)> points;
@@ -67,12 +72,19 @@ class HealthTrendChart extends StatelessWidget {
     final low = math.min(90.0, (values.reduce(math.min) / 5).floor() * 5.0);
     const high = 100.0;
     final over = values.any((v) => v > high);
-    String date(DateTime? d) => d == null ? '' : '${d.day}/${d.month}';
+    String date(DateTime? d) => d == null
+        ? ''
+        : monthly
+        ? '${d.month}/${d.year}'
+        : '${d.day}/${d.month}';
     final scaler = MediaQuery.textScalerOf(context);
     return Semantics(
-      label:
-          'Dung lượng còn lại theo ${clean.length} lần sạc, từ '
-          '${values.first.round()}% đến ${values.last.round()}%',
+      label: monthly
+          ? 'Sức khỏe pin theo ${clean.length} tháng, từ '
+                '${values.first.round()}% đến ${values.last.round()}% so với '
+                'lúc bắt đầu theo dõi'
+          : 'Dung lượng còn lại theo ${clean.length} lần sạc, từ '
+                '${values.first.round()}% đến ${values.last.round()}%',
       excludeSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -94,6 +106,7 @@ class HealthTrendChart extends StatelessWidget {
                   estimate: estimate,
                   reveal: t,
                   weak: faint,
+                  smooth: !monthly,
                 ),
               ),
             ),
@@ -121,11 +134,17 @@ class HealthTrendChart extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Mỗi điểm là một lần sạc. Đồng hồ xe chỉ hiện số tròn nên từng '
-            'điểm lệch vài %; hãy nhìn đường liền (trung vị 5 lần sạc)'
-            '${faint.contains(true) ? ', điểm mờ là lúc lâu chưa sạc đầy' : ''}'
-            '${estimate == null ? '' : ', nét đứt là ước tính hiện tại'}'
-            '${over ? '. Điểm rỗng là lần đo vượt 100%' : ''}.',
+            monthly
+                ? 'Mỗi điểm là một tháng, gộp các lần sạc trong tháng, so với '
+                      'lúc bắt đầu theo dõi (100%)'
+                      '${estimate == null ? '' : '; nét đứt là số hiện tại'}'
+                      '${over ? '. Điểm rỗng là tháng đo cao hơn lúc đầu' : ''}.'
+                : 'Mỗi điểm là một lần sạc. Đồng hồ xe chỉ hiện số tròn nên '
+                      'từng điểm lệch vài %; hãy nhìn đường liền (trung vị 5 lần '
+                      'sạc)'
+                      '${faint.contains(true) ? ', điểm mờ là lúc lâu chưa sạc đầy' : ''}'
+                      '${estimate == null ? '' : ', nét đứt là ước tính hiện tại'}'
+                      '${over ? '. Điểm rỗng là lần đo vượt 100%' : ''}.',
             key: const ValueKey('health-trend-note'),
             style: LuxeText.caption,
           ),
@@ -144,9 +163,13 @@ class _TrendPainter extends CustomPainter {
     this.estimate,
     this.reveal = 1,
     this.weak = const [],
+    this.smooth = true,
   });
 
   final double? estimate;
+
+  /// The line is the running median of five (per charge) or the points.
+  final bool smooth;
   final List<bool> weak;
 
   /// 0–1: how much of the line is drawn.
@@ -218,12 +241,11 @@ class _TrendPainter extends CustomPainter {
       );
     }
     // The trend: the running median, which one odd reading cannot move.
-    final smooth = HealthTrendChart.runningMedian([
-      for (final v in values) math.min(v, high),
-    ]);
+    final capped = [for (final v in values) math.min(v, high)];
+    final line0 = smooth ? HealthTrendChart.runningMedian(capped) : capped;
     final trend = [
-      for (var i = 0; i < smooth.length; i++)
-        Offset(chart.left + step * i, y(smooth[i])),
+      for (var i = 0; i < line0.length; i++)
+        Offset(chart.left + step * i, y(line0[i])),
     ];
     final line = Paint()
       ..color = LuxeColors.platinum

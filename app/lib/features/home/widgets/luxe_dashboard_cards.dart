@@ -321,7 +321,8 @@ class LuxeStatsStrip extends ConsumerWidget {
         ? ref.watch(batteryHealthProvider(v.vehicleId)).valueOrNull
         : null;
     // QA 162: the same reading as Sức khỏe pin (as measured, may pass 100).
-    final capacity = health == null ? null : HealthVerdict.of(health)?.pct;
+    final verdict = health == null ? null : HealthVerdict.of(health);
+    final capacity = verdict?.pct;
     final cells = [
       (
         Icons.speed_rounded,
@@ -334,7 +335,12 @@ class LuxeStatsStrip extends ConsumerWidget {
         'km / 1% pin',
       ),
       capacity != null
-          ? (Icons.battery_std_rounded, '${capacity.round()}%', 'dung lượng')
+          ? (
+              Icons.battery_std_rounded,
+              '${capacity.round()}%',
+              // QA 164: against the battery's own start once it is fixed.
+              verdict!.relative ? 'sức khỏe pin' : 'dung lượng',
+            )
           : (
               Icons.battery_std_rounded,
               v?.hasSohData == true ? '${v!.stateOfHealth.round()}%' : '—',
@@ -461,8 +467,10 @@ class LuxeBatteryCapacityCard extends ConsumerWidget {
         return _CapacityShell(
           value: verdict.pct,
           title: verdict.label,
-          caption:
-              'Còn khoảng ${verdict.pct.round()}% dung lượng · ${verdict.short}',
+          caption: verdict.relative
+              ? 'Giữ ${verdict.pct.round()}% so với lúc đầu · ${verdict.short}'
+              : 'Còn khoảng ${verdict.pct.round()}% dung lượng · '
+                    '${verdict.short}',
         );
       },
     );

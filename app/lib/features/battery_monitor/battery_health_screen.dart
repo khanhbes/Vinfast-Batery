@@ -30,7 +30,15 @@ class BatteryHealth {
     this.highPct,
     this.trendWeak = const [],
     this.charges = const [],
+    this.tracking,
+    this.totalPct,
   });
+
+  /// QA 164: against the battery's own start (the main figure).
+  final HealthTracking? tracking;
+
+  /// QA 164: the absolute figure's error with the charger efficiency's doubt.
+  final double? totalPct;
 
   final double? nominalCapacityWh;
   final HealthValue? estimate;
@@ -101,7 +109,80 @@ class BatteryHealth {
       for (final c in (map['charges'] as List? ?? const []))
         ?HealthCharge.fromMap(c),
     ],
+    tracking: HealthTracking.fromMap(map['tracking']),
+    totalPct: switch (map['spread']) {
+      {'totalPct': final num v} => v.toDouble(),
+      _ => null,
+    },
   );
+}
+
+/// QA 164 (owner's choice): the battery against the first months the app
+/// followed it. The charger efficiency the absolute figure assumes cancels
+/// out, so this is the figure that stays right over the years.
+class HealthTracking {
+  const HealthTracking({
+    required this.ready,
+    this.relativePct,
+    this.uncertaintyPct,
+    this.since,
+    this.until,
+    this.needCharges = 0,
+    this.needDays = 0,
+    this.monthly = const [],
+  });
+
+  /// The reference is fixed (else it is still being built).
+  final bool ready;
+  final double? relativePct;
+  final double? uncertaintyPct;
+  final DateTime? since;
+  final DateTime? until;
+  final int needCharges;
+  final int needDays;
+
+  /// (first day of the month, % against the start), oldest first.
+  final List<(DateTime, double)> monthly;
+
+  /// "9/2026" or "9–10/2026".
+  String get sinceText {
+    final a = since, b = until;
+    if (a == null) return '';
+    if (b == null || (a.month == b.month && a.year == b.year)) {
+      return '${a.month}/${a.year}';
+    }
+    return a.year == b.year
+        ? '${a.month}–${b.month}/${a.year}'
+        : '${a.month}/${a.year}–${b.month}/${b.year}';
+  }
+
+  /// "Cần thêm 2 lần sạc và 10 ngày".
+  String get needText {
+    final parts = [
+      if (needCharges > 0) '$needCharges lần sạc',
+      if (needDays > 0) '$needDays ngày',
+    ];
+    return parts.isEmpty ? '' : 'Cần thêm ${parts.join(' và ')}';
+  }
+
+  static HealthTracking? fromMap(Object? raw) {
+    if (raw is! Map) return null;
+    return HealthTracking(
+      ready: raw['status'] == 'ready',
+      relativePct: (raw['relativePct'] as num?)?.toDouble(),
+      uncertaintyPct: (raw['uncertaintyPct'] as num?)?.toDouble(),
+      since: DateTime.tryParse(raw['since']?.toString() ?? '')?.toLocal(),
+      until: DateTime.tryParse(raw['until']?.toString() ?? '')?.toLocal(),
+      needCharges: (raw['needCharges'] as num?)?.toInt() ?? 0,
+      needDays: (raw['needDays'] as num?)?.toInt() ?? 0,
+      monthly: [
+        for (final m in (raw['monthly'] as List? ?? const []))
+          if (m is Map && m['relativePct'] is num && m['month'] is String)
+            if (DateTime.tryParse('${m['month']}-01') case final at?)
+              (at, (m['relativePct'] as num).toDouble()),
+      ],
+    );
+  }
 }
 
 /// One charge in "Từng lần sạc" (QA 162, like a battery app's session list).
@@ -170,10 +251,28 @@ class HealthVerdict {
     required this.basis,
     required this.short,
     this.capacityText,
+    this.relative = false,
+    this.stale = false,
+    this.building,
   });
 
-  /// % of the rated capacity, as measured (may pass 100).
+  /// QA 164: the main figure. Against the battery's own start when the
+  /// reference is fixed ([relative]), else % of the rated capacity. As
+  /// measured either way (may pass 100).
   final double pct;
+
+  /// [pct] is against the first months the app followed the battery.
+  final bool relative;
+
+  /// No counted charge lately: the figure comes from older months.
+  final bool stale;
+
+  /// "Đang lập mốc theo dõi · Cần thêm 2 lần sạc" while there is no
+  /// reference yet.
+  final String? building;
+
+  /// What [pct] is measured against, under the number.
+  String get unit => relative ? 'so với lúc đầu' : 'dung lượng hãng';
 
   /// "Pin còn như mới" … "Pin chai nhiều, nên đưa xe đi kiểm tra".
   final String label;
@@ -196,8 +295,13 @@ class HealthVerdict {
     final v = health.estimate;
     final nominal = health.nominalCapacityWh;
     if (v == null || nominal == null) return null;
+    final tracking = health.tracking;
+    final relative = tracking?.relativePct;
+    if (tracking != null && tracking.ready && relative != null) {
+      return _relative(health, v, nominal, tracking, relative);
+    }
     final pct = v.sohPct;
-    final uncertainty = health.uncertaintyPct;
+    final uncertainty = health.totalPct ?? health.uncertaintyPct;
     final margin = uncertainty ?? 3;
     final label = pct >= 100 - margin
         ? 'Pin còn như mới'
@@ -223,21 +327,89 @@ class HealthVerdict {
       if (health.testRecent) 'có bài kiểm tra',
     ].join(' · ');
     final short = ['$n lần sạc', ?plusMinus].join(' · ');
-    final low = health.lowPct, high = health.highPct;
-    final capacityText = low != null && high != null && high > low
-        ? 'khoảng ${groupThousands(_tens(nominal * low / 100))}–'
-              '${groupThousands(_tens(nominal * high / 100))} Wh / '
-              '${groupThousands(nominal)} Wh danh định'
-        : 'khoảng ${groupThousands(v.capacityWh)} Wh / '
-              '${groupThousands(nominal)} Wh danh định';
     return HealthVerdict(
       pct: pct,
       label: label,
       detail: detail,
       basis: basis,
       short: short,
-      capacityText: capacityText,
+      capacityText: _capacityText(health, v, nominal),
+      stale: v.stale,
+      building: tracking == null || tracking.ready
+          ? null
+          : [
+              'Đang lập mốc theo dõi',
+              if (tracking.needText.isNotEmpty) tracking.needText,
+            ].join(' · '),
     );
+  }
+
+  /// QA 164: the battery against its own start, the absolute capacity as
+  /// the second line (with the charger efficiency's doubt in its range).
+  static HealthVerdict _relative(
+    BatteryHealth health,
+    HealthValue v,
+    double nominal,
+    HealthTracking tracking,
+    double pct,
+  ) {
+    final margin = (tracking.uncertaintyPct ?? 3).clamp(1.0, 99.0);
+    final drop = 100 - pct;
+    // Service advice still follows the absolute figure (under 70 % of the
+    // rated capacity), which is what a workshop measures.
+    final worn = v.sohPct < 70;
+    final label = worn
+        ? 'Pin chai nhiều, nên đưa xe đi kiểm tra'
+        : drop <= margin
+        ? 'Pin giữ như lúc đầu'
+        : drop < 10
+        ? 'Pin giảm nhẹ'
+        : drop < 20
+        ? 'Pin giảm rõ, nên theo dõi'
+        : 'Pin giảm nhiều, nên đưa xe đi kiểm tra';
+    final since = tracking.sinceText;
+    final from = since.isEmpty
+        ? 'lúc bắt đầu theo dõi'
+        : 'lúc bắt đầu theo dõi ($since)';
+    final detail = drop <= margin
+        ? 'Chưa thấy giảm rõ so với $from'
+              '${pct > 100 ? '; cao hơn một chút là sai số đo, pin không tự '
+                        'hồi phục' : ''}.'
+        : 'Giảm khoảng ${drop.round()}% so với $from.';
+    final plusMinus = '±${margin.round()}%';
+    final n = v.samples ?? 0;
+    return HealthVerdict(
+      pct: pct,
+      relative: true,
+      stale: v.stale,
+      label: label,
+      detail: detail,
+      basis: [
+        'Dựa trên $n lần sạc',
+        'sai số $plusMinus',
+        if (health.testRecent) 'có bài kiểm tra',
+      ].join(' · '),
+      short: '$plusMinus · so với $since',
+      capacityText: _capacityText(health, v, nominal),
+    );
+  }
+
+  /// "khoảng 2 290–2 450 Wh / 2 400 Wh danh định": the range carries the
+  /// assumed charger efficiency's doubt when the server sends it.
+  static String _capacityText(
+    BatteryHealth health,
+    HealthValue v,
+    double nominal,
+  ) {
+    final total = health.totalPct;
+    final low = total != null ? v.sohPct - total : health.lowPct;
+    final high = total != null ? v.sohPct + total : health.highPct;
+    return low != null && high != null && high > low
+        ? 'khoảng ${groupThousands(_tens(nominal * low / 100))}–'
+              '${groupThousands(_tens(nominal * high / 100))} Wh / '
+              '${groupThousands(nominal)} Wh danh định'
+        : 'khoảng ${groupThousands(v.capacityWh)} Wh / '
+              '${groupThousands(nominal)} Wh danh định';
   }
 }
 
@@ -288,7 +460,11 @@ class HealthValue {
     this.confidence,
     this.startPct,
     this.at,
+    this.stale = false,
   });
+
+  /// QA 164: from older months (no counted charge lately).
+  final bool stale;
 
   final double sohPct;
   final double capacityWh;
@@ -313,7 +489,8 @@ class HealthValue {
       samples: (raw['samples'] as num?)?.toInt(),
       confidence: raw['confidence']?.toString(),
       startPct: (raw['startPct'] as num?)?.toDouble(),
-      at: DateTime.tryParse(raw['at']?.toString() ?? ''),
+      at: DateTime.tryParse((raw['at'] ?? raw['asOf'])?.toString() ?? ''),
+      stale: raw['stale'] == true,
     );
   }
 }
@@ -393,12 +570,23 @@ class _Body extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _Hero(health: health),
-        if (health.baseline case final baseline?) ...[
+        if (health.baseline case final baseline?
+            when health.tracking?.ready != true) ...[
           const SizedBox(height: 10),
           LuxeNotice(
             key: const ValueKey('health-baseline'),
             icon: Icons.timeline_rounded,
             message: baseline.sentence(health.uncertaintyPct),
+          ),
+        ],
+        // QA 164: the battery's life, month by month (Pro/Ultra).
+        if ((health.tracking?.monthly.length ?? 0) >= 2) ...[
+          const LuxeSectionLabel('Theo tháng'),
+          HealthTrendChart(
+            key: const ValueKey('health-monthly'),
+            points: [for (final (at, v) in health.tracking!.monthly) (at, v)],
+            estimate: health.tracking!.relativePct,
+            monthly: true,
           ),
         ],
         if (health.trend.length >= 2) ...[
@@ -438,13 +626,17 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         const LuxeNotice(
+          key: ValueKey('health-method'),
           message:
-              'Xe không gửi dữ liệu pin cho app, nên đây là ước tính từ điện năng '
-              'ổ Shelly đo và % bạn đọc trên đồng hồ. Mỗi lần sạc tăng từ 20% '
-              'trở lên được tính, lần ngay sau một lần sạc đầy được tin nhất, '
-              'lần lệch nhiều bị bỏ. Hiệu suất sạc giả định 90% nên con số có '
-              'thể lệch vài %; mức thay đổi theo thời gian đáng tin hơn. Sạc đầy '
-              'định kỳ giúp số chính xác hơn. Dưới 70% nên đưa xe đi kiểm tra.',
+              'Xe không gửi dữ liệu pin cho app, nên app tính từ điện năng ổ '
+              'Shelly đo và % bạn đọc trên đồng hồ. Mỗi lần sạc tăng từ 20% trở '
+              'lên được tính, lần ngay sau một lần sạc đầy được tin nhất, lần '
+              'lệch nhiều so với các lần quanh nó bị bỏ. Số chính so với những '
+              'tháng đầu app theo dõi pin này, nên không phụ thuộc hiệu suất bộ '
+              'sạc; dung lượng theo Wh giả định hiệu suất 90% nên khoảng của nó '
+              'rộng hơn. App giữ số theo từng tháng suốt đời pin. Sạc đầy định '
+              'kỳ giúp số chính xác hơn. Dưới 70% dung lượng hãng nên đưa xe đi '
+              'kiểm tra.',
         ),
       ],
     );
@@ -454,6 +646,11 @@ class _Body extends StatelessWidget {
 class _Hero extends StatelessWidget {
   const _Hero({required this.health});
   final BatteryHealth health;
+
+  static String _month(DateTime? at) {
+    final d = at?.toLocal();
+    return d == null ? 'cũ' : 'tháng ${d.month}/${d.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -491,19 +688,35 @@ class _Hero extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: Row(
         children: [
-          LuxeRing(
-            value: (verdict.pct / 100).clamp(0.0, 1.0),
-            size: 104,
-            color: LuxeColors.platinum,
-            child: Text(
-              '${verdict.pct.round()}%',
-              key: const ValueKey('health-soh'),
-              style: const TextStyle(
-                color: LuxeColors.text,
-                fontSize: 26,
-                fontWeight: FontWeight.w600,
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LuxeRing(
+                value: (verdict.pct / 100).clamp(0.0, 1.0),
+                size: 104,
+                color: LuxeColors.platinum,
+                child: Text(
+                  '${verdict.pct.round()}%',
+                  key: const ValueKey('health-soh'),
+                  style: const TextStyle(
+                    color: LuxeColors.text,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 6),
+              // QA 164: what the figure is against, under the ring.
+              SizedBox(
+                width: 104,
+                child: Text(
+                  verdict.unit,
+                  key: const ValueKey('health-unit'),
+                  textAlign: TextAlign.center,
+                  style: LuxeText.caption,
+                ),
+              ),
+            ],
           ),
           const SizedBox(width: 18),
           Expanded(
@@ -523,7 +736,32 @@ class _Hero extends StatelessWidget {
                 ),
                 if (verdict.capacityText case final capacity?) ...[
                   const SizedBox(height: 2),
-                  Text('Còn $capacity', style: LuxeText.caption),
+                  Text(
+                    verdict.relative
+                        ? 'Dung lượng ước tính $capacity'
+                        : 'Còn $capacity',
+                    key: const ValueKey('health-capacity'),
+                    style: LuxeText.caption,
+                  ),
+                ],
+                if (verdict.building case final building?) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    building,
+                    key: const ValueKey('health-building'),
+                    style: LuxeText.caption,
+                  ),
+                ],
+                if (verdict.stale) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Lâu chưa có lần sạc qua ổ Shelly để tính, đây là số '
+                    '${_month(health.estimate?.at)}',
+                    key: const ValueKey('health-stale'),
+                    style: LuxeText.caption.copyWith(
+                      color: LuxeColors.champagne,
+                    ),
+                  ),
                 ],
                 const SizedBox(height: 8),
                 LuxeTag(verdict.basis, color: LuxeColors.platinumMid),

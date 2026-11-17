@@ -155,6 +155,10 @@ class LearnedProfile:
     wh_history: list[dict] = field(default_factory=list)
     cross_log: list[dict] = field(default_factory=list)
     trend: dict | None = None
+    # QA 164: battery health by month for the battery's whole life (the
+    # ledger keeps 200 charges) and the fixed reference from the first
+    # months the app followed this battery.
+    health_log: dict | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -178,6 +182,7 @@ class LearnedProfile:
             "whHistory": self.wh_history[-MAX_WH_HISTORY:],
             "crossLog": self.cross_log[-MAX_CROSS_LOG:],
             "trend": self.trend,
+            "healthLog": self.health_log,
         }
 
     @classmethod
@@ -205,6 +210,7 @@ class LearnedProfile:
             wh_history=_dicts(data.get("whHistory")),
             cross_log=_dicts(data.get("crossLog")),
             trend=dict(data["trend"]) if isinstance(data.get("trend"), dict) else None,
+            health_log=dict(data["healthLog"]) if isinstance(data.get("healthLog"), dict) else None,
         )
 
 
@@ -387,6 +393,13 @@ def queue_sample(
     queued = LearnedProfile(**{**profile.__dict__, "samples": samples,
                                "pending": [*pending, entry][-MAX_PENDING_SAMPLES:],
                                "ledger": [*ledger, entry][-MAX_LEDGER_CHARGES:]})
+    # QA 164: the battery's health by month outlives the 200-charge ledger.
+    try:
+        queued.health_log = update_health_log(
+            profile.health_log, unique_charges(queued),
+            complete=len(queued.ledger) < MAX_LEDGER_CHARGES, now=now)
+    except (TypeError, ValueError, ZeroDivisionError):
+        pass  # never lose a charge over the log
     return queued, "queued"
 
 
@@ -412,6 +425,21 @@ HEALTH_READING_FLOOR_PCT = 1.5
 HEALTH_CHARGE_SCATTER_PCT = 3.0
 # Above this share of the weight left out as outliers, they widen the error.
 HEALTH_MAX_DROPPED_SHARE = 0.25
+# QA 164 (owner's choice): the main figure is the capacity against the first
+# months the app followed this battery, which does not depend on the charger
+# efficiency assumed for the absolute figure. The reference is fixed once it
+# has this many counted charges over this many days, and never moves again.
+HEALTH_REFERENCE_CHARGES = 8
+HEALTH_REFERENCE_DAYS = 28
+# Months kept in the health log (ten years of the battery's life).
+HEALTH_LOG_MONTHS = 120
+# Charges on each side a charge is compared with to call it an outlier.
+HEALTH_NEIGHBOURS = 10
+# The charger efficiency is assumed at 90 %; real ones sit about 87-93 %, so
+# the absolute figure may be this much off on top of its measured error.
+HEALTH_EFFICIENCY_SPREAD = 0.033
+# With no counted charge in the window, the latest months still say something.
+HEALTH_STALE_CHARGES = 6
 
 
 def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
@@ -422,7 +450,8 @@ def _implied_capacity(wh_per_pct: float, efficiency: float) -> float:
 def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
                    efficiency: float = DEFAULT_EFFICIENCY, *,
                    history: list[dict] | None = None,
-                   now: datetime | None = None) -> dict:
+                   now: datetime | None = None,
+                   log: dict | None = None) -> dict:
     """% of the nominal capacity the battery still holds (QA 135).
 
     ``estimate``: from every charge with a confirmed end % (median of the
@@ -448,11 +477,18 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
     from the others are left out; the result is the pooled Wh/% of the rest.
     ``uncertaintyPct`` comes from their scatter and the whole-% reading.
     ``charges`` lists the latest ones with why each was or was not used.
+
+    QA 164 (owner's choice): ``tracking`` is the main figure, the capacity
+    against the first months the app followed this battery (``log``, the
+    stored monthly log, merged with these charges), so the assumed charger
+    efficiency cancels out. ``spread.totalPct`` adds that efficiency's own
+    doubt to the absolute figure. With no counted charge in the window the
+    latest months give a ``stale`` estimate instead of nothing.
     """
     nominal = _positive(nominal_capacity_wh)
     result: dict = {"nominalCapacityWh": nominal, "efficiency": efficiency,
                     "estimate": None, "test": None, "trend": [],
-                    "spread": None, "baseline": None, "charges": []}
+                    "spread": None, "baseline": None, "charges": [], "tracking": None}
     if nominal is None:
         return result
 
@@ -473,10 +509,14 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
     rows = _health_rows(charges, trusts, efficiency, soh, now=now)
     result["charges"] = [row["public"] for row in rows[-HEALTH_WINDOW_CHARGES:]]
     used = [row for row in rows if row["public"]["used"]]
+    health_log = update_health_log(log, charges, complete=len(history or []) < MAX_LEDGER_CHARGES,
+                                   now=now)
+    pooled_wh = None
     if used:
         weight = sum(row["weight"] for row in used)
         pooled = (sum(row["weight"] * row["energyWh"] for row in used)
                   / sum(row["weight"] * row["gain"] for row in used))
+        pooled_wh = pooled
         capacity = _implied_capacity(pooled, efficiency)
         middle = soh(capacity)
         effective = weight ** 2 / sum(row["weight"] ** 2 for row in used)
@@ -510,7 +550,38 @@ def battery_health(samples: list[dict], nominal_capacity_wh: float | None,
             "uncertaintyPct": round(uncertainty, 1),
             "lowPct": round(middle - uncertainty, 1),
             "highPct": round(middle + uncertainty, 1),
+            # QA 164: with the charger efficiency's own doubt (87-93 %).
+            "totalPct": round(math.hypot(uncertainty, middle * HEALTH_EFFICIENCY_SPREAD), 1),
         }
+    elif health_log["months"]:
+        # QA 164: nothing counted lately (no Shelly charge for months): the
+        # latest months still say where the battery stood, marked stale.
+        recent: list[dict] = []
+        for bucket in reversed(health_log["months"]):
+            recent.insert(0, bucket)
+            if sum(int(b.get("charges") or 0) for b in recent) >= HEALTH_STALE_CHARGES:
+                break
+        stale = _pooled(recent)
+        if stale:
+            pooled_wh = stale["whPerPct"]
+            middle = soh(_implied_capacity(pooled_wh, efficiency))
+            uncertainty = _relative_error_pct(stale["scatter"], stale["effective"])
+            result["estimate"] = {
+                "sohPct": middle, "capacityWh": round(_implied_capacity(pooled_wh, efficiency)),
+                "samples": stale["charges"], "effectiveCharges": round(stale["effective"], 1),
+                "confidence": "low", "method": "monthly-log", "stale": True, "asOf": stale["to"],
+            }
+            result["spread"] = {
+                "perChargePct": round(stale["scatter"] * 100, 1),
+                "uncertaintyPct": round(uncertainty, 1),
+                "lowPct": round(middle - uncertainty, 1),
+                "highPct": round(middle + uncertainty, 1),
+                "totalPct": round(math.hypot(uncertainty, middle * HEALTH_EFFICIENCY_SPREAD), 1),
+            }
+    current_error = None
+    if result["spread"] and result["estimate"]:
+        current_error = result["spread"]["uncertaintyPct"] / max(result["estimate"]["sohPct"], 1) * 100
+    result["tracking"] = health_tracking(health_log, pooled_wh, current_error, nominal, efficiency)
     if exact:
         seen = {str(item.get("sessionId") or "") for item in exact}
         long = sorted(
@@ -573,7 +644,7 @@ def _health_trusts(charges: list[dict]) -> dict[str, str]:
 
 
 def _health_rows(charges: list[dict], trusts: dict[str, str], efficiency: float,
-                 soh, *, now: datetime | None) -> list[dict]:
+                 soh, *, now: datetime | None, window: bool = True) -> list[dict]:
     """Each charge with its weight and why it is (not) part of the estimate."""
     dated = [_parse_at(item.get("at")) for item in charges]
     latest = now or max((at for at in dated if at is not None), default=None)
@@ -597,21 +668,26 @@ def _health_rows(charges: list[dict], trusts: dict[str, str], efficiency: float,
             reason = "censored"
         elif value is None or gain < HEALTH_MIN_GAIN_PCT:
             reason = "short"
-        elif age > HEALTH_WINDOW_DAYS:
+        elif window and age > HEALTH_WINDOW_DAYS:
             reason = "old"
         else:
             reason = None
         weight = 0.0
         if reason is None:
-            weight = gain * TRUST_WEIGHT[trust] * 0.5 ** (max(0.0, age) / HEALTH_HALF_LIFE_DAYS)
-            if test and age <= HEALTH_TEST_FRESH_DAYS:
+            weight = gain * TRUST_WEIGHT[trust]
+            if window:
+                weight *= 0.5 ** (max(0.0, age) / HEALTH_HALF_LIFE_DAYS)
+            if test and (age <= HEALTH_TEST_FRESH_DAYS or not window):
                 weight *= HEALTH_TEST_BOOST
         rows.append({
-            "weight": weight, "gain": gain, "energyWh": energy or 0.0, "soh": value,
+            "weight": weight, "gain": gain, "energyWh": energy or 0.0, "soh": value, "at": at,
             "public": {"at": item.get("at"), "startPct": start, "endPct": end,
                        "sohPct": value, "trust": trust, "test": test,
                        "used": reason is None, "reason": reason},
         })
+    if not window:
+        _drop_outliers_nearby(rows)
+        return rows
     # Only the latest charges count, then the ones far from the rest leave.
     eligible = [row for row in rows if row["public"]["used"]]
     for row in eligible[:-HEALTH_WINDOW_CHARGES]:
@@ -630,17 +706,166 @@ def _health_rows(charges: list[dict], trusts: dict[str, str], efficiency: float,
     return rows
 
 
-def _weighted_median(pairs: list[tuple[float, float]]) -> float:
-    pairs = sorted((value, weight) for value, weight in pairs if weight > 0)
-    if not pairs:
-        return 0.0
-    half = sum(weight for _, weight in pairs) / 2
-    running = 0.0
-    for value, weight in pairs:
-        running += weight
-        if running >= half:
-            return value
-    return pairs[-1][0]
+def _drop_outliers_nearby(rows: list[dict]) -> None:
+    """QA 164: over a battery's life the capacity moves, so a charge is
+    compared with the charges around it (not with every charge ever)."""
+    eligible = [row for row in rows if row["public"]["used"]]
+    flags = []
+    for index, row in enumerate(eligible):
+        near = eligible[max(0, index - HEALTH_NEIGHBOURS): index + HEALTH_NEIGHBOURS + 1]
+        if len(near) < 3:
+            flags.append(False)
+            continue
+        middle = _weighted_median([(item["soh"], item["weight"]) for item in near])
+        mad = _weighted_median([(abs(item["soh"] - middle), item["weight"]) for item in near])
+        flags.append(abs(row["soh"] - middle) > max(3 * 1.4826 * mad, HEALTH_OUTLIER_FLOOR_PCT))
+    for row, far in zip(eligible, flags):
+        if far:
+            row["public"].update(used=False, reason="outlier")
+            row["dropped"] = row["weight"]
+            row["weight"] = 0.0
+
+
+def _month_key(at: datetime | None) -> str | None:
+    return None if at is None else at.astimezone(timezone.utc).strftime("%Y-%m")
+
+
+def _bucket(rows: list[dict]) -> dict | None:
+    """Sums that pool across months: Wh/% = sumWE / sumWG, and the scatter of
+    single charges in Wh/% (efficiency-free) from sumWV and sumWV2."""
+    used = [row for row in rows if row["weight"] > 0]
+    if not used:
+        return None
+    values = [(row["weight"], row["energyWh"] / row["gain"]) for row in used]
+    ats = [row["at"] for row in used if row["at"] is not None]
+    return {
+        "sumW": round(sum(w for w, _ in values), 4),
+        "sumW2": round(sum(w * w for w, _ in values), 4),
+        "sumWE": round(sum(row["weight"] * row["energyWh"] for row in used), 3),
+        "sumWG": round(sum(row["weight"] * row["gain"] for row in used), 4),
+        "sumWV": round(sum(w * v for w, v in values), 4),
+        "sumWV2": round(sum(w * v * v for w, v in values), 4),
+        "charges": len(used),
+        "dropped": sum(1 for row in rows if row.get("dropped")),
+        "firstAt": min(ats).isoformat() if ats else None,
+        "lastAt": max(ats).isoformat() if ats else None,
+    }
+
+
+def _pooled(buckets: list[dict]) -> dict | None:
+    """Several buckets as one: Wh/%, charges, effective charges, the relative
+    scatter of one charge (0.03 = 3 %) and the span in days."""
+    buckets = [b for b in buckets if b and float(b.get("sumWG") or 0) > 0 and float(b.get("sumW") or 0) > 0]
+    if not buckets:
+        return None
+    total = {key: sum(float(b.get(key) or 0) for b in buckets)
+             for key in ("sumW", "sumW2", "sumWE", "sumWG", "sumWV", "sumWV2")}
+    wh = total["sumWE"] / total["sumWG"]
+    mean = total["sumWV"] / total["sumW"]
+    variance = max(0.0, total["sumWV2"] / total["sumW"] - mean * mean)
+    firsts = [at for at in (_parse_at(b.get("firstAt")) for b in buckets) if at]
+    lasts = [at for at in (_parse_at(b.get("lastAt")) for b in buckets) if at]
+    span = (max(lasts) - min(firsts)).total_seconds() / 86400 if firsts and lasts else 0.0
+    return {"whPerPct": wh, "charges": int(sum(int(b.get("charges") or 0) for b in buckets)),
+            "effective": total["sumW"] ** 2 / total["sumW2"] if total["sumW2"] else 0.0,
+            "scatter": math.sqrt(variance) / mean if mean else 0.0,
+            "from": min(firsts).isoformat() if firsts else None,
+            "to": max(lasts).isoformat() if lasts else None, "days": span}
+
+
+def update_health_log(log: dict | None, charges: list[dict], *,
+                      complete: bool = True, now: datetime | None = None) -> dict:
+    """QA 164: the monthly log of battery health, rebuilt for every month the
+    charges cover and kept for the months they no longer do. ``complete`` is
+    False when the oldest charges have already left the list: the oldest
+    month there is then partial, and a stored one is kept. The reference is
+    set once (enough counted charges over enough days) and never replaced."""
+    stored = dict(log) if isinstance(log, dict) else {}
+    months = {str(m.get("month")): dict(m) for m in (stored.get("months") or [])
+              if isinstance(m, dict) and m.get("month")}
+    ordered = sorted(charges, key=lambda item: str(item.get("at") or ""))
+    trusts = _health_trusts(ordered)
+    typical = _median([float(item["energyWh"]) / _gain(item) for item in ordered
+                       if _positive(item.get("energyWh")) and _gain(item) >= HEALTH_MIN_GAIN_PCT])
+    scale = _implied_capacity(typical, DEFAULT_EFFICIENCY) if typical else None
+    rows = (_health_rows(ordered, trusts, DEFAULT_EFFICIENCY,
+                         lambda capacity: capacity / scale * 100, now=None, window=False)
+            if ordered and scale else [])
+    grouped: dict[str, list[dict]] = {}
+    for row in rows:
+        key = _month_key(row["at"])
+        if key:
+            grouped.setdefault(key, []).append(row)
+    oldest = min(grouped) if grouped else None
+    for key, month_rows in grouped.items():
+        if key == oldest and not complete and key in months:
+            continue
+        bucket = _bucket(month_rows)
+        if bucket is None:
+            months.pop(key, None)
+        else:
+            months[key] = {"month": key, **bucket}
+    kept = [months[key] for key in sorted(months)][-HEALTH_LOG_MONTHS:]
+    reference = stored.get("reference") if isinstance(stored.get("reference"), dict) else None
+    if reference is None:
+        running: list[dict] = []
+        for bucket in kept:
+            running.append(bucket)
+            pooled = _pooled(running)
+            if (pooled and pooled["charges"] >= HEALTH_REFERENCE_CHARGES
+                    and pooled["days"] >= HEALTH_REFERENCE_DAYS):
+                reference = {"whPerPct": round(pooled["whPerPct"], 4),
+                             "charges": pooled["charges"],
+                             "effective": round(pooled["effective"], 2),
+                             "scatter": round(pooled["scatter"], 4),
+                             "from": pooled["from"], "to": pooled["to"],
+                             "months": [b["month"] for b in running],
+                             "fixedAt": (now or datetime.now(timezone.utc)).isoformat()}
+                break
+    return {"version": 1, "months": kept, "reference": reference}
+
+
+def _relative_error_pct(scatter: float, effective: float) -> float:
+    """How far a pooled Wh/% may be off, in % of itself."""
+    per_charge = max(scatter * 100, HEALTH_CHARGE_SCATTER_PCT)
+    return math.sqrt((per_charge / math.sqrt(max(effective, 1.0))) ** 2 + HEALTH_READING_FLOOR_PCT ** 2)
+
+
+def health_tracking(log: dict, current_wh_per_pct: float | None, current_error_pct: float | None,
+                    nominal: float, efficiency: float) -> dict:
+    """The battery against its own start, and its months (QA 164)."""
+    reference = log.get("reference")
+    months = log.get("months") or []
+    if not reference:
+        pooled = _pooled(months)
+        charges = pooled["charges"] if pooled else 0
+        days = pooled["days"] if pooled else 0.0
+        return {"status": "building",
+                "needCharges": max(0, HEALTH_REFERENCE_CHARGES - charges),
+                "needDays": max(0, int(math.ceil(HEALTH_REFERENCE_DAYS - days))),
+                "charges": charges, "monthly": []}
+    base = float(reference["whPerPct"])
+    base_error = _relative_error_pct(float(reference.get("scatter") or 0),
+                                     float(reference.get("effective") or 1))
+    result = {"status": "ready", "since": reference.get("from"), "until": reference.get("to"),
+              "referenceCharges": reference.get("charges"),
+              "referenceCapacityPct": round(_implied_capacity(base, efficiency) / nominal * 100, 1),
+              "relativePct": None, "uncertaintyPct": None, "lowPct": None, "highPct": None}
+    if current_wh_per_pct:
+        relative = current_wh_per_pct / base * 100
+        error = math.sqrt((current_error_pct or HEALTH_CHARGE_SCATTER_PCT) ** 2 + base_error ** 2)
+        result.update(relativePct=round(relative, 1), uncertaintyPct=round(error, 1),
+                      lowPct=round(relative - error, 1), highPct=round(relative + error, 1))
+    monthly = []
+    for bucket in months[-60:]:
+        pooled = _pooled([bucket])
+        if not pooled:
+            continue
+        monthly.append({"month": bucket["month"], "charges": pooled["charges"],
+                        "relativePct": round(pooled["whPerPct"] / base * 100, 1),
+                        "sohPct": round(_implied_capacity(pooled["whPerPct"], efficiency) / nominal * 100, 1)})
+    result["monthly"] = monthly
+    return result
 
 
 def _health_baseline(charges: list[dict], soh, efficiency: float) -> dict | None:
@@ -840,6 +1065,7 @@ def train(
         wh_history=_with_history(profile, candidate_wh, now, mode),
         cross_log=profile.cross_log,
         trend=profile.trend,
+        health_log=profile.health_log,
     )
     candidate.soc_mae = _loo_mae(samples, base_wh_per_pct, weigh_now, half_life)
     evaluation = _evaluate(samples, profile, base_wh_per_pct, weigh_now, half_life)
