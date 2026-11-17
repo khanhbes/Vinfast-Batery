@@ -164,6 +164,8 @@ class PromptAssembler:
                     "batteryPercent",
                     # QA 149: the % is a running charge's estimate.
                     "batteryCharging",
+                    # QA 164: how old the % is (minutes).
+                    "batteryReadMinutesAgo",
                     "odoKm",
                     "sohPercent",
                     "capacityWh",

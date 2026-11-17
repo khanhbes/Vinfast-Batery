@@ -16,12 +16,43 @@ from .guardrails import check_emergency_sos
 from .memory import SettingsError
 from .tips import clean as clean_tip
 
+# QA 164: a photo for Pinova Bot (Pro/Ultra). The relay takes 512 KB bodies,
+# so the app sends a compressed JPEG; it is never stored.
+IMAGE_MIME = ("image/jpeg", "image/png", "image/webp")
+IMAGE_MAX_BYTES = 350 * 1024
+IMAGE_DEFAULT_QUESTION = "Bạn xem giúp mình ảnh này."
+
+
+def clean_image(raw) -> dict | None:
+    """``{"mimeType", "data"}`` with base64 data of an allowed, small image."""
+    import base64
+    import binascii
+    if not isinstance(raw, dict):
+        return None
+    mime = str(raw.get("mimeType") or "").lower()
+    data = raw.get("data")
+    if mime not in IMAGE_MIME or not isinstance(data, str) or not data:
+        return None
+    if len(data) > IMAGE_MAX_BYTES * 4 // 3 + 8:
+        return None
+    try:
+        decoded = base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        return None
+    if not decoded or len(decoded) > IMAGE_MAX_BYTES:
+        return None
+    signatures = {"image/jpeg": (b"\xff\xd8",), "image/png": (b"\x89PNG",), "image/webp": (b"RIFF",)}
+    if not decoded.startswith(signatures[mime]):
+        return None
+    return {"mimeType": mime, "data": data}
+
+
 # A password or access code typed into a settings box (QA 163).
 _SECRET = re.compile(r"(mật khẩu|mat khau|password|passwd|token|api[ _-]?key|otp|mã pin)\s*[:=]", re.I)
 
 
 def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolver, require_admin, db=None,
-                               audit=None, tips=None):
+                               audit=None, tips=None, image_quota=None):
     bp = Blueprint("assistant", __name__)
 
     def fail(status, code, message, retryable=False):
@@ -42,6 +73,14 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         if not uid:
             return fail(401, "unauthorized", "Cần đăng nhập")
         body = request.get_json(silent=True) or {}
+        # QA 164: a photo (Pro/Ultra); without a question it gets a default one.
+        image = None
+        if body.get("image") is not None:
+            image = clean_image(body.get("image"))
+            if image is None:
+                return fail(400, "INVALID_IMAGE", "Ảnh không đọc được hoặc quá lớn. Hãy chụp lại.")
+            if not str(body.get("message") or "").strip():
+                body = {**body, "message": IMAGE_DEFAULT_QUESTION}
         # Rule 9: Emergency SOS never costs quota and is never blocked by 429
         sos = check_emergency_sos(str(body.get("message") or ""))
         if sos:
@@ -60,27 +99,41 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         if gated:
             left = max(0, quota.limit_for(uid) - quota.used_today(uid))
             return jsonify({"success": True, "data": {**gated, "remainingToday": left}})
+        if image is not None:
+            if not engine.allows(uid, "assistant_image"):
+                return fail(403, "PREMIUM_REQUIRED", "Gửi ảnh cho Pinova Bot thuộc gói Pro trở lên.")
+            if image_quota is not None and not image_quota.take(uid)[0]:
+                return fail(429, "IMAGE_QUOTA", "Hôm nay bạn đã dùng hết lượt ảnh AI.")
         allowed, remaining = quota.take(uid)
         if not allowed:
+            if image is not None and image_quota is not None:
+                image_quota.refund(uid)
             return fail(429, "ASSISTANT_QUOTA", "Bạn đã dùng hết lượt trò chuyện hôm nay. Pinova Bot chuyển sang chế độ cơ bản.")
-        if body.get("stream") is True:
-            return _stream_chat(uid, body, remaining)
-        try:
-            result = engine.chat(uid, body.get("message"), body.get("history"), body.get("context"))
-        except GeminiUnavailable as error:
+
+        def refund():
             quota.refund(uid)
+            if image is not None and image_quota is not None:
+                image_quota.refund(uid)
+
+        if body.get("stream") is True:
+            return _stream_chat(uid, body, remaining, image, refund)
+        try:
+            result = engine.chat(uid, body.get("message"), body.get("history"), body.get("context"),
+                                 image=image)
+        except GeminiUnavailable as error:
+            refund()
             return fail(503, "ASSISTANT_UNAVAILABLE", "Trợ lý AI tạm thời không phản hồi.", retryable=True) \
                 if str(error) != "notConfigured" else fail(503, "ASSISTANT_NOT_CONFIGURED", "Trợ lý AI chưa được cấu hình.")
         except Exception:
             # Firestore/tool/bug: the user got no answer, so no charge.
-            quota.refund(uid)
+            refund()
             return fail(503, "ASSISTANT_UNAVAILABLE", "Trợ lý AI tạm thời không phản hồi.", retryable=True)
         return jsonify({"success": True, "data": {**result, "remainingToday": remaining}})
 
     def _sse(event: str, data) -> str:
         return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-    def _stream_chat(uid: str, body: dict, remaining):
+    def _stream_chat(uid: str, body: dict, remaining, image=None, refund=None):
         """QA 164: the same turn as JSON chat, as server-sent events: ``delta``
         while the model writes, ``status`` while a tool reads, ``reset`` when
         a later round replaces the text, then ``done`` with the whole checked
@@ -94,14 +147,14 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         def run():
             try:
                 result = engine.chat(uid, body.get("message"), body.get("history"), body.get("context"),
-                                     on_event=emit)
+                                     on_event=emit, image=image)
                 events.put(("done", result))
             except GeminiUnavailable as error:
-                quota.refund(uid)
+                (refund or (lambda: quota.refund(uid)))()
                 events.put(("error", "ASSISTANT_NOT_CONFIGURED" if str(error) == "notConfigured"
                             else "ASSISTANT_UNAVAILABLE"))
             except Exception:
-                quota.refund(uid)
+                (refund or (lambda: quota.refund(uid)))()
                 events.put(("error", "ASSISTANT_UNAVAILABLE"))
 
         threading.Thread(target=run, name="assistant-stream", daemon=True).start()

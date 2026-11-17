@@ -118,10 +118,12 @@ class HybridAssistantEngine implements LocalChatEngine {
     if (_disposed) return const LocalChatReply('Hãy mở lại trợ lý.');
     final normalized = BatteryBotFaq.normalize(message);
     if (const {'hoan tac', 'undo', 'quay lai nhu cu'}.contains(normalized)) {
+      AssistantSignals.takeImage(); // QA 164: never carried to a later turn
       return _undo();
     }
     final quick = BatteryBotFaq.quickAnswers[message.trim()];
     if (quick != null) {
+      AssistantSignals.takeImage();
       _remember('user', message);
       _remember('assistant', quick);
       return LocalChatReply(quick);
@@ -140,6 +142,15 @@ class HybridAssistantEngine implements LocalChatEngine {
       );
     } on AssistantUnavailable catch (error) {
       AssistantSignals.clearLive();
+      // QA 164: a photo the server turned down is said plainly (plan, the
+      // day's photos, a photo it could not read), not "basic mode".
+      const photo = {'PREMIUM_REQUIRED', 'IMAGE_QUOTA', 'INVALID_IMAGE'};
+      if (photo.contains(error.code)) {
+        return LocalChatReply(
+          error.message ??
+              'Chưa gửi được ảnh này. Bạn hãy hỏi bằng chữ hoặc thử lại sau.',
+        );
+      }
       return _basic(message, error);
     }
     AssistantSignals.liveStatus.value = null;
@@ -416,6 +427,21 @@ class HybridAssistantEngine implements LocalChatEngine {
       );
     }
   }
+
+  /// QA 164: the conversation Pinova Bot continues: an old one opened again
+  /// gets its last turns back as context, a new chat starts with none.
+  void startConversation(List<(String, String)> turns) {
+    _generation++;
+    _history.clear();
+    _pending.clear();
+    _lastUndo = null;
+    for (final (role, text) in turns) {
+      _remember(role, text);
+    }
+  }
+
+  /// The turns sent with the next message (tests).
+  List<Map<String, String>> get historyForTest => List.unmodifiable(_history);
 
   @override
   void cancel() {

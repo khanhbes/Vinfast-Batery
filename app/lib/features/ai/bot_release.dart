@@ -12,9 +12,16 @@ class BotRelease {
 /// thiệu with what changed. Raise [current] and add a release on top of
 /// [releases] whenever the bot changes (AGENTS.md).
 abstract final class PinovaBotRelease {
-  static const current = '3.2.0';
+  static const current = '3.3.0';
 
   static const releases = <BotRelease>[
+    BotRelease('3.3.0', '17/11/2026', [
+      'Chữ hiện dần ngay khi Pinova Bot đang viết, kèm việc Bot đang làm (ví dụ đang xem ổ Shelly).',
+      'Nói để hỏi và nghe Bot đọc câu trả lời (Android).',
+      'Gửi ảnh đèn báo, bộ sạc hay ổ Shelly để Bot xem (gói Pro, Ultra).',
+      'Lịch sử chat tìm được, chia theo ngày, đổi tên và xóa có hoàn tác; mở lại đoạn cũ thì Bot nhớ đoạn đó.',
+      'Sức khỏe pin nói theo mức so với lúc bắt đầu theo dõi; câu hỏi ngoài hướng dẫn vẫn được trả lời theo thông tin chung.',
+    ]),
     BotRelease('3.2.0', '16/11/2026', [
       'Cài đặt riêng cho Pinova Bot: giọng trả lời, độ dài, cách gọi bạn và điều Bot nên biết về bạn.',
       'Mỗi ngày một mẹo nhỏ về đi xe, sạc và giữ pin bền; xem đủ ở Tiện ích → Mẹo nhỏ.',

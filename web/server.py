@@ -7057,6 +7057,10 @@ def _register_scan():
     try:
         store = configured_store()
     except Exception:
+        # QA 164: a photo to Pinova Bot uses the same AI photos as the scan.
+        image_quota=DailyQuota(store, limit=5, partition='scanAiQuota',
+                               limit_for=(lambda uid: billing.limit(uid, 'scan_ai_daily'))
+                               if billing is not None else None),
         store = None
     billing = app.extensions.get('billing')
     app.register_blueprint(create_scan_blueprint(

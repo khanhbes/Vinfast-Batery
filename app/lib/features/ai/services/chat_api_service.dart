@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../core/constants/app_constants.dart';
+import '../models/chat_message.dart';
 import '../models/chat_session.dart';
 import '../models/function_call_action.dart';
 import '../../../core/providers/vehicle_context_provider.dart';
@@ -333,6 +334,22 @@ class ChatApiService {
       sessionIdCompleter: sessionIdCompleter,
       functionCallCompleter: functionCallCompleter,
     );
+  }
+
+  /// QA 164: what Pinova Bot knows of this conversation: the given messages
+  /// (an old one opened again, or none for a new chat). Only the server
+  /// engine keeps such context.
+  void startConversation(List<ChatMessage> messages) {
+    final engine = _localEngine;
+    if (engine is! HybridAssistantEngine) return;
+    engine.startConversation([
+      for (final m in messages)
+        if (!m.hasError &&
+            !m.isStreaming &&
+            m.id != 'msg-welcome' &&
+            m.content.trim().isNotEmpty)
+          (m.fromBot ? 'assistant' : 'user', m.content),
+    ]);
   }
 
   void _simulateOfflineStream(

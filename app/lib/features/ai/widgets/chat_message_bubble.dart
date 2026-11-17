@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../../core/services/voice_bridge.dart';
 import '../../../core/utils/battery_bot_faq.dart';
 import '../models/chat_message.dart';
 import '../models/function_call_action.dart';
@@ -28,7 +30,11 @@ class ChatMessageBubble extends StatelessWidget {
     this.isActionLoading = false,
     this.showMeta = true,
     this.liveStatus,
+    this.imageBytes,
   });
+
+  /// QA 164: the photo sent with this message (this visit only).
+  final Uint8List? imageBytes;
 
   /// QA 164: what Pinova Bot is reading while this answer is written.
   final String? liveStatus;
@@ -109,6 +115,32 @@ class ChatMessageBubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
+            if (message.hasImage) ...[
+              if (imageBytes case final bytes?)
+                ClipRRect(
+                  key: ValueKey('bubble-photo-${message.id}'),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.memory(
+                    bytes,
+                    width: 160,
+                    height: 160,
+                    fit: BoxFit.cover,
+                  ),
+                )
+              else
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.image_rounded, size: 16, color: LuxeColors.dim),
+                    SizedBox(width: 4),
+                    Text(
+                      'Đã gửi kèm ảnh',
+                      style: TextStyle(fontSize: 12.5, color: LuxeColors.dim),
+                    ),
+                  ],
+                ),
+              const SizedBox(height: 6),
+            ],
             Container(
               constraints: BoxConstraints(maxWidth: screenWidth * 0.8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
@@ -283,6 +315,8 @@ class ChatMessageBubble extends StatelessWidget {
                     tooltip: 'Chia sẻ',
                     onTap: _shareMessage,
                   ),
+                  // QA 164: hear the answer (Android's Vietnamese voice).
+                  if (VoiceBridge.supported) _SpeakButton(message: message),
                   if (onAskAgain != null)
                     _BubbleActionButton(
                       key: const ValueKey('bubble-ask-again'),
@@ -468,6 +502,43 @@ class _BubbleActionButton extends StatelessWidget {
     tooltip: tooltip,
     onPressed: onTap,
     icon: Icon(icon, size: 16, color: LuxeColors.dim),
+  );
+}
+
+class _SpeakButton extends StatelessWidget {
+  const _SpeakButton({required this.message});
+  final ChatMessage message;
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<String?>(
+    valueListenable: VoiceBridge.speaking,
+    builder: (context, id, _) {
+      final reading = id == message.id;
+      return IconButton(
+        key: ValueKey('bubble-speak-${message.id}'),
+        tooltip: reading ? 'Dừng đọc' : 'Đọc to',
+        onPressed: () async {
+          if (reading) {
+            await VoiceBridge.stop();
+            return;
+          }
+          final ok = await VoiceBridge.speak(message.id, message.content);
+          if (!ok) {
+            AppPopup.showInfo(
+              'Máy chưa có giọng đọc tiếng Việt',
+              detail:
+                  'Cài giọng tiếng Việt trong Cài đặt của máy, mục chuyển '
+                  'văn bản thành giọng nói.',
+            );
+          }
+        },
+        icon: Icon(
+          reading ? Icons.stop_circle_rounded : Icons.volume_up_rounded,
+          size: 16,
+          color: reading ? context.planAccent : LuxeColors.dim,
+        ),
+      );
+    },
   );
 }
 

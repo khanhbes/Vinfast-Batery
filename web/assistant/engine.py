@@ -31,7 +31,7 @@ MAX_TURNS = 3
 CHAT_DEADLINE_SECONDS = 28.0
 
 # QA 163: Pinova Bot's own version (the app shows it in Giới thiệu).
-BOT_SERVER_VERSION = "3.2.0"
+BOT_SERVER_VERSION = "3.3.0"
 
 SCREENS = ["overview", "charge", "history", "settings", "maintenance", "achievements",
            "battery_monitor", "trip_planner", "notifications", "garage", "vehicle_specs",
@@ -185,13 +185,15 @@ Số thập phân viết bằng dấu chấm như trong app (0.58 kWh, 1.21 km c
 7. An toàn trên hết: không hướng dẫn vượt giới hạn 12 A / 2500 W, không vô hiệu hóa bảo vệ, khuyên giám sát khi sạc.
 8. Chuyến đi: câu hỏi "đi X được không / hết bao nhiêu pin" → gọi estimate_trip (cần điểm đến + điểm đi, hoặc số km; thiếu thì hỏi lại). Trả lời: % hao (khoảng), % khi tới nơi, kết luận, và gợi ý cụ thể khi không đủ (sạc trước đến X% mất bao lâu — gọi estimate_charge; chạy chậm; tuyến ngắn hơn; sạc ở điểm đến). Luôn nói đây là ước tính.
 9. Sạc theo mức pin: "sạc đến 80%" → gọi prepare_target_charging(percent=80) (mở tab Sạc, người dùng tự vuốt; máy chủ tự ngắt khi ước tính đạt mức). "sạc 80% mất bao lâu" → estimate_charge. Nêu độ chính xác cá nhân nếu có (learnedSamples, socMae). Nhắc nhập % trên đồng hồ xe sau khi sạc để có thêm dữ liệu. Nếu bật sạc hẹn giờ để đạt một mức pin (vd "sạc hẹn giờ từ 11 đến 85%", hoặc gói Free không có sạc đến %), gọi start_timed_charging(minutes=thời gian ước tính, target_percent=mức đó).
-10. App học thế nào: % người dùng nhập (tay, Pinova Bot, ảnh đồng hồ), lúc app tự nhận biết pin đầy và các chuyến đi chỉ được XẾP HÀNG; mô hình chỉ đổi khi người dùng bấm Huấn luyện ở Cài đặt → AI cá nhân (app báo khi đủ dữ liệu: 3 lần sạc hoặc 10 chuyến mới). Không nói app "học ngay" hay tự học.
+10. App học thế nào: % người dùng đọc trên đồng hồ sau khi sạc (nhập tay, Pinova Bot, quét ảnh) và lúc app tự nhận biết pin đầy giúp ước tính thời gian sạc (Wh cho 1%) tự học sau vài lần sạc mới, ở mọi gói, giữ số cũ nếu số mới kém hơn (tắt được ở AI cá nhân). Ước tính chuyến đi chỉ đổi khi người dùng bấm Huấn luyện ở Tiện ích → AI cá nhân (gói Ultra; app báo khi có 10 chuyến mới). Không nói app "học ngay" sau một lần.
 11. Tổng kết theo tháng (kWh, số phiên, thời gian) → gọi get_charging_summary; chi phí theo giá điện xem ở tab Lịch sử.
 12. Gói Pinova Premium: Free (an toàn, hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày); Pro 29.000đ/tháng hoặc 249.000đ/năm (sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, lộ trình, % pin chai, giao diện, 2 xe, lịch sử đầy đủ + CSV, 30 tin/ngày); Ultra 49.000đ/tháng hoặc 449.000đ/năm (thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày). Chi phí theo tháng ở tab Lịch sử có cho mọi gói; chưa có chia sẻ xe, sạc giờ điện rẻ hay báo cáo tháng, đừng hứa các tính năng này. Dùng thử Ultra 7 ngày. Chưa có thanh toán trong app. Hỏi về gói → get_subscription rồi trả lời; muốn xem/nâng cấp → open_premium; "dùng thử" → start_trial; đọc mã → apply_promo_code. Khi công cụ trả premiumRequired, giải thích ngắn và gọi open_premium. Trước khi hỏi chi tiết cho một tính năng ngoài gói của người dùng (xem gói hiện tại trong ngữ cảnh: lộ trình và sạc đến % cần Pro; sạc đêm và huấn luyện AI cần Ultra), nói ngay tính năng đó thuộc gói nào và hỏi họ có muốn xem gói không; đừng hỏi điểm đến, giờ thức hay % rồi mới báo khóa. Lời khuyên sạc theo loại pin của xe (batteryChemistry): ắc quy chì (Lead-acid) nên sạc đầy sau mỗi lần dùng, không khuyên dừng ở 80%.
 13. Trợ giúp: lỗi bạn không xử lý được hoặc người dùng muốn hỏi đội hỗ trợ → contact_support với tiêu đề và mô tả theo lời người dùng; mở màn tự kiểm tra lỗi → navigate(screen="help").
 14. Đang sạc đến % mà muốn đổi mục tiêu ("sạc lên 90% luôn") → update_charge_target. Sạc đêm ("tối nay sạc để 6 giờ sáng đầy") → get_night_plan nếu cần, rồi set_night_plan. Không bao giờ tự bật sạc.
-15. % pin chai, pin còn tốt không → get_battery_health; nêu đây là ước tính, gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) và navigate(screen="battery_health").
-16. Nếu người dùng hỏi một câu không nằm trong kịch bản hoặc kho kiến thức đã kiểm định của app: bắt đầu câu trả lời bằng nhãn [UNSCRIPTED_ESCALATE], trả lời chung lịch sự rằng trường hợp này đã được chuyển lên Quản trị viên (Admin) để đánh giá bổ sung kịch bản, gợi ý các tính năng hiện có của app và gọi contact_support."""
+15. % pin chai, pin còn tốt không → get_battery_health. Số chính là "so với lúc bắt đầu theo dõi" (relativePct ± relativeErrorPct, từ tháng since) khi có: nói pin giữ/giảm bao nhiêu so với lúc đó; trong sai số thì nói chưa thấy giảm rõ, không bao giờ nói pin "hồi phục". Dung lượng so với hãng (capacityPct ± capacityErrorPct) là ước tính phụ vì giả định hiệu suất bộ sạc. Đang lập mốc (needCharges) thì nói còn cần thêm bao nhiêu lần sạc. stale = số của những tháng trước. Gợi ý bài kiểm tra (đi xuống ≤ 30% rồi sạc đầy) khi chưa có, và navigate(screen="battery_health").
+16. Câu hỏi về xe điện, pin, sạc mà HƯỚNG DẪN APP và công cụ không có câu trả lời: vẫn trả lời ngắn theo hiểu biết chung, nói rõ đây là thông tin chung và nên đối chiếu sổ hướng dẫn của xe hoặc hỏi đại lý VinFast; mở đầu bằng nhãn [UNSCRIPTED_ESCALATE] (app tự bỏ nhãn này và ghi câu hỏi cho đội Pinova bổ sung, người dùng không thấy). Không nói đã chuyển cho Quản trị viên. Chỉ gọi contact_support khi người dùng muốn hỏi đội hỗ trợ hoặc gặp lỗi app bạn không xử lý được.
+17. Khi người dùng gửi ẢNH: nói ngắn điều bạn thấy liên quan tới xe, pin, sạc, ổ Shelly hoặc đèn báo trên đồng hồ, rồi trả lời câu hỏi. Đèn cảnh báo: giải thích ý nghĩa thường gặp, nói rõ cần đối chiếu sổ hướng dẫn hoặc đại lý VinFast, nếu có dấu hiệu nguy hiểm (khói, cháy, phồng pin, dây chảy) thì khuyên ngắt điện và tránh xa trước tiên. Ảnh không liên quan thì nói lịch sự là bạn chỉ xem ảnh về xe và sạc. Không đọc lại biển số, mặt người hay giấy tờ trong ảnh. Không đoán số % pin hay ODO từ ảnh mờ; muốn ghi số đọc thì gợi ý nút Quét đồng hồ.
+18. Số pin trong ngữ cảnh: batteryReadMinutesAgo cho biết số đó được đọc cách đây bao lâu. Trên 6 giờ và xe không đang sạc thì nói đó là số lúc trước (xe có thể đã chạy) và mời quét đồng hồ hoặc nhập % mới trước khi tính thời gian sạc hay quãng đường."""
 
 
 def _clock_time(value) -> str | None:
@@ -457,8 +459,12 @@ class VisibleText:
     wait until they cannot be the start of one. The final, checked answer
     replaces this text when the turn ends."""
 
-    MARKERS = ("GỢI Ý", "GOI Y:", "[UNSCRIPTED", "[UNSCRIPTED_ESCALATE]")
-    HOLD = 14
+    # Everything from here on is the follow-up line.
+    CUTS = ("GỢI Ý", "GOI Y:")
+    # Removed wherever it is (the unscripted flag opens the answer).
+    FLAGS = ("[UNSCRIPTED_ESCALATE]",)
+    # Longer than any marker, so none can leak in part.
+    HOLD = 22
 
     def __init__(self, emit):
         self.full = ""
@@ -472,15 +478,48 @@ class VisibleText:
 
     def feed(self, delta: str) -> None:
         self.full += delta
-        cut = len(self.full)
-        for marker in self.MARKERS:
-            index = self.full.find(marker)
+        text = self.full
+        for flag in self.FLAGS:
+            text = text.replace(flag, "")
+        text = text.lstrip()
+        cut = len(text)
+        for marker in self.CUTS:
+            index = text.find(marker)
             if index >= 0:
                 cut = min(cut, index)
-        safe = cut if cut < len(self.full) else max(self.sent, len(self.full) - self.HOLD)
+        safe = cut if cut < len(text) else max(self.sent, len(text) - self.HOLD)
         if safe > self.sent:
-            self.emit("delta", self.full[self.sent:safe])
+            self.emit("delta", text[self.sent:safe])
             self.sent = safe
+
+
+def health_brief(result: dict) -> dict:
+    """QA 164: what the model needs from battery health, the main figure
+    first (against the battery's own start), the absolute one with its whole
+    error; not the per-charge list."""
+    if not isinstance(result, dict) or "estimate" not in result:
+        return result
+    estimate = result.get("estimate") or {}
+    spread = result.get("spread") or {}
+    tracking = result.get("tracking") or {}
+    test = result.get("test") or {}
+    brief = {"nominalCapacityWh": result.get("nominalCapacityWh")}
+    if tracking.get("status") == "ready" and tracking.get("relativePct") is not None:
+        brief.update(relativePct=tracking["relativePct"], relativeErrorPct=tracking.get("uncertaintyPct"),
+                     since=str(tracking.get("since") or "")[:7])
+    elif tracking.get("status") == "building":
+        brief.update(referenceBuilding=True, needCharges=tracking.get("needCharges"),
+                     needDays=tracking.get("needDays"))
+    if estimate:
+        brief.update(capacityPct=estimate.get("sohPct"),
+                     capacityErrorPct=spread.get("totalPct") or spread.get("uncertaintyPct"),
+                     charges=estimate.get("samples"), stale=bool(estimate.get("stale")))
+    if test:
+        brief["testPct"] = test.get("sohPct")
+        brief["testAt"] = str(test.get("at") or "")[:10]
+    if result.get("full") is False:
+        brief["full"] = False
+    return {key: value for key, value in brief.items() if value is not None}
 
 
 def summarize_session(item: dict) -> dict:
@@ -557,6 +596,10 @@ class AssistantEngine:
         self.mailer = mailer
         self.prompt_assembler = PromptAssembler()
         self._last_prompt_trace: dict | None = None
+
+    def allows(self, uid: str, feature: str) -> bool:
+        """The owner's plan includes ``feature`` (everything without billing)."""
+        return self.entitlements is None or self.entitlements.allows(uid, feature)
 
     def _premium_block(self, uid: str, feature: str) -> dict | None:
         if self.entitlements is None or self.entitlements.allows(uid, feature):
@@ -652,7 +695,7 @@ class AssistantEngine:
                 if not self.health_reader or not vehicle_id:
                     return {"error": "unavailable"}
                 blocked = self._premium_block(uid, "battery_health")
-                return blocked or self.health_reader(uid, vehicle_id)
+                return blocked or health_brief(self.health_reader(uid, vehicle_id))
             if name == "get_night_plan":
                 if not self.night_reader or not vehicle_id:
                     return {"error": "unavailable"}
@@ -857,7 +900,7 @@ class AssistantEngine:
 
     def chat(self, uid: str, message: str, history: list[dict] | None, context: dict | None,
              *, version_id: str | None = None, dry_run: bool = False, include_trace: bool = False,
-             on_event=None) -> dict:
+             on_event=None, image: dict | None = None) -> dict:
         """One turn. ``on_event(kind, data)`` (QA 164) receives ``delta``
         (text the owner may see now), ``status`` (what Pinova Bot is reading)
         and ``reset`` while the model writes; the returned result is still
@@ -1006,7 +1049,14 @@ class AssistantEngine:
             if text and not _SENSITIVE.search(text):
                 contents.append({"role": "model" if turn.get("role") in ("assistant", "model", "bot") else "user",
                                  "parts": [{"text": text}]})
-        contents.append({"role": "user", "parts": [{"text": message}]})
+        if image:
+            # QA 164: the owner's photo goes with this question only; it is
+            # never stored or sent again with later turns.
+            contents.append({"role": "user", "parts": [
+                {"inlineData": {"mimeType": image["mimeType"], "data": image["data"]}},
+                {"text": message}]})
+        else:
+            contents.append({"role": "user", "parts": [{"text": message}]})
         tools = CLIENT_ACTIONS + [tool for tool in SERVER_TOOLS
                                   if learning or tool["name"] not in ("remember",)]
         state: dict = {}

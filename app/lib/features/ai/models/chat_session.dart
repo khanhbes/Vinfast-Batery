@@ -9,7 +9,11 @@ class ChatSession {
     required this.updatedAt,
     this.messageCount = 0,
     this.lastMessage,
+    this.renamed = false,
   });
+
+  /// QA 164: the owner named it; a later save keeps that name.
+  final bool renamed;
 
   final String sessionId;
   String get id => sessionId;
@@ -31,6 +35,7 @@ class ChatSession {
           : DateTime.now(),
       messageCount: (json['messageCount'] as num?)?.toInt() ?? 0,
       lastMessage: json['lastMessage'] as String?,
+      renamed: json['renamed'] == true,
     );
   }
 
@@ -42,6 +47,7 @@ class ChatSession {
       'updatedAt': updatedAt.toIso8601String(),
       'messageCount': messageCount,
       if (lastMessage != null) 'lastMessage': lastMessage,
+      if (renamed) 'renamed': true,
     };
   }
 }

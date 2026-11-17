@@ -177,3 +177,31 @@ def test_driving_mode_is_not_streamed():
     events = _events(response)
     assert not [k for k, _ in events if k == "delta"]
     assert events[-1][0] == "done"
+
+
+def test_health_brief_puts_the_start_first_and_drops_the_charge_list():
+    from assistant.engine import health_brief
+    brief = health_brief({
+        "nominalCapacityWh": 2400,
+        "estimate": {"sohPct": 98.8, "samples": 8},
+        "spread": {"uncertaintyPct": 2.2, "totalPct": 4.0},
+        "tracking": {"status": "ready", "relativePct": 99.4, "uncertaintyPct": 2.8,
+                     "since": "2026-09-12T17:00:00+00:00"},
+        "charges": [{"at": "x"}] * 20,
+        "trend": [{"sohPct": 99}] * 40,
+    })
+    assert brief == {"nominalCapacityWh": 2400, "relativePct": 99.4, "relativeErrorPct": 2.8,
+                     "since": "2026-09", "capacityPct": 98.8, "capacityErrorPct": 4.0,
+                     "charges": 8, "stale": False}
+    building = health_brief({"estimate": {"sohPct": 99}, "tracking": {"status": "building", "needCharges": 2}})
+    assert building["referenceBuilding"] is True and building["needCharges"] == 2
+
+
+def test_unscripted_flag_never_shows_and_does_not_stop_the_stream():
+    shown = []
+    visible = VisibleText(lambda kind, data: shown.append(data))
+    for piece in ["[UNSCRIPTED_", "ESCALATE]Đây là thông tin chung: không nên ", "lấy điện từ cổng sạc cho thiết bị khác vì dễ hỏng pin."]:
+        visible.feed(piece)
+    text = "".join(s for s in shown if s)
+    assert text.startswith("Đây là thông tin chung")
+    assert "[" not in text and "UNSCRIPTED" not in text

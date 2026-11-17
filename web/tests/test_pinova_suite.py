@@ -70,9 +70,12 @@ def test_unscripted_question_gives_general_reply_and_forwards_to_admin_review_qu
         include_trace=True,
     )
     assert res.get("unscriptedEscalation") is True
-    assert "chưa nằm trong kịch bản" in res["reply"]
-    assert "Quản trị viên" in res["reply"]
-    assert any(a["name"] == "contact_support" for a in res["actions"])
+    # QA 164 (owner's choice): a general answer said to be general, no
+    # "forwarded to the Admin" and no support form; the queue still gets it.
+    assert "thông tin chung" in res["reply"]
+    assert "Quản trị viên" not in res["reply"]
+    assert "[UNSCRIPTED" not in res["reply"]
+    assert not any(a["name"] == "contact_support" for a in res["actions"])
 
     # Verify it was automatically added to Admin's flaggedConversations review queue
     flagged = store.get_overview()["flaggedConversations"]

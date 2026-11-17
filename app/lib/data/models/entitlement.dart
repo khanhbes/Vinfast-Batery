@@ -48,7 +48,9 @@ enum PremiumFeature {
   offpeakSchedule('offpeak_schedule', PlanTier.ultra, 'Sạc giờ điện rẻ'),
   shareVehicle('share_vehicle', PlanTier.ultra, 'Chia sẻ xe với người nhà'),
   monthlyReport('monthly_report', PlanTier.ultra, 'Báo cáo pin hằng tháng'),
-  ultraLook('ultra_look', PlanTier.ultra, 'Giao diện Aurora chuyển động');
+  ultraLook('ultra_look', PlanTier.ultra, 'Giao diện Aurora chuyển động'),
+  // QA 164 (owner's choice): a photo sent to Pinova Bot.
+  assistantImage('assistant_image', PlanTier.pro, 'Gửi ảnh cho Pinova Bot');
 
   const PremiumFeature(this.id, this.tier, this.label);
   final String id;

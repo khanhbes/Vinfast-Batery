@@ -309,44 +309,29 @@ class DeterministicPlaygroundGemini:
                 }
             ]
 
+        # QA 164 (owner's choice): a general answer, said to be general; the
+        # question is queued for the team silently, no support form.
         if is_en:
             return [
                 {
                     "text": (
-                        "[UNSCRIPTED_ESCALATE]This question is not yet covered in **Pinova's** verified app scenarios or knowledge base. "
-                        "To avoid guessing, I have **automatically forwarded this case to the Administrator (Admin)** for evaluation and scenario updates. "
-                        "Meanwhile, I can help you check your **VinFast Feliz 2025** battery, control your **Shelly 1** smart plug, estimate trip range, or submit a **Support ticket** below!"
+                        "[UNSCRIPTED_ESCALATE]This is general information, not yet in **Pinova's** verified "
+                        "guides: do not draw power for other devices from the scooter's charging or "
+                        "accessory ports, and check your scooter's manual or a VinFast dealer before any "
+                        "modification. I can check your battery, plan a charge or estimate a trip for you."
                     )
-                },
-                {
-                    "functionCall": {
-                        "name": "contact_support",
-                        "args": {
-                            "category": "app",
-                            "subject": "Unscripted question forwarded for Admin review",
-                            "message": msg[:300],
-                        },
-                    }
                 },
             ]
 
         return [
             {
                 "text": (
-                    "[UNSCRIPTED_ESCALATE]Câu hỏi này hiện chưa nằm trong kịch bản hoặc kho kiến thức đã kiểm định của **Pinova** trên ứng dụng. "
-                    "Để tránh trả lời phỏng đoán thiếu chính xác, mình đã **tự động gửi trường hợp này lên Quản trị viên (Admin)** để đánh giá và bổ sung kịch bản hỗ trợ. "
-                    "Trong lúc chờ cập nhật, mình có thể giúp bạn kiểm tra mức pin xe **VinFast Feliz 2025**, điều khiển ổ cắm **Shelly 1**, ước tính lộ trình hoặc gửi phiếu **Hỗ trợ kỹ thuật** bên dưới nhé!"
+                    "[UNSCRIPTED_ESCALATE]Đây là thông tin chung, chưa có trong hướng dẫn đã kiểm định của "
+                    "**Pinova**: không nên lấy điện từ cổng sạc hay nguồn trên xe cho thiết bị khác, vì dễ "
+                    "làm hỏng pin hoặc chập điện. Bạn nên đối chiếu sổ hướng dẫn của xe hoặc hỏi đại lý "
+                    "VinFast trước khi lắp thêm gì. Mình có thể giúp bạn xem pin, chuẩn bị sạc hoặc ước "
+                    "tính quãng đường."
                 )
-            },
-            {
-                "functionCall": {
-                    "name": "contact_support",
-                    "args": {
-                        "category": "app",
-                        "subject": "Câu hỏi ngoài kịch bản cần Admin đánh giá bổ sung",
-                        "message": msg[:300],
-                    },
-                }
             },
         ]
 

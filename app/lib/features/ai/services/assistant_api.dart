@@ -33,6 +33,19 @@ abstract final class AssistantSignals {
     liveText.value = '';
     liveStatus.value = null;
   }
+
+  /// QA 164: the photo to send with the next message (Pro/Ultra), taken
+  /// once by [AssistantApi.chat]; never kept after that.
+  static ({String mimeType, String data})? _image;
+
+  static void attachImage(String mimeType, String base64Data) =>
+      _image = (mimeType: mimeType, data: base64Data);
+
+  static ({String mimeType, String data})? takeImage() {
+    final image = _image;
+    _image = null;
+    return image;
+  }
 }
 
 /// QA 163: the owner's Pinova Bot settings (`/api/assistant/settings`).
@@ -393,7 +406,14 @@ class AssistantApi {
     required List<Map<String, String>> history,
     required Map<String, dynamic> context,
   }) async {
-    final body = {'message': message, 'history': history, 'context': context};
+    final image = AssistantSignals.takeImage();
+    final body = {
+      'message': message,
+      'history': history,
+      'context': context,
+      if (image != null)
+        'image': {'mimeType': image.mimeType, 'data': image.data},
+    };
     final data = streamReplies
         ? await _streamTurn(body)
         : await _call('POST', '/api/assistant/chat', body: body);

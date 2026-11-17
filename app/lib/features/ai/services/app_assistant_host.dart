@@ -130,6 +130,14 @@ class AppAssistantActionHost implements AssistantActionHost {
           'model': vehicle.vinfastModelName ?? vehicle.vehicleName,
           if (vehicle.hasBatteryData) 'batteryPercent': vehicle.currentBattery,
           if (live != null) 'batteryCharging': true,
+          // QA 164: how old the % is, so the bot says when it may be stale.
+          if (live == null &&
+              vehicle.hasBatteryData &&
+              vehicle.batteryDataUpdatedAt != null)
+            'batteryReadMinutesAgo': DateTime.now()
+                .difference(vehicle.batteryDataUpdatedAt!)
+                .inMinutes
+                .clamp(0, 60 * 24 * 365),
           'odoKm': vehicle.currentOdo,
           if (vehicle.hasSohData) 'sohPercent': vehicle.stateOfHealth,
           if (vehicle.batteryCapacityWh > 0)

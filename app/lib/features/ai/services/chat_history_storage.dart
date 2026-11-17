@@ -93,7 +93,11 @@ class ChatHistoryStorage {
         (s) => s.sessionId == sessionId,
       );
 
+      final kept = existingIndex >= 0 && sessions[existingIndex].renamed
+          ? sessions[existingIndex].title
+          : null;
       final sessionTitle =
+          kept ??
           title ??
           (messages.isNotEmpty
               ? messages
@@ -110,6 +114,7 @@ class ChatHistoryStorage {
         updatedAt: now,
         messageCount: messages.length,
         lastMessage: messages.isNotEmpty ? messages.last.content : null,
+        renamed: kept != null,
       );
 
       if (existingIndex >= 0) {
@@ -189,6 +194,32 @@ class ChatHistoryStorage {
   /// Alias cho listSavedSessions với hỗ trợ phân trang
   Future<List<ChatSession>> listSessions({int limit = 50, int offset = 0}) =>
       listSavedSessions(limit: limit, offset: offset);
+
+  /// QA 164: the owner's own name for a conversation (kept on later saves).
+  Future<void> renameSession(String sessionId, String title) =>
+      _serializeWrite(() async {
+        final clean = title.trim();
+        if (clean.isEmpty) return;
+        final uid = _uidResolver();
+        final sessions = await listSavedSessions(limit: 100000);
+        if (uid != _uidResolver()) return;
+        final index = sessions.indexWhere((s) => s.sessionId == sessionId);
+        if (index < 0) return;
+        final old = sessions[index];
+        sessions[index] = ChatSession(
+          sessionId: old.sessionId,
+          title: clean.length > 80 ? clean.substring(0, 80) : clean,
+          createdAt: old.createdAt,
+          updatedAt: old.updatedAt,
+          messageCount: old.messageCount,
+          lastMessage: old.lastMessage,
+          renamed: true,
+        );
+        await _secure.write(
+          key: _sessionIndexKey,
+          value: jsonEncode(sessions.map((s) => s.toJson()).toList()),
+        );
+      });
 
   /// Xóa một session khỏi local storage
   Future<void> deleteSession(String sessionId) async {

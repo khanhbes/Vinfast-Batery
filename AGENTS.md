@@ -363,6 +363,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Bong bóng mẹo: tối đa 1/ngày, không ở tab Sạc, cách bong bóng khác 2 giờ, theo công tắc trong Cài đặt Pinova Bot (`TipLibrary`, `TipPicker`). Chạm mở Mẹo nhỏ.
   - Cài đặt Bot do máy chủ giữ (`memory.set_settings`); "điều Bot nên biết" luôn trong `<untrusted_context>`. Câu hỏi gợi ý là dòng "GỢI Ý:" máy chủ tách ra (`split_follow_ups`).
   - Pinova Bot có phiên bản riêng: đổi Bot thì tăng `PinovaBotRelease.current` (app, thêm ghi chú vào `releases`) và `BOT_SERVER_VERSION` (máy chủ).
+- **QA 164 (17/11/2026, chủ app chọn):**
+  - Sức khỏe pin: số chính so với mốc những tháng đầu (`tracking`, mốc cố định trong `healthLog.reference`, không bao giờ đổi); sổ theo tháng `health_log` ghi ở `queue_sample`, mọi chỗ dựng `LearnedProfile(...)` bằng tham số tên phải mang `health_log`. Sai số số tuyệt đối gồm hiệu suất bộ sạc (`totalPct`). Hiển thị chỉ qua `HealthVerdict.of`.
+  - Mẹo trong ngày chỉ qua `TipLibrary.today` (cố định trong ngày); đừng gọi `TipPicker.pick` trực tiếp cho "Mẹo hôm nay".
+  - Pinova Bot stream: `engine.chat(on_event=)`, chữ qua `VisibleText` (không lộ "GỢI Ý:" hay nhãn); kết quả `done` mới là câu chính thức. Thêm thao tác relay mới thì sửa cả APIM bicep lẫn `web/gemini_relay`.
+  - Chat mới gọi `startConversation(const [])`, mở chat cũ gọi với tin của nó; ảnh gửi một lần qua `AssistantSignals.attachImage`, không lưu ảnh ở đâu cả. Giọng nói chỉ qua `VoiceBridge` (Android, không xin quyền micro).
 
 ### 3.7. BatteryBot (trợ lý AI)
 

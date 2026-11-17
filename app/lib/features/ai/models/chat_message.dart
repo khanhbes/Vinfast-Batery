@@ -48,7 +48,12 @@ class ChatMessage {
     this.hasError = false,
     this.errorMessage,
     this.userFeedback,
+    this.hasImage = false,
   });
+
+  /// QA 164: the owner sent a photo with this message. The photo itself is
+  /// never stored (only this flag), in the chat or on the server.
+  final bool hasImage;
 
   final String id;
   final ChatRole role;
@@ -78,8 +83,10 @@ class ChatMessage {
     bool? hasError,
     String? errorMessage,
     String? userFeedback,
+    bool? hasImage,
   }) {
     return ChatMessage(
+      hasImage: hasImage ?? this.hasImage,
       id: id ?? this.id,
       role: role ?? this.role,
       content: content ?? this.content,
@@ -121,6 +128,7 @@ class ChatMessage {
       hasError: json['hasError'] as bool? ?? false,
       errorMessage: json['errorMessage'] as String?,
       userFeedback: json['userFeedback'] as String?,
+      hasImage: json['hasImage'] == true,
     );
   }
 
@@ -137,6 +145,7 @@ class ChatMessage {
       if (hasError) 'hasError': true,
       if (errorMessage != null) 'errorMessage': errorMessage,
       if (userFeedback != null) 'userFeedback': userFeedback,
+      if (hasImage) 'hasImage': true,
     };
   }
 }

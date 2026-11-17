@@ -4,15 +4,18 @@ import '../tips/tip_library.dart';
 import 'assistant_settings_screen.dart';
 import 'bot_release.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../../core/providers/app_state_providers.dart';
 import '../../core/providers/vehicle_context_provider.dart';
 import '../../core/services/assistant_context_coordinator.dart';
+import '../../core/services/voice_bridge.dart';
 import '../../core/theme/app_ui_colors.dart';
 import '../../core/theme/luxe_theme.dart';
 import '../../core/utils/battery_bot_faq.dart';
@@ -34,11 +37,15 @@ import 'services/chat_history_storage.dart';
 import 'services/suggestion_service.dart';
 import 'services/voice_input_service.dart';
 import 'widgets/battery_reading_sheet.dart';
+import 'widgets/chat_history_sheet.dart';
 import 'widgets/chat_message_bubble.dart';
 import 'widgets/quick_reply_chips.dart';
 import '../../core/services/guide_registry.dart';
 import '../../core/services/screen_tour.dart';
 import '../premium/plan_tag.dart';
+import '../premium/premium_gate.dart';
+import '../../core/widgets/luxe_settings.dart';
+import '../../data/models/entitlement.dart';
 import '../../core/providers/entitlement_provider.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/theme/plan_style.dart';
@@ -101,6 +108,7 @@ class _InteractiveAssistantSheetState
     _messages
       ..clear()
       ..addAll(recent.messages);
+    ref.read(chatApiServiceProvider).startConversation(recent.messages);
     return true;
   }
 
@@ -124,6 +132,110 @@ class _InteractiveAssistantSheetState
   /// checked reply replaces it.
   int? _liveIndex;
   String? _liveStatus;
+
+  /// QA 164: a photo to send with the next question (Pro/Ultra), and the
+  /// photos sent in this visit (memory only; never stored).
+  Uint8List? _pendingImage;
+  String _pendingMime = 'image/jpeg';
+  final Map<String, Uint8List> _photos = {};
+
+  /// The relay takes 512 KB bodies; base64 adds a third.
+  static const _maxPhotoBytes = 340 * 1024;
+
+  Future<void> _openAttachMenu() async {
+    await showLuxeSheet<void>(
+      context,
+      builder: (sheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSheetHeader(title: 'Gửi cho Pinova Bot'),
+              LuxeSettingsGroup(
+                children: [
+                  LuxeSettingsRow(
+                    key: const ValueKey('attach-scan'),
+                    icon: Icons.document_scanner_rounded,
+                    title: 'Quét đồng hồ xe',
+                    subtitle: 'Đọc % pin và ODO, bạn xem lại trước khi lưu',
+                    onTap: () {
+                      Navigator.of(sheet).pop();
+                      unawaited(_readDashboardPhoto());
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              PremiumLocked(
+                feature: PremiumFeature.assistantImage,
+                reserveTagSpace: true,
+                child: LuxeSettingsGroup(
+                  children: [
+                    LuxeSettingsRow(
+                      key: const ValueKey('attach-camera'),
+                      icon: Icons.photo_camera_rounded,
+                      title: 'Chụp ảnh hỏi Pinova Bot',
+                      subtitle: 'Đèn báo trên đồng hồ, bộ sạc, ổ Shelly',
+                      onTap: () {
+                        Navigator.of(sheet).pop();
+                        unawaited(_pickPhoto(ImageSource.camera));
+                      },
+                    ),
+                    LuxeSettingsRow(
+                      key: const ValueKey('attach-gallery'),
+                      icon: Icons.photo_library_rounded,
+                      title: 'Chọn ảnh có sẵn',
+                      subtitle: 'Ảnh chỉ gửi kèm câu hỏi, không được lưu',
+                      onTap: () {
+                        Navigator.of(sheet).pop();
+                        unawaited(_pickPhoto(ImageSource.gallery));
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickPhoto(ImageSource source) async {
+    XFile? file;
+    try {
+      file = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1280,
+        maxHeight: 1280,
+        imageQuality: 70,
+      );
+    } on Object {
+      file = null;
+      AppPopup.showInfo('Chưa mở được máy ảnh hoặc thư viện ảnh');
+    }
+    if (file == null || !mounted) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    if (bytes.length > _maxPhotoBytes) {
+      AppPopup.showInfo(
+        'Ảnh còn quá lớn',
+        detail: 'Hãy chụp lại gần hơn hoặc chọn ảnh khác.',
+      );
+      return;
+    }
+    final name = file.name.toLowerCase();
+    setState(() {
+      _pendingImage = bytes;
+      _pendingMime = name.endsWith('.png')
+          ? 'image/png'
+          : name.endsWith('.webp')
+          ? 'image/webp'
+          : 'image/jpeg';
+    });
+  }
 
   void _onLive() {
     final index = _liveIndex;
@@ -449,44 +561,29 @@ class _InteractiveAssistantSheetState
     }
   }
 
+  /// QA 164: the system's speech screen; what was said goes into the box
+  /// for the owner to check and send (a spoken command never runs alone).
   Future<void> _toggleVoiceInput() async {
-    if (_isTyping) return;
-    _voiceService ??= VoiceInputService();
-
-    if (_isListeningVoice) {
-      final text = await _voiceService!.stopListening();
-      if (!mounted) return;
-      setState(() {
-        _isListeningVoice = false;
-      });
-      if (text.trim().isNotEmpty) {
-        _inputController.text = text;
-        _handleSend(text);
-      }
-    } else {
-      final success = await _voiceService!.startListening(
-        localeId: 'vi_VN',
-        onResult: (text) {
-          if (!mounted) return;
-          _voiceService!.updateTranscript(text);
-          setState(() {
-            _inputController.text = text;
-          });
-        },
-        onDone: () {
-          if (!mounted) return;
-          setState(() {
-            _isListeningVoice = false;
-          });
-        },
+    if (_isTyping || _isListeningVoice) return;
+    setState(() => _isListeningVoice = true);
+    String? said;
+    try {
+      said = await VoiceBridge.listen();
+    } on VoiceUnavailable {
+      AppPopup.showInfo(
+        'Máy chưa nhận được giọng nói',
+        detail: 'Bật ứng dụng Google trên máy để nói với Pinova Bot.',
       );
-
-      if (success && mounted) {
-        setState(() {
-          _isListeningVoice = true;
-        });
-      }
     }
+    if (!mounted) return;
+    setState(() => _isListeningVoice = false);
+    final text = said?.trim() ?? '';
+    if (text.isEmpty) return;
+    final current = _inputController.text.trim();
+    _inputController.text = current.isEmpty ? text : '$current $text';
+    _inputController.selection = TextSelection.collapsed(
+      offset: _inputController.text.length,
+    );
   }
 
   void _handleRetry(int msgIndex) {
@@ -517,6 +614,8 @@ class _InteractiveAssistantSheetState
     _isTyping = false;
     _activeSuggestion = null;
     _actionLoadingMap.clear();
+    // QA 164: a new chat no longer sends the last one to the server.
+    ref.read(chatApiServiceProvider).startConversation(const []);
     setState(() {
       _sessionId = 'session-${DateTime.now().millisecondsSinceEpoch}';
       _messages.clear();
@@ -555,6 +654,8 @@ class _InteractiveAssistantSheetState
     }
     if (!_isCurrent(generation)) return;
     if (loaded.isNotEmpty) {
+      // QA 164: an old conversation opened again is the context again.
+      ref.read(chatApiServiceProvider).startConversation(loaded);
       setState(() {
         _sessionId = sessionId;
         _messages.clear();
@@ -593,176 +694,26 @@ class _InteractiveAssistantSheetState
       return;
     }
     if (!mounted || !_isCurrent(generation)) return;
-
-    final uiColors = _LuxePalette(context.planAccent);
+    // QA 164: search, days, rename, delete with undo (widgets/chat_history_sheet).
     await showLuxeSheet<void>(
       context,
       builder: (modalCtx) {
         _historyModalContext = modalCtx;
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.history_rounded,
-                              color: uiColors.primary,
-                              size: 22,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Lịch sử trò chuyện',
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.bold,
-                                color: LuxeColors.text,
-                              ),
-                            ),
-                          ],
-                        ),
-                        TextButton.icon(
-                          icon: const Icon(Icons.add_comment_rounded, size: 16),
-                          label: const Text('Đoạn chat mới'),
-                          onPressed: () {
-                            Navigator.of(modalCtx).pop();
-                            _startNewChat();
-                          },
-                        ),
-                      ],
-                    ),
-                    const Divider(),
-                    Text(
-                      'Lịch sử lưu trên máy này.',
-                      style: TextStyle(color: LuxeColors.muted),
-                    ),
-                    if (sessions.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: Center(
-                          child: Text(
-                            'Chưa có lịch sử hội thoại nào.',
-                            style: TextStyle(
-                              color: LuxeColors.muted,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      )
-                    else
-                      ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: MediaQuery.of(context).size.height * 0.4,
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: sessions.length,
-                          separatorBuilder: (_, _) => const Divider(height: 1),
-                          itemBuilder: (itemCtx, i) {
-                            final sess = sessions[i];
-                            final isCurrent = sess.id == _sessionId;
-                            final dateStr = DateFormat(
-                              'dd/MM HH:mm',
-                            ).format(sess.updatedAt);
-                            return ListTile(
-                              contentPadding: EdgeInsets.zero,
-                              leading: CircleAvatar(
-                                radius: 18,
-                                backgroundColor: isCurrent
-                                    ? uiColors.primary.withValues(alpha: 0.15)
-                                    : uiColors.background,
-                                child: Icon(
-                                  isCurrent
-                                      ? Icons.chat_bubble_rounded
-                                      : Icons.chat_bubble_outline_rounded,
-                                  color: isCurrent
-                                      ? uiColors.primary
-                                      : LuxeColors.muted,
-                                  size: 18,
-                                ),
-                              ),
-                              title: Text(
-                                sess.title,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: isCurrent
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
-                                  color: LuxeColors.text,
-                                ),
-                              ),
-                              subtitle: Text(
-                                '$dateStr • ${sess.messageCount} tin nhắn',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: LuxeColors.muted,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                tooltip: 'Xóa cuộc trò chuyện trên máy này',
-                                icon: Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 18,
-                                  color: LuxeColors.muted,
-                                ),
-                                onPressed: () async {
-                                  try {
-                                    await storage.deleteSession(sess.id);
-                                  } catch (_) {
-                                    if (!ctx.mounted ||
-                                        !mounted ||
-                                        !_isCurrent(generation)) {
-                                      return;
-                                    }
-                                    AppPopup.showMessage(
-                                      'Chưa xóa được lịch sử trên máy này. Hãy thử lại.',
-                                      kind: AppNoticeKind.error,
-                                    );
-                                    return;
-                                  }
-                                  if (!ctx.mounted ||
-                                      !mounted ||
-                                      !_isCurrent(generation)) {
-                                    return;
-                                  }
-                                  setModalState(() {
-                                    sessions.removeWhere(
-                                      (item) => item.id == sess.id,
-                                    );
-                                  });
-                                  if (sess.id == _sessionId) {
-                                    _startNewChat();
-                                  }
-                                },
-                              ),
-                              onTap: () {
-                                Navigator.of(modalCtx).pop();
-                                if (!isCurrent) {
-                                  _loadSession(sess.id);
-                                }
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            );
+        return ChatHistorySheet(
+          sessions: sessions,
+          storage: storage,
+          currentId: _sessionId,
+          onOpen: (id) {
+            Navigator.of(modalCtx).pop();
+            if (id != _sessionId) _loadSession(id);
+          },
+          onNewChat: () {
+            Navigator.of(modalCtx).pop();
+            _startNewChat();
+          },
+          onDeleted: (id) {
+            if (!mounted || !_isCurrent(generation)) return;
+            if (id == _sessionId) _startNewChat();
           },
         );
       },
@@ -962,12 +913,15 @@ class _InteractiveAssistantSheetState
   }
 
   void _handleSend(String rawText) {
-    final text = rawText.trim();
+    final photo = _pendingImage;
+    var text = rawText.trim();
+    if (text.isEmpty && photo != null) text = 'Bạn xem giúp mình ảnh này.';
     if (text.isEmpty || _isTyping) return;
     final generation = _generation;
     _inputController.clear();
     AssistantSignals.followUps.value = const [];
     if (_looksSensitive(text)) {
+      setState(() => _pendingImage = null);
       setState(
         () => _messages.add(
           ChatMessage(
@@ -984,14 +938,21 @@ class _InteractiveAssistantSheetState
     ref
         .read(behaviorTrackerProvider.notifier)
         .trackChatInteraction(topic: _detectTopic(text));
+    final userId = 'user-${DateTime.now().microsecondsSinceEpoch}';
+    if (photo != null) {
+      AssistantSignals.attachImage(_pendingMime, base64Encode(photo));
+      _photos[userId] = photo;
+    }
     setState(() {
       _activeSuggestion = null;
+      _pendingImage = null;
       _messages.add(
         ChatMessage(
-          id: 'user-${DateTime.now().microsecondsSinceEpoch}',
+          id: userId,
           role: ChatRole.user,
           content: text,
           timestamp: DateTime.now(),
+          hasImage: photo != null,
         ),
       );
       _isTyping = true;
@@ -1289,6 +1250,7 @@ class _InteractiveAssistantSheetState
     final bubble = ChatMessageBubble(
       message: message,
       showMeta: showMeta,
+      imageBytes: _photos[message.id],
       liveStatus: index == _liveIndex ? _liveStatus : null,
       onFeedback: (rating) => _onFeedback(index, rating),
       onActionPressed: _executeAction,
@@ -1719,6 +1681,41 @@ class _InteractiveAssistantSheetState
                         );
                       },
                     ),
+                    if (_pendingImage case final photo?)
+                      Padding(
+                        key: const ValueKey('assistant-photo-preview'),
+                        padding: const EdgeInsets.fromLTRB(16, 6, 12, 0),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.memory(
+                                photo,
+                                width: 56,
+                                height: 56,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Expanded(
+                              child: Text(
+                                'Ảnh sẽ gửi kèm câu hỏi của bạn',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: LuxeColors.muted,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              key: const ValueKey('assistant-photo-remove'),
+                              tooltip: 'Bỏ ảnh',
+                              icon: const Icon(Icons.close_rounded, size: 20),
+                              onPressed: () =>
+                                  setState(() => _pendingImage = null),
+                            ),
+                          ],
+                        ),
+                      ),
                     // Input dock: one glass capsule holding field, mic and send.
                     Padding(
                       padding: EdgeInsets.fromLTRB(
@@ -1758,12 +1755,9 @@ class _InteractiveAssistantSheetState
                                               color: LuxeColors.danger,
                                             ),
                                             tooltip: 'Hủy ghi âm',
-                                            onPressed: () {
-                                              _voiceService?.cancelListening();
-                                              setState(() {
-                                                _isListeningVoice = false;
-                                              });
-                                            },
+                                            onPressed: () => setState(
+                                              () => _isListeningVoice = false,
+                                            ),
                                           ),
                                           // QA 139: no waveform (voice input is
                                           // off; it looped without real audio).
@@ -1817,39 +1811,32 @@ class _InteractiveAssistantSheetState
                             if (!_isListeningVoice)
                               IconButton(
                                 key: GuideRegistry.keyBotScan,
-                                tooltip: 'Quét đồng hồ xe để đọc % pin và ODO',
+                                tooltip: 'Quét đồng hồ hoặc gửi ảnh',
                                 icon: const Icon(
                                   Icons.photo_camera_rounded,
                                   color: LuxeColors.platinumMid,
                                 ),
                                 onPressed: _isTyping || _readingDashboard
                                     ? null
-                                    : _readDashboardPhoto,
+                                    : _openAttachMenu,
                               ),
-                            if (VoiceInputService.isSupported ||
-                                _isListeningVoice)
+                            if (VoiceBridge.supported && !_isListeningVoice)
                               IconButton(
                                 key: const Key('assistant_voice_button'),
-                                tooltip: _isListeningVoice
-                                    ? 'Dừng ghi âm'
-                                    : 'Giọng nói chưa sẵn sàng. Hãy nhập bằng bàn phím.',
-                                icon: Icon(
-                                  _isListeningVoice
-                                      ? Icons.stop_circle_rounded
-                                      : Icons.mic_none_rounded,
-                                  color: _isListeningVoice
-                                      ? LuxeColors.danger
-                                      : LuxeColors.platinumMid,
+                                tooltip: 'Nói để hỏi Pinova Bot',
+                                icon: const Icon(
+                                  Icons.mic_rounded,
+                                  color: LuxeColors.platinumMid,
                                 ),
-                                onPressed: VoiceInputService.isSupported
-                                    ? _toggleVoiceInput
-                                    : null,
+                                onPressed: _isTyping ? null : _toggleVoiceInput,
                               ),
                             ValueListenableBuilder<TextEditingValue>(
                               valueListenable: _inputController,
                               builder: (context, value, _) {
                                 final ready =
-                                    value.text.trim().isNotEmpty && !_isTyping;
+                                    (value.text.trim().isNotEmpty ||
+                                        _pendingImage != null) &&
+                                    !_isTyping;
                                 // QA 163: while Pinova Bot answers, the
                                 // button stops the answer.
                                 if (_isTyping) {
@@ -2268,18 +2255,6 @@ class _TypingDotState extends State<_TypingDot>
       ),
     ),
   );
-}
-
-/// Luxe colours for the history sheet (same names as [AppUiColors]).
-class _LuxePalette {
-  const _LuxePalette(this.primary);
-  Color get surface => const Color(0xFF0C0D0F);
-  Color get background => LuxeColors.raised;
-
-  /// The plan's accent (QA 140).
-  final Color primary;
-  Color get text => LuxeColors.text;
-  Color get muted => LuxeColors.muted;
 }
 
 /// "Pinova Bot" with the plan's tag and the plan's daily messages (QA 136).

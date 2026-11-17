@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from flask import Flask
 
-from assistant.engine import AssistantEngine, habits_from, summarize_session, validate_action
+from assistant.engine import BOT_SERVER_VERSION, AssistantEngine, habits_from, summarize_session, validate_action
 from assistant.gemini import GeminiUnavailable
 from assistant.knowledge import KnowledgeBase, fold
 from assistant.memory import AssistantMemory
@@ -47,7 +47,7 @@ def test_plain_answer_uses_knowledge_and_context_in_prompt():
     assert {"profile", "model1", "total"} <= set(timings)
     # QA 163: plus the follow-up questions and the bot version.
     assert result == {"reply": "Bạn mở tab **Lịch sử** nhé.", "actions": [], "source": "gemini",
-                      "memoryChanged": False, "followUps": [], "botVersion": "3.2.0"}
+                      "memoryChanged": False, "followUps": [], "botVersion": BOT_SERVER_VERSION}
     system = eng.gemini.calls[0]["system"]
     assert "Lịch sử sạc" in system and '"batteryPercent": 40' in system
 

@@ -39,6 +39,7 @@ FEATURES = {
     "share_vehicle": "ultra",
     "monthly_report": "ultra",
     "ultra_look": "ultra",         # QA 136: aurora colours and motion
+    "assistant_image": "pro",      # QA 164: a photo sent to Pinova Bot
 }
 
 # Per-tier numeric limits; ``None`` means no limit.

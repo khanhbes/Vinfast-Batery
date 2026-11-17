@@ -61,7 +61,8 @@ def test_health_tool_is_pro_and_reads_the_vehicle():
     eng.gemini.script = [[{"functionCall": {"name": "get_battery_health", "args": {}}}], [{"text": "92%"}]]
     eng.chat("u1", "pin tôi chai bao nhiêu", [], CONTEXT)
     response = eng.gemini.calls[-1]["contents"][-1]["parts"][0]["functionResponse"]["response"]
-    assert response == {"estimate": {"sohPct": 92}}
+    # QA 164: a short view for the model (the main figure first).
+    assert response == {"capacityPct": 92, "stale": False}
 
 
 def test_night_action_and_tool():

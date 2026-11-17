@@ -105,6 +105,14 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- QA 164: the system speech screen and text-to-speech (no
+             microphone permission: the recognizer app holds it). -->
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
+        </intent>
         <!-- QA 145: open the MoMo app to pay (APK build). -->
         <intent>
             <action android:name="android.intent.action.VIEW"/>
