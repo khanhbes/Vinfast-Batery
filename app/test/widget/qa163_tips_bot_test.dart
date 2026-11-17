@@ -200,10 +200,17 @@ void main() {
       await _pump(tester, TipsScreen(library: library), scale: scale);
       expect(tester.takeException(), isNull);
       expect(find.byKey(const ValueKey('tips-today')), findsOneWidget);
+      // QA 164: the groups are one row that scrolls sideways.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('tips-filter-weather')),
+      );
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tips-filter-weather')));
       await tester.pump();
       expect(find.text('Tránh đi qua chỗ ngập sâu'), findsWidgets);
       expect(find.text('Hằng ngày sạc đến 80–90%'), findsNothing);
+      await tester.ensureVisible(find.byKey(const ValueKey('tips-filter-all')));
+      await tester.pump();
       await tester.tap(find.byKey(const ValueKey('tips-filter-all')));
       await tester.enterText(
         find.byKey(const ValueKey('tips-search')),

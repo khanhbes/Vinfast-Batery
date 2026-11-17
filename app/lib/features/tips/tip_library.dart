@@ -27,6 +27,7 @@ class TipLibrary extends ChangeNotifier {
   static const _lastDayKey = 'tips.daily.lastDay.v1';
   static const _dailyKey = 'tips.daily.enabled.v1';
   static const _morningKey = 'assistant.morning.enabled.v1';
+  static const _todayKey = 'tips.today.v1';
 
   final Future<String> Function() _asset;
   final Future<Map<String, dynamic>> Function() _remote;
@@ -35,6 +36,10 @@ class TipLibrary extends ChangeNotifier {
   final Set<String> _seen = {};
   final Set<String> _saved = {};
   String? _lastDay;
+
+  /// QA 164: "day|tipId", the tip of the day once chosen (the bubble, the
+  /// chat and Mẹo nhỏ show the same one, even after tips are read).
+  String? _today;
   bool _daily = true;
   bool _morning = true;
   bool _loaded = false;
@@ -65,6 +70,7 @@ class TipLibrary extends ChangeNotifier {
       _seen.addAll(prefs.getStringList(_seenKey) ?? const []);
       _saved.addAll(prefs.getStringList(_savedKey) ?? const []);
       _lastDay = prefs.getString(_lastDayKey);
+      _today = prefs.getString(_todayKey);
       _daily = prefs.getBool(_dailyKey) ?? true;
       _morning = prefs.getBool(_morningKey) ?? true;
     } on Object {
@@ -120,6 +126,37 @@ class TipLibrary extends ChangeNotifier {
   }
 
   static String dayKey(DateTime now) => '${now.year}-${now.month}-${now.day}';
+
+  /// QA 164: the one tip of the day. Chosen once (for this moment and this
+  /// battery, unseen first) and kept for the day, so reading tips or another
+  /// screen asking later does not change it.
+  Tip? today({
+    required DateTime now,
+    bool? leadAcid,
+    int? batteryPercent,
+    bool charging = false,
+  }) {
+    final day = dayKey(now);
+    final stored = _today?.split('|');
+    if (stored != null && stored.length == 2 && stored.first == day) {
+      final tip = byId(stored.last);
+      if (tip != null && tip.fits(leadAcid: leadAcid)) return tip;
+    }
+    final tip = TipPicker.pick(
+      _tips,
+      now: now,
+      seen: _seen,
+      leadAcid: leadAcid,
+      batteryPercent: batteryPercent,
+      charging: charging,
+    );
+    if (tip != null) {
+      _today = '$day|${tip.id}';
+      final value = _today!;
+      unawaited(_write((p) => p.setString(_todayKey, value)));
+    }
+    return tip;
+  }
 
   /// The daily tip was already told today.
   bool toldToday(DateTime now) => _lastDay == dayKey(now);

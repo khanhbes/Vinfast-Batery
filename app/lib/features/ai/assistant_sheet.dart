@@ -1,6 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import '../settings/about_screen.dart';
-import '../tips/tip.dart';
 import '../tips/tip_library.dart';
 import 'assistant_settings_screen.dart';
 import 'bot_release.dart';
@@ -2082,11 +2081,7 @@ class _TodayTipState extends State<_TodayTip> {
     if (!_library.loaded || !_library.dailyEnabled) {
       return const SizedBox.shrink();
     }
-    final tip = TipPicker.pick(
-      _library.tips,
-      now: DateTime.now(),
-      seen: _library.seen,
-    );
+    final tip = _library.today(now: DateTime.now());
     if (tip == null) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

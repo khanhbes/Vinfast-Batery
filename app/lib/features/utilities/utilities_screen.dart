@@ -125,7 +125,7 @@ class UtilitiesScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              const LuxeSectionLabel('XE & AI CÁ NHÂN'),
+              const LuxeSectionLabel('XE, AI & MẸO'),
               LuxeReveal(
                 index: 1,
                 child: LuxeTileGrid(
@@ -160,15 +160,8 @@ class UtilitiesScreen extends ConsumerWidget {
                       accent: achievements.rank.rarity.accent,
                       onTap: () => push(const AchievementsScreen()),
                     ),
-                  ],
-                ),
-              ),
-              // QA 163 (owner's choice): every tip for riding and charging.
-              const LuxeSectionLabel('MẸO & HƯỚNG DẪN'),
-              LuxeReveal(
-                index: 2,
-                child: LuxeTileGrid(
-                  tiles: [
+                    // QA 163 (owner's choice): every tip for riding and
+                    // charging. QA 164: in this group, so no tile sits alone.
                     LuxeTile(
                       key: const ValueKey('utilities-tips'),
                       icon: Icons.lightbulb_rounded,

@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/models/vehicle_model.dart';
-import '../../features/tips/tip.dart';
 import '../../features/tips/tip_library.dart';
 import '../providers/app_state_providers.dart';
 import '../providers/vehicle_context_provider.dart';
@@ -223,10 +222,8 @@ class AssistantContextCoordinator extends ChangeNotifier {
         !tips.toldToday(currentTime) &&
         (last == null || currentTime.difference(last) >= tipAfterOtherBubble)) {
       final leadAcid = _leadAcid(vehicle);
-      final tip = TipPicker.pick(
-        tips.tips,
+      final tip = tips.today(
         now: currentTime,
-        seen: tips.seen,
         leadAcid: leadAcid,
         batteryPercent: vehicle != null && vehicle.hasBatteryData
             ? vehicle.currentBattery
