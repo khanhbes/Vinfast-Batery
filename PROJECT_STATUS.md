@@ -12,7 +12,7 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 164. Task Completion Log — Sức khỏe pin so với lúc bắt đầu theo dõi và sổ theo tháng, Mẹo nhỏ đồng bộ hơn, Pinova Bot 3.3 (stream, lịch sử, giọng nói, ảnh) (17/11/2026, chủ app chọn: theo dõi thay đổi; stream thật; ưu tiên cả giao diện, câu trả lời, lịch sử, giọng nói và ảnh; câu ngoài kho kiến thức trả lời chung và ghi lặng lẽ; ảnh chỉ Pro/Ultra; giọng nói Android) — Code + test xong, APK 2.2.1+244, **máy chủ và relay chưa deploy**
+## 164. Task Completion Log — Sức khỏe pin so với lúc bắt đầu theo dõi và sổ theo tháng, Mẹo nhỏ đồng bộ hơn, Pinova Bot 3.3 (stream, lịch sử, giọng nói, ảnh) (17/11/2026, chủ app chọn: theo dõi thay đổi; stream thật; ưu tiên cả giao diện, câu trả lời, lịch sử, giọng nói và ảnh; câu ngoài kho kiến thức trả lời chung và ghi lặng lẽ; ảnh chỉ Pro/Ultra; giọng nói Android) — Code + test xong, APK 2.2.1+244, **đã deploy 17/11/2026** (API, worker, dashboard, relay APIM thao tác `stream`)
 
 **Kiểm tra trên máy (Xiaomi, tài khoản chủ app, chỉ xem):** bản 2.2.0 đã cài; máy chủ production chưa có QA 162–163 (`/api/tips` 404), nên Sức khỏe pin hiện **102%** theo cách cũ (trung vị 10 lần) với ghi chú của cách mới; lần mở đầu báo "Chưa tải được" khi mạng điện thoại chập chờn, kéo xuống tải lại được. Mẹo nhỏ: bộ lọc 3 hàng, thẻ chỉ có tiêu đề. Pinova Bot: "Mẹo hôm nay" trong chat khác ở Mẹo nhỏ (lựa chọn đổi khi đọc mẹo), ba mặt Bot trên một màn, thanh trên hai hàng, chữ "Dữ liệu hồ sơ" màu champagne (màu cảnh báo).
 
@@ -39,7 +39,9 @@
 
 **Giới hạn:** chưa thử bản 2.2.1 có máy chủ mới trên máy; stream qua APIM Consumption chưa đo; giọng nói cần ứng dụng Google và giọng tiếng Việt trên máy; iOS chưa có giọng nói; sổ theo tháng chỉ ghi từ lần sạc kế tiếp sau deploy (trước đó tính tạm từ sổ 200 lần mỗi lần mở).
 
-**Cần chủ app:** deploy API (QA 162–164) và dashboard; deploy lại relay APIM bằng `deploy/azure/gemini-relay-apim.bicep` (thao tác `stream`); cài 2.2.1; chạy `tools/read_charge_ledger.ps1` để có sổ sạc mới rồi `python web/scripts/qa162_health_replay.py`.
+**Deploy (17/11/2026, chủ app yêu cầu):** gate từ worktree sạch commit `5dcd7d0` (image API đúng 94 file, test Linux 1005 đạt, khởi động thử, smoke worker; bằng chứng `docs/qa_evidence/app-review-2026-10-05/qa164-*-20261117`), API `vinfast-api@sha256:67008582…`, worker `vinfast-worker@sha256:d52d49ff…` (revision 0000032); `/api/health`, `/api/ready` 200, `/api/tips` 401 khi chưa đăng nhập (trước là 404). Production trước đó vẫn là QA 150, nên lần này đưa lên cả QA 151–164. Dashboard build từ worktree sạch và đã lên Static Web App. Relay APIM: thêm thao tác `stream` bằng az CLI (không cần khóa Gemini), policy đọc lại đúng `streamGenerateContent` + `buffer-response="false"`. Gate lần đầu báo 2 lỗi của QA 163 (công cụ so file image chưa biết `assistant/tips_vi.json`, test so kho mẹo cần thư mục app) đã sửa ở `5dcd7d0`. Phần sửa dở chưa commit của luồng khác không lên production.
+
+**Cần chủ app:** cài 2.2.1; chạy `tools/read_charge_ledger.ps1` để có sổ sạc mới rồi `python web/scripts/qa162_health_replay.py`.
 
 ---
 
