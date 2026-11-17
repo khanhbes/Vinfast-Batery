@@ -17,9 +17,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import requests
 
 GEMINI = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# QA 164: the answer as it is written (server-sent events, passed on as is).
+GEMINI_STREAM = ("https://generativelanguage.googleapis.com/v1beta/models/"
+                 "{model}:streamGenerateContent?alt=sse")
 MAX_BODY = 512 * 1024
 _MODEL = re.compile(r"^[a-z0-9][a-z0-9.\-]{2,63}$")
-_PATH = re.compile(r"^/v1/generate/([^/?#]+)$")
+_PATH = re.compile(r"^/v1/(generate|stream)/([^/?#]+)$")
 
 
 def _config():
@@ -63,7 +66,8 @@ class Handler(BaseHTTPRequestHandler):
         supplied = self.headers.get("X-Relay-Token", "")
         if not cfg["token"] or not hmac.compare_digest(supplied.encode(), cfg["token"].encode()):
             return self._error(401, "UNAUTHENTICATED")
-        model = match.group(1)
+        model = match.group(2)
+        streaming = match.group(1) == "stream"
         if not _MODEL.match(model) or (cfg["models"] and model not in cfg["models"]):
             return self._error(400, "MODEL_NOT_ALLOWED")
         try:
@@ -80,13 +84,29 @@ class Handler(BaseHTTPRequestHandler):
         if not cfg["key"]:
             return self._error(503, "NOT_CONFIGURED")
         try:
-            upstream = self.session.post(GEMINI.format(model=model), data=body, timeout=25,
+            upstream = self.session.post((GEMINI_STREAM if streaming else GEMINI).format(model=model),
+                                         data=body, timeout=25, stream=streaming,
                                          headers={"x-goog-api-key": cfg["key"],
                                                   "Content-Type": "application/json"})
         except requests.RequestException:
             return self._error(502, "UPSTREAM_UNREACHABLE")
-        self._send(upstream.status_code, upstream.content,
-                   upstream.headers.get("Content-Type", "application/json"))
+        if not streaming or upstream.status_code != 200:
+            return self._send(upstream.status_code, upstream.content,
+                              upstream.headers.get("Content-Type", "application/json"))
+        # HTTP/1.0: no length, the stream ends when the connection closes.
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        try:
+            for chunk in upstream.iter_content(chunk_size=None):
+                if chunk:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+        except (requests.RequestException, OSError):
+            pass
+        finally:
+            upstream.close()
 
 
 def main():

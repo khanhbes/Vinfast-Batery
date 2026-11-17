@@ -436,6 +436,53 @@ def describe_action(action: dict) -> str:
     }.get(name, "Mình đã chuẩn bị thao tác, bạn kiểm tra rồi xác nhận nhé.")
 
 
+# QA 164: what the owner sees while Pinova Bot reads something for them.
+TOOL_STATUS = {
+    "get_charger_status": "Đang xem ổ Shelly…",
+    "get_charging_history": "Đang xem lịch sử sạc…",
+    "get_charging_habits": "Đang xem thói quen sạc…",
+    "get_charging_summary": "Đang tổng kết tháng…",
+    "search_app_help": "Đang tìm hướng dẫn…",
+    "estimate_trip": "Đang tính quãng đường…",
+    "get_subscription": "Đang xem gói của bạn…",
+    "get_battery_health": "Đang xem sức khỏe pin…",
+    "get_night_plan": "Đang xem lịch sạc đêm…",
+    "estimate_charge": "Đang tính thời gian sạc…",
+}
+
+
+class VisibleText:
+    """QA 164: the part of a streamed answer the owner may already see. The
+    "GỢI Ý:" line and internal markers never show; the last few characters
+    wait until they cannot be the start of one. The final, checked answer
+    replaces this text when the turn ends."""
+
+    MARKERS = ("GỢI Ý", "GOI Y:", "[UNSCRIPTED", "[UNSCRIPTED_ESCALATE]")
+    HOLD = 14
+
+    def __init__(self, emit):
+        self.full = ""
+        self.sent = 0
+        self.emit = emit
+
+    def reset(self) -> None:
+        if self.sent:
+            self.emit("reset", None)
+        self.full, self.sent = "", 0
+
+    def feed(self, delta: str) -> None:
+        self.full += delta
+        cut = len(self.full)
+        for marker in self.MARKERS:
+            index = self.full.find(marker)
+            if index >= 0:
+                cut = min(cut, index)
+        safe = cut if cut < len(self.full) else max(self.sent, len(self.full) - self.HOLD)
+        if safe > self.sent:
+            self.emit("delta", self.full[self.sent:safe])
+            self.sent = safe
+
+
 def summarize_session(item: dict) -> dict:
     def when(value):
         try:
@@ -809,7 +856,12 @@ class AssistantEngine:
         return block
 
     def chat(self, uid: str, message: str, history: list[dict] | None, context: dict | None,
-             *, version_id: str | None = None, dry_run: bool = False, include_trace: bool = False) -> dict:
+             *, version_id: str | None = None, dry_run: bool = False, include_trace: bool = False,
+             on_event=None) -> dict:
+        """One turn. ``on_event(kind, data)`` (QA 164) receives ``delta``
+        (text the owner may see now), ``status`` (what Pinova Bot is reading)
+        and ``reset`` while the model writes; the returned result is still
+        the whole, checked answer and replaces what was streamed."""
         from .guardrails import (
             check_conduct_and_policy_violation,
             check_emergency_sos,
@@ -961,6 +1013,11 @@ class AssistantEngine:
         reply_text, actions = "", []
         called_tool_names: list[str] = []
         temp = float(version_cfg.get("modelConfig", {}).get("temperature", 0.2))
+        # QA 164: stream to the owner, except while driving (two sentences,
+        # cut at the end) and for the admin's replays.
+        streaming = (on_event is not None and not dry_run and not context.get("drivingMode")
+                     and hasattr(self.gemini, "stream"))
+        visible = VisibleText(on_event) if streaming else None
 
         for turn in range(MAX_TURNS):
             left = CHAT_DEADLINE_SECONDS - (time.perf_counter() - started)
@@ -968,8 +1025,21 @@ class AssistantEngine:
                 break
             before = time.perf_counter()
             last_round = turn == MAX_TURNS - 1
-            parts = self.gemini.generate(system=system, contents=contents, tools=tools, temperature=temp,
-                                         tool_mode="NONE" if last_round else "AUTO", timeout=left)
+            if visible is not None:
+                visible.reset()
+                parts = []
+                for kind, data in self.gemini.stream(
+                        system=system, contents=contents, tools=tools, temperature=temp,
+                        tool_mode="NONE" if last_round else "AUTO", timeout=left):
+                    if kind == "text":
+                        visible.feed(data)
+                    elif kind == "parts":
+                        parts = data
+                if turn == 0:
+                    timings["firstText"] = int((time.perf_counter() - before) * 1000)
+            else:
+                parts = self.gemini.generate(system=system, contents=contents, tools=tools, temperature=temp,
+                                             tool_mode="NONE" if last_round else "AUTO", timeout=left)
             timings[f"model{turn + 1}"] = int((time.perf_counter() - before) * 1000)
             text = "".join(str(p.get("text") or "") for p in parts if "text" in p).strip()
             calls = [p["functionCall"] for p in parts if isinstance(p.get("functionCall"), dict)]
@@ -1007,6 +1077,11 @@ class AssistantEngine:
             # part's thoughtSignature to come back with the tool results.
             contents.append({"role": "model", "parts": [p for p in parts if "functionCall" in p or "text" in p]})
             responses = []
+            if on_event is not None and streaming:
+                for c in server_calls:
+                    label = TOOL_STATUS.get(c.get("name", ""))
+                    if label:
+                        on_event("status", label)
             for c in server_calls:
                 tool_res = (
                     {"saved": True, "dryRun": True}

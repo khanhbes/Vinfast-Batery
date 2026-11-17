@@ -5,12 +5,18 @@ travels only in the ``x-goog-api-key`` header (never in a URL or a log).
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 
 import requests
 
 _ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+_STREAM_ENDPOINT = ("https://generativelanguage.googleapis.com/v1beta/models/"
+                    "{model}:streamGenerateContent?alt=sse")
+# QA 164: a relay without the stream operation (404/405) is asked the old way
+# for this long before trying the stream again.
+STREAM_RETRY_SECONDS = 600.0
 
 
 class GeminiUnavailable(RuntimeError):
@@ -30,6 +36,7 @@ class GeminiClient:
         # key and accepts only the shared relay token (Task 124).
         self.relay_url = (os.environ.get("GEMINI_RELAY_URL") or "").strip().rstrip("/")
         self.relay_token = (os.environ.get("GEMINI_RELAY_TOKEN") or "").strip()
+        self._no_stream_until = 0.0
 
     @property
     def configured(self) -> bool:
@@ -45,6 +52,116 @@ class GeminiClient:
         return self.http.post(_ENDPOINT.format(model=self.model),
                               headers={"x-goog-api-key": self.api_key}, json=body,
                               timeout=timeout)
+
+    @staticmethod
+    def _body(system: str, contents: list[dict], tools: list[dict] | None, temperature: float,
+              max_tokens: int, tool_mode: str) -> dict:
+        body = {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": contents,
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": max_tokens},
+        }
+        if tools:
+            body["tools"] = [{"functionDeclarations": tools}]
+            body["toolConfig"] = {"functionCallingConfig": {"mode": tool_mode}}
+        return body
+
+    def stream(self, *, system: str, contents: list[dict], tools: list[dict] | None = None,
+               temperature: float = 0.4, max_tokens: int = 1024, tool_mode: str = "AUTO",
+               timeout: float | None = None):
+        """QA 164: the answer as the model writes it. Yields ``("text", delta)``
+        and ends with ``("parts", parts)``: the same parts ``generate`` returns
+        (one text part, then each functionCall part verbatim, thoughtSignature
+        included, as Gemini 3 needs them echoed back).
+
+        A relay without the stream operation, or a stream that fails before
+        any text, falls back to ``generate`` (the whole text in one delta). A
+        relay that buffers simply delivers every delta at the end."""
+        if not self.configured:
+            raise GeminiUnavailable("notConfigured")
+        budget = self.timeout if timeout is None else max(1.0, min(self.timeout, timeout))
+        started = time.monotonic()
+        if time.monotonic() < self._no_stream_until:
+            yield from self._whole(system, contents, tools, temperature, max_tokens, tool_mode, budget)
+            return
+        body = self._body(system, contents, tools, temperature, max_tokens, tool_mode)
+        try:
+            if self.relay_url:
+                response = self.http.post(f"{self.relay_url}/v1/stream/{self.model}",
+                                          headers={"X-Relay-Token": self.relay_token}, json=body,
+                                          timeout=(min(10.0, budget), budget), stream=True)
+            else:
+                response = self.http.post(_STREAM_ENDPOINT.format(model=self.model),
+                                          headers={"x-goog-api-key": self.api_key}, json=body,
+                                          timeout=(min(10.0, budget), budget), stream=True)
+        except requests.RequestException:
+            yield from self._whole(system, contents, tools, temperature, max_tokens, tool_mode,
+                                   budget - (time.monotonic() - started))
+            return
+        if response.status_code in (404, 405):
+            response.close()
+            self._no_stream_until = time.monotonic() + STREAM_RETRY_SECONDS
+            yield from self._whole(system, contents, tools, temperature, max_tokens, tool_mode,
+                                   budget - (time.monotonic() - started))
+            return
+        if response.status_code != 200:
+            response.close()
+            if response.status_code == 429:
+                raise GeminiUnavailable("rateLimited")
+            if response.status_code in (500, 503):
+                yield from self._whole(system, contents, tools, temperature, max_tokens, tool_mode,
+                                       budget - (time.monotonic() - started))
+                return
+            raise GeminiUnavailable(f"http{response.status_code}")
+        text, signature, calls, sent = [], None, [], False
+        try:
+            for raw in response.iter_lines(decode_unicode=True):
+                if time.monotonic() - started > budget:
+                    raise GeminiUnavailable("timeout")
+                if not raw or not raw.startswith("data:"):
+                    continue
+                try:
+                    chunk = json.loads(raw[5:].strip())
+                    candidate = (chunk.get("candidates") or [{}])[0]
+                    parts = (candidate.get("content") or {}).get("parts") or []
+                except (ValueError, AttributeError, IndexError):
+                    continue
+                for part in parts:
+                    if not isinstance(part, dict) or part.get("thought"):
+                        continue
+                    if isinstance(part.get("functionCall"), dict):
+                        calls.append(part)
+                    elif "text" in part:
+                        if part.get("thoughtSignature") and not signature:
+                            signature = part["thoughtSignature"]
+                        delta = str(part.get("text") or "")
+                        if delta:
+                            text.append(delta)
+                            sent = True
+                            yield ("text", delta)
+        except requests.RequestException as error:
+            if not sent and not calls:
+                yield from self._whole(system, contents, tools, temperature, max_tokens, tool_mode,
+                                       budget - (time.monotonic() - started))
+                return
+            raise GeminiUnavailable("network") from error
+        finally:
+            response.close()
+        merged = []
+        if text or signature:
+            part = {"text": "".join(text)}
+            if signature:
+                part["thoughtSignature"] = signature
+            merged.append(part)
+        yield ("parts", merged + calls)
+
+    def _whole(self, system, contents, tools, temperature, max_tokens, tool_mode, left):
+        parts = self.generate(system=system, contents=contents, tools=tools, temperature=temperature,
+                              max_tokens=max_tokens, tool_mode=tool_mode, timeout=max(1.0, left))
+        text = "".join(str(p.get("text") or "") for p in parts if "text" in p)
+        if text:
+            yield ("text", text)
+        yield ("parts", parts)
 
     def generate(self, *, system: str, contents: list[dict], tools: list[dict] | None = None,
                  temperature: float = 0.4, max_tokens: int = 1024, tool_mode: str = "AUTO",

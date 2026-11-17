@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 
+import '../../../core/theme/luxe_theme.dart';
+
 import 'typing_indicator_dots.dart';
 
 class StreamingTextWidget extends StatefulWidget {
@@ -9,11 +11,15 @@ class StreamingTextWidget extends StatefulWidget {
     required this.text,
     required this.isStreaming,
     this.style,
+    this.status,
   });
 
   final String text;
   final bool isStreaming;
   final TextStyle? style;
+
+  /// QA 164: what Pinova Bot is reading while it has nothing to say yet.
+  final String? status;
 
   @override
   State<StreamingTextWidget> createState() => _StreamingTextWidgetState();
@@ -64,13 +70,13 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     final textStyle =
         widget.style ??
         theme.textTheme.bodyMedium?.copyWith(
           color: theme.colorScheme.onSurface,
-          height: 1.45,
-          fontSize: 14,
+          height: 1.5,
+          // QA 164: the same size as the owner's own messages.
+          fontSize: 15.5,
         );
 
     // Khi bot đang bắt đầu soạn (chưa có text trả về)
@@ -87,7 +93,8 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                'Đang chuẩn bị câu trả lời…',
+                widget.status ?? 'Đang suy nghĩ…',
+                key: const ValueKey('assistant-live-status'),
                 style: textStyle?.copyWith(
                   fontSize: 12.5,
                   fontStyle: FontStyle.italic,
@@ -116,24 +123,21 @@ class _StreamingTextWidgetState extends State<StreamingTextWidget>
               color: theme.colorScheme.onSurfaceVariant,
               fontStyle: FontStyle.italic,
             ),
-            code: TextStyle(
+            // QA 164: LUXE colours (the app is dark only).
+            code: const TextStyle(
               fontSize: 12.5,
               fontFamily: 'monospace',
-              color: isDark ? const Color(0xFF38BDF8) : const Color(0xFF0369A1),
-              backgroundColor: isDark
-                  ? const Color(0xFF0F172A)
-                  : const Color(0xFFF1F5F9),
+              color: LuxeColors.platinumHi,
+              backgroundColor: LuxeColors.raised,
             ),
             codeblockDecoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0B0F17) : const Color(0xFFF8FAFC),
+              color: LuxeColors.raised,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isDark
-                    ? const Color(0xFF1E293B)
-                    : const Color(0xFFE2E8F0),
-                width: 1.0,
-              ),
+              border: Border.all(color: LuxeColors.hairline),
             ),
+            h1: textStyle?.copyWith(fontSize: 19, fontWeight: FontWeight.w600),
+            h2: textStyle?.copyWith(fontSize: 17, fontWeight: FontWeight.w600),
+            h3: textStyle?.copyWith(fontWeight: FontWeight.w600),
             codeblockPadding: const EdgeInsets.symmetric(
               horizontal: 10,
               vertical: 8,

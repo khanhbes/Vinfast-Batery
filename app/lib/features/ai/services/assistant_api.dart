@@ -20,6 +20,19 @@ abstract final class AssistantLock {
 abstract final class AssistantSignals {
   static final followUps = ValueNotifier<List<String>>(const []);
   static final remainingToday = ValueNotifier<int?>(null);
+
+  /// QA 164: the answer as Pinova Bot writes it (server-sent events). The
+  /// sheet shows it while the turn runs; the final, checked reply replaces
+  /// it. Empty when nothing has arrived yet.
+  static final liveText = ValueNotifier<String>('');
+
+  /// QA 164: what Pinova Bot is reading right now ("Đang xem ổ Shelly…").
+  static final liveStatus = ValueNotifier<String?>(null);
+
+  static void clearLive() {
+    liveText.value = '';
+    liveStatus.value = null;
+  }
 }
 
 /// QA 163: the owner's Pinova Bot settings (`/api/assistant/settings`).
@@ -155,6 +168,7 @@ class AssistantApi {
     Future<String?> Function()? tokenResolver,
     Future<String?> Function()? refreshedTokenResolver,
     this.timeout = const Duration(seconds: 35),
+    this.streamReplies = true,
   }) : _client = client ?? http.Client(),
        _tokenResolver = tokenResolver ?? _firebaseToken,
        _refreshedTokenResolver =
@@ -168,6 +182,11 @@ class AssistantApi {
   final Future<String?> Function()? _refreshedTokenResolver;
   final Duration timeout;
 
+  /// QA 164: ask for the answer as it is written (`stream: true`). An older
+  /// server, or an answer the server gives before the model (SOS, quota,
+  /// rules), comes back as JSON and is read the same way as before.
+  final bool streamReplies;
+
   static Future<String?> _firebaseToken() async => Firebase.apps.isEmpty
       ? null
       : FirebaseAuth.instance.currentUser?.getIdToken();
@@ -178,6 +197,131 @@ class AssistantApi {
       : FirebaseAuth.instance.currentUser?.getIdToken(true);
 
   void close() => _client.close();
+
+  /// The parsed `{success, data, error}` body, or the data from the `done`
+  /// event of a stream (QA 164).
+  Map<String, dynamic> _data(int status, Map<String, dynamic> decoded) {
+    if (status != 200 || decoded['success'] != true) {
+      final error = decoded['error'];
+      final code = error is Map ? error['code']?.toString() : 'http$status';
+      throw AssistantUnavailable(
+        code ?? 'http$status',
+        error is Map ? error['message']?.toString() : null,
+      );
+    }
+    final data = decoded['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+  }
+
+  /// QA 164: one chat turn as server-sent events. `delta`/`status`/`reset`
+  /// go to [AssistantSignals]; `done` carries the whole result. Anything
+  /// that is not an event stream is read as the JSON answer.
+  Future<Map<String, dynamic>> _streamTurn(Map<String, dynamic> body) async {
+    final uri = AppConstants.tryBuildApiUri('/api/assistant/chat');
+    if (uri == null || !AppConstants.isApiConfigured) {
+      throw const AssistantUnavailable('unconfigured');
+    }
+    String? token;
+    try {
+      token = await _tokenResolver().timeout(const Duration(seconds: 12));
+    } on Object {
+      throw const AssistantUnavailable('auth');
+    }
+    if (token == null) throw const AssistantUnavailable('auth');
+    Future<http.StreamedResponse> send(String bearer) async {
+      final request = http.Request('POST', uri)
+        ..headers.addAll({
+          'Authorization': 'Bearer $bearer',
+          'Content-Type': 'application/json',
+          'Accept': 'text/event-stream, application/json',
+        })
+        ..body = jsonEncode({...body, 'stream': true});
+      try {
+        return await _client.send(request).timeout(timeout);
+      } on Object {
+        throw const AssistantUnavailable('network');
+      }
+    }
+
+    var response = await send(token);
+    final refresh = _refreshedTokenResolver;
+    if (response.statusCode == 401 && refresh != null) {
+      await response.stream.drain<void>().catchError((_) {});
+      String? fresh;
+      try {
+        fresh = await refresh().timeout(const Duration(seconds: 12));
+      } on Object {
+        fresh = null;
+      }
+      if (fresh != null && fresh != token) response = await send(fresh);
+    }
+    final type = response.headers['content-type'] ?? '';
+    if (!type.startsWith('text/event-stream')) {
+      final String text;
+      try {
+        text = await response.stream.bytesToString().timeout(timeout);
+      } on Object {
+        throw const AssistantUnavailable('network');
+      }
+      Map<String, dynamic> decoded;
+      try {
+        decoded = Map<String, dynamic>.from(jsonDecode(text) as Map);
+      } on Object {
+        throw AssistantUnavailable('http${response.statusCode}');
+      }
+      return _data(response.statusCode, decoded);
+    }
+    var event = '';
+    final data = <String>[];
+    Map<String, dynamic>? done;
+    try {
+      final lines = response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          // The server sends nothing for a while only when it is gone.
+          .timeout(timeout);
+      await for (final line in lines) {
+        if (line.startsWith('event:')) {
+          event = line.substring(6).trim();
+        } else if (line.startsWith('data:')) {
+          data.add(line.substring(5).trimLeft());
+        } else if (line.isEmpty && data.isNotEmpty) {
+          final Object? json;
+          try {
+            json = jsonDecode(data.join('\n'));
+          } on FormatException {
+            data.clear();
+            continue;
+          }
+          data.clear();
+          final map = json is Map ? json : const {};
+          switch (event) {
+            case 'delta':
+              AssistantSignals.liveText.value += '${map['text'] ?? ''}';
+              AssistantSignals.liveStatus.value = null;
+            case 'status':
+              AssistantSignals.liveStatus.value = map['text']?.toString();
+            case 'reset':
+              AssistantSignals.liveText.value = '';
+            case 'done':
+              done = Map<String, dynamic>.from(map);
+            case 'error':
+              throw AssistantUnavailable(
+                map['code']?.toString() ?? 'ASSISTANT_UNAVAILABLE',
+                map['message']?.toString(),
+              );
+          }
+          if (done != null) break;
+        }
+      }
+    } on AssistantUnavailable {
+      rethrow;
+    } on Object {
+      throw const AssistantUnavailable('network');
+    }
+    if (done == null) throw const AssistantUnavailable('incomplete');
+    return done;
+  }
 
   Future<Map<String, dynamic>> _call(
     String method,
@@ -249,11 +393,10 @@ class AssistantApi {
     required List<Map<String, String>> history,
     required Map<String, dynamic> context,
   }) async {
-    final data = await _call(
-      'POST',
-      '/api/assistant/chat',
-      body: {'message': message, 'history': history, 'context': context},
-    );
+    final body = {'message': message, 'history': history, 'context': context};
+    final data = streamReplies
+        ? await _streamTurn(body)
+        : await _call('POST', '/api/assistant/chat', body: body);
     final actions = <AssistantAction>[];
     for (final item in (data['actions'] as List? ?? const [])) {
       if (item is Map && item['name'] is String) {

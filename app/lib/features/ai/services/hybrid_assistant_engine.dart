@@ -129,6 +129,9 @@ class HybridAssistantEngine implements LocalChatEngine {
     final generation = _generation;
     final uid = uidResolver();
     final AssistantTurn turn;
+    // QA 164: the sheet shows the answer as it is written; a new turn starts
+    // empty, and nothing half-written stays once the turn is over.
+    AssistantSignals.clearLive();
     try {
       turn = await api.chat(
         message: message,
@@ -136,8 +139,10 @@ class HybridAssistantEngine implements LocalChatEngine {
         context: host.context(),
       );
     } on AssistantUnavailable catch (error) {
+      AssistantSignals.clearLive();
       return _basic(message, error);
     }
+    AssistantSignals.liveStatus.value = null;
     if (_disposed || generation != _generation || uid != uidResolver()) {
       return const LocalChatReply('Tài khoản đã thay đổi. Hãy hỏi lại.');
     }

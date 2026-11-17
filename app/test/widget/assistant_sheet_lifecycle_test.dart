@@ -154,7 +154,7 @@ void main() {
     );
     await tester.tap(find.byKey(const Key('assistant_send_button')));
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Đang chuẩn bị câu trả lời…'), findsOneWidget);
+    expect(find.text('Đang suy nghĩ…'), findsOneWidget);
     await api.replies.first.close();
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pumpWidget(const SizedBox());
@@ -243,9 +243,15 @@ void main() {
     await open(tester, _FakeChat());
     // Keep the real button callback to simulate a second queued pointer action
     // even if the first opens the modal before another hit test can run.
+    // QA 164: the tools are named pills (an InkWell inside).
     final historyAction = tester
-        .widget<IconButton>(find.byKey(const Key('assistant_history_button')))
-        .onPressed;
+        .widget<InkWell>(
+          find.descendant(
+            of: find.byKey(const Key('assistant_history_button')),
+            matching: find.byType(InkWell),
+          ),
+        )
+        .onTap;
     expect(historyAction, isNotNull);
     await tester.tap(find.byKey(const Key('assistant_history_button')));
     historyAction!();

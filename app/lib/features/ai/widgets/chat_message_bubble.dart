@@ -27,7 +27,11 @@ class ChatMessageBubble extends StatelessWidget {
     this.onAskAgain,
     this.isActionLoading = false,
     this.showMeta = true,
+    this.liveStatus,
   });
+
+  /// QA 164: what Pinova Bot is reading while this answer is written.
+  final String? liveStatus;
 
   final ChatMessage message;
   final void Function(String rating)? onFeedback;
@@ -224,6 +228,7 @@ class ChatMessageBubble extends StatelessWidget {
                   StreamingTextWidget(
                     text: message.content,
                     isStreaming: message.isStreaming,
+                    status: liveStatus,
                   ),
                   if (message.hasError && onRetry != null) ...[
                     const SizedBox(height: 6),

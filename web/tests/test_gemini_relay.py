@@ -71,3 +71,20 @@ def test_relay_mode_needs_its_token(monkeypatch):
     monkeypatch.setenv("GEMINI_RELAY_URL", "https://relay.example")
     monkeypatch.delenv("GEMINI_RELAY_TOKEN", raising=False)
     assert GeminiClient(api_key="direct", model="m").configured is False
+
+
+def test_relay_passes_the_stream_on_as_it_comes(server):
+    # QA 164: /v1/stream/<model> forwards streamGenerateContent?alt=sse.
+    base, upstream = server
+    chunks = [b'data: {"candidates":[{"content":{"parts":[{"text":"Pin "}]}}]}\r\n\r\n',
+              b'data: {"candidates":[{"content":{"parts":[{"text":"40%"}]}}]}\r\n\r\n']
+    upstream.post.return_value = MagicMock(status_code=200, iter_content=lambda chunk_size=None: iter(chunks),
+                                           headers={"Content-Type": "text/event-stream"})
+    body = {"contents": [{"parts": [{"text": "hi"}]}]}
+    response = requests.post(f"{base}/v1/stream/gemini-3.5-flash-lite", json=body, timeout=5,
+                             headers={"X-Relay-Token": "relay-secret-token"})
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "text/event-stream"
+    assert response.content == b"".join(chunks)
+    assert upstream.post.call_args.args[0].endswith(":streamGenerateContent?alt=sse")
+    assert upstream.post.call_args.kwargs["stream"] is True

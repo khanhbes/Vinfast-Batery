@@ -60,6 +60,30 @@ resource policy 'Microsoft.ApiManagement/service/apis/operations/policies@2023-0
   }
 }
 
+// QA 164: the answer as it is written (server-sent events). The response is
+// passed on unbuffered; the API falls back to generateContent when this
+// operation is missing or the gateway buffers anyway.
+resource streamOperation 'Microsoft.ApiManagement/service/apis/operations@2023-05-01-preview' = {
+  parent: api
+  name: 'stream'
+  properties: {
+    displayName: 'streamGenerateContent'
+    method: 'POST'
+    urlTemplate: '/v1/stream/{model}'
+    templateParameters: [{ name: 'model', type: 'string', required: true }]
+  }
+}
+
+resource streamPolicy 'Microsoft.ApiManagement/service/apis/operations/policies@2023-05-01-preview' = {
+  parent: streamOperation
+  name: 'policy'
+  dependsOn: [key]
+  properties: {
+    format: 'rawxml'
+    value: '<policies><inbound><base /><rate-limit calls="60" renewal-period="60" /><choose><when condition="@(context.Request.MatchedParameters["model"] != "${model}")"><return-response><set-status code="400" reason="MODEL_NOT_ALLOWED" /></return-response></when><when condition="@(int.Parse(context.Request.Headers.GetValueOrDefault("Content-Length", "0")) > 524288)"><return-response><set-status code="413" reason="BODY_SIZE" /></return-response></when></choose><set-header name="x-goog-api-key" exists-action="override"><value>{{gemini-key}}</value></set-header><set-header name="X-Relay-Token" exists-action="delete" /><rewrite-uri template="/${model}:streamGenerateContent" copy-unmatched-params="false" /><set-query-parameter name="alt" exists-action="override"><value>sse</value></set-query-parameter></inbound><backend><forward-request timeout="60" buffer-response="false" /></backend><outbound><base /></outbound><on-error><base /></on-error></policies>'
+  }
+}
+
 resource subscription 'Microsoft.ApiManagement/service/subscriptions@2023-05-01-preview' = {
   parent: apim
   name: 'vinfast-api'

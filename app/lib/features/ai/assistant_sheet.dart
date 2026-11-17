@@ -118,6 +118,28 @@ class _InteractiveAssistantSheetState
   }
 
   bool _isTyping = false;
+
+  /// QA 164: the reply being written (index in [_messages]) and what Pinova
+  /// Bot is reading for it; the streamed text shows there until the final,
+  /// checked reply replaces it.
+  int? _liveIndex;
+  String? _liveStatus;
+
+  void _onLive() {
+    final index = _liveIndex;
+    if (!mounted || index == null || index >= _messages.length) return;
+    final message = _messages[index];
+    if (!message.isStreaming) return;
+    final text = AssistantSignals.liveText.value;
+    final status = AssistantSignals.liveStatus.value;
+    if (text == message.content && status == _liveStatus) return;
+    setState(() {
+      _liveStatus = status;
+      _messages[index] = message.copyWith(content: text);
+    });
+    if (text.isNotEmpty) _scrollToBottom();
+  }
+
   int _generation = 0;
   String? _ownerUid;
   StreamSubscription<User?>? _authSubscription;
@@ -159,6 +181,8 @@ class _InteractiveAssistantSheetState
   void initState() {
     super.initState();
     _ownerUid = _currentUid();
+    AssistantSignals.liveText.addListener(_onLive);
+    AssistantSignals.liveStatus.addListener(_onLive);
     unawaited(_loadFirstRun());
     if (_restoreRecent()) {
       _scrollToBottom();
@@ -747,6 +771,8 @@ class _InteractiveAssistantSheetState
 
   @override
   void dispose() {
+    AssistantSignals.liveText.removeListener(_onLive);
+    AssistantSignals.liveStatus.removeListener(_onLive);
     _keepRecent();
     _generation++;
     _replyTimer?.cancel();
@@ -808,6 +834,8 @@ class _InteractiveAssistantSheetState
     final index = _messages.lastIndexWhere((m) => m.isStreaming);
     setState(() {
       _isTyping = false;
+      _liveIndex = null;
+      _liveStatus = null;
       if (index >= 0) {
         final text = _messages[index].content.trim();
         _messages[index] = _messages[index].copyWith(
@@ -974,6 +1002,8 @@ class _InteractiveAssistantSheetState
     final vehicle = ref.read(vehicleContextProvider).vehicle;
     final index = _messages.length;
     final id = 'reply-${DateTime.now().microsecondsSinceEpoch}';
+    _liveIndex = index;
+    _liveStatus = null;
     setState(
       () => _messages.add(
         ChatMessage(
@@ -1048,6 +1078,8 @@ class _InteractiveAssistantSheetState
         failed = true;
         setState(() {
           _isTyping = false;
+          _liveIndex = null;
+          _liveStatus = null;
           _messages[index] = _messages[index].copyWith(
             content: error is ChatApiException
                 ? error.userMessage
@@ -1071,6 +1103,8 @@ class _InteractiveAssistantSheetState
             : null;
         setState(() {
           _isTyping = false;
+          _liveIndex = null;
+          _liveStatus = null;
           _messages[index] = _messages[index].copyWith(
             content: accumulated.isEmpty
                 ? 'Chưa nhận được câu trả lời. Hãy thử lại.'
@@ -1255,6 +1289,7 @@ class _InteractiveAssistantSheetState
     final bubble = ChatMessageBubble(
       message: message,
       showMeta: showMeta,
+      liveStatus: index == _liveIndex ? _liveStatus : null,
       onFeedback: (rating) => _onFeedback(index, rating),
       onActionPressed: _executeAction,
       isActionLoading: _actionLoadingMap[message.actionCard?.callId] ?? false,
@@ -1373,9 +1408,10 @@ class _InteractiveAssistantSheetState
                         ),
                       ),
                     ),
-                    // Header: mascot, name, close; then vehicle chip + tools.
-                    // Capped and scrollable so a long vehicle name, large text
-                    // and the keyboard never push the input dock off screen.
+                    // QA 164: one header row (Pinova Bot, the vehicle and its
+                    // battery, close), then the tools with their names so a
+                    // new owner sees what each does. Capped and scrollable so
+                    // large text and the keyboard never push the input away.
                     ConstrainedBox(
                       constraints: BoxConstraints(
                         maxHeight: box.maxHeight * (keyboard > 0 ? 0.28 : 0.45),
@@ -1383,12 +1419,13 @@ class _InteractiveAssistantSheetState
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(16, 6, 10, 8),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Row(
                               children: [
                                 Container(
-                                  width: 50,
-                                  height: 50,
+                                  width: 44,
+                                  height: 44,
                                   padding: const EdgeInsets.all(2),
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
@@ -1397,14 +1434,6 @@ class _InteractiveAssistantSheetState
                                         alpha: 0.55,
                                       ),
                                     ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: context.planAccent.withValues(
-                                          alpha: 0.16,
-                                        ),
-                                        blurRadius: 16,
-                                      ),
-                                    ],
                                   ),
                                   child: BatteryBotMascot(
                                     size: BatteryBotSize.avatar,
@@ -1414,7 +1443,37 @@ class _InteractiveAssistantSheetState
                                   ),
                                 ),
                                 const SizedBox(width: 12),
-                                const Expanded(child: _BotTitle()),
+                                Expanded(
+                                  child: _BotTitle(
+                                    vehicle: Text(
+                                      vehicle?.displayName ??
+                                          'Chưa chọn xe theo dõi',
+                                      key: const Key('assistant_vehicle_label'),
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        color: LuxeColors.text,
+                                      ),
+                                    ),
+                                    battery: Text(
+                                      vehicle != null && chargingNow != null
+                                          ? 'Đang sạc · ước tính $chargingNow%'
+                                          : vehicle == null ||
+                                                !vehicle.hasBatteryData
+                                          ? 'Chưa có dữ liệu pin'
+                                          : 'Pin ${vehicle.currentBattery}%',
+                                      key: const Key(
+                                        'assistant_battery_source',
+                                      ),
+                                      // What the owner entered or the app
+                                      // estimated: neither verified nor a
+                                      // warning, so muted.
+                                      style: const TextStyle(
+                                        fontSize: 12.5,
+                                        color: LuxeColors.muted,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                                 IconButton(
                                   key: const Key('assistant_close_button'),
                                   tooltip: 'Đóng Pinova Bot',
@@ -1427,108 +1486,34 @@ class _InteractiveAssistantSheetState
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            Row(
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
                               children: [
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      12,
-                                      8,
-                                      12,
-                                      8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(16),
-                                      color: LuxeColors.glass,
-                                      border: Border.all(
-                                        color: LuxeColors.hairline,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(
-                                          Icons.two_wheeler_rounded,
-                                          size: 18,
-                                          color: context.planAccent,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                vehicle?.displayName ??
-                                                    'Chưa chọn xe theo dõi',
-                                                key: const Key(
-                                                  'assistant_vehicle_label',
-                                                ),
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: LuxeColors.text,
-                                                ),
-                                              ),
-                                              Text(
-                                                vehicle != null &&
-                                                        chargingNow != null
-                                                    ? 'Đang sạc · ước tính $chargingNow%'
-                                                    : vehicle == null ||
-                                                          !vehicle
-                                                              .hasBatteryData
-                                                    ? 'Chưa có dữ liệu pin'
-                                                    : 'Pin ${vehicle.currentBattery}% · Dữ liệu hồ sơ',
-                                                key: const Key(
-                                                  'assistant_battery_source',
-                                                ),
-                                                // User-entered, not verified:
-                                                // champagne, not emerald.
-                                                style: const TextStyle(
-                                                  fontSize: 11.5,
-                                                  color: LuxeColors.champagne,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                IconButton(
+                                _ToolPill(
                                   key: const Key('assistant_history_button'),
+                                  icon: Icons.history_rounded,
+                                  label: 'Lịch sử',
                                   tooltip: 'Lịch sử chat',
-                                  style: _glassIcon,
-                                  icon: const Icon(
-                                    Icons.history_rounded,
-                                    size: 20,
-                                  ),
-                                  onPressed: _showHistoryModal,
+                                  onTap: _showHistoryModal,
+                                ),
+                                _ToolPill(
+                                  key: const Key('assistant_new_chat_button'),
+                                  icon: Icons.add_comment_rounded,
+                                  label: 'Chat mới',
+                                  tooltip: 'Đoạn chat mới',
+                                  onTap: () => _startNewChat(),
                                 ),
                                 // QA 163: one place for Pinova Bot's
                                 // settings (style, tips, memory).
-                                IconButton(
+                                _ToolPill(
                                   key: const Key('assistant_settings_button'),
+                                  icon: Icons.tune_rounded,
+                                  label: 'Cài đặt',
                                   tooltip: 'Cài đặt Pinova Bot',
-                                  style: _glassIcon,
-                                  icon: const Icon(
-                                    Icons.settings_rounded,
-                                    size: 20,
-                                  ),
-                                  onPressed: () =>
+                                  onTap: () =>
                                       AssistantSettingsScreen.open(context),
-                                ),
-                                IconButton(
-                                  key: const Key('assistant_new_chat_button'),
-                                  tooltip: 'Đoạn chat mới',
-                                  style: _glassIcon,
-                                  icon: const Icon(
-                                    Icons.add_comment_rounded,
-                                    size: 20,
-                                  ),
-                                  onPressed: () => _startNewChat(),
                                 ),
                               ],
                             ),
@@ -1593,10 +1578,20 @@ class _InteractiveAssistantSheetState
                                       ),
                                     ),
                                   if (_introSeen)
-                                    const _WelcomeHeader()
+                                    _WelcomeHeader(
+                                      greeting: _messages.isEmpty
+                                          ? 'Hỏi mình về xe, pin, sạc và ổ Shelly.'
+                                          : _messages.first.content,
+                                    )
                                   else
                                     _BotIntro(onStart: _finishIntro),
-                                  for (var i = 0; i < _messages.length; i++)
+                                  // The greeting is in the header above; a
+                                  // restored first answer still shows.
+                                  for (
+                                    var i = _introSeen ? 1 : 0;
+                                    i < _messages.length;
+                                    i++
+                                  )
                                     _bubble(i, showMeta: false),
                                   _SuggestionCards(
                                     suggestions: _starters(
@@ -1665,7 +1660,7 @@ class _InteractiveAssistantSheetState
                                   _TypingDot(),
                                   SizedBox(width: 10),
                                   Text(
-                                    'Đang chuẩn bị câu trả lời…',
+                                    'Đang suy nghĩ…',
                                     style: TextStyle(
                                       fontSize: 12.5,
                                       fontStyle: FontStyle.italic,
@@ -1915,33 +1910,47 @@ class _InteractiveAssistantSheetState
 
 /// Welcome header for a fresh conversation: mascot and a calm title.
 class _WelcomeHeader extends StatelessWidget {
-  const _WelcomeHeader();
+  const _WelcomeHeader({required this.greeting});
+
+  /// QA 164: the greeting is said here once (the sheet used to show the
+  /// question, then the same greeting again as a message, with three faces
+  /// of Pinova Bot on screen).
+  final String greeting;
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.fromLTRB(16, 6, 16, 6),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(24, 10, 24, 8),
     child: Column(
       children: [
-        LuxeReveal(
+        const LuxeReveal(
           child: BatteryBotMascot(
             size: BatteryBotSize.sm,
             mood: BatteryBotMood.happy,
           ),
         ),
-        SizedBox(height: 8),
+        const SizedBox(height: 10),
         LuxeReveal(
           index: 1,
           child: Column(
             children: [
-              Text('TRỢ LÝ PIN CÁ NHÂN', style: LuxeText.eyebrow),
-              SizedBox(height: 4),
-              Text(
+              const Text(
                 'Mình có thể giúp gì?',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: LuxeColors.text,
                   fontSize: 22,
                   fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                greeting,
+                key: const ValueKey('assistant-greeting'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: LuxeColors.muted,
+                  fontSize: 14,
+                  height: 1.45,
                 ),
               ),
             ],
@@ -2274,42 +2283,105 @@ class _LuxePalette {
 }
 
 /// "Pinova Bot" with the plan's tag and the plan's daily messages (QA 136).
-class _BotTitle extends ConsumerWidget {
-  const _BotTitle();
+class _BotTitle extends StatelessWidget {
+  const _BotTitle({required this.vehicle, required this.battery});
+
+  /// QA 164: the vehicle and its battery under the name (one line when it
+  /// fits), instead of a second card.
+  final Widget vehicle;
+  final Widget battery;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final plan = ref.watch(entitlementProvider);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 2,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: const [
-            Text(
-              'Pinova Bot',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w500,
-                color: LuxeColors.text,
-                letterSpacing: -0.2,
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Wrap(
+        spacing: 8,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            'Pinova Bot',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w500,
+              color: LuxeColors.text,
+              letterSpacing: -0.2,
+            ),
+          ),
+          CurrentPlanTag(key: ValueKey('assistant-plan-tag')),
+        ],
+      ),
+      const SizedBox(height: 2),
+      Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          vehicle,
+          const Text(
+            '  ·  ',
+            style: TextStyle(fontSize: 12.5, color: LuxeColors.dim),
+          ),
+          battery,
+        ],
+      ),
+    ],
+  );
+}
+
+/// QA 164: a tool in the header with its name (Lịch sử, Chat mới, Cài đặt).
+class _ToolPill extends StatelessWidget {
+  const _ToolPill({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: Semantics(
+      button: true,
+      label: tooltip,
+      excludeSemantics: true,
+      child: Material(
+        color: LuxeColors.glass,
+        shape: const StadiumBorder(
+          side: BorderSide(color: LuxeColors.hairline),
+        ),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 18, color: LuxeColors.platinum),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: LuxeColors.text,
+                    ),
+                  ),
+                ],
               ),
             ),
-            CurrentPlanTag(key: ValueKey('assistant-plan-tag')),
-          ],
+          ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          plan.known
-              ? 'Trợ lý pin & sạc · ${plan.assistantDaily} tin mỗi ngày'
-              : 'Trợ lý pin & sạc cá nhân',
-          style: const TextStyle(fontSize: 12.5, color: LuxeColors.muted),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
 }
 
 /// The sheet's top edge: the plan's gradient, still on Free/Pro; on Ultra

@@ -1,14 +1,17 @@
 """HTTP surface for Pinova / BatteryBot (Task 124 + Pinova v3 Governance Stages 1–7)."""
 from __future__ import annotations
 
+import json
+import queue
 import re
+import threading
 from datetime import datetime, timezone
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from .eval_runner import run_eval_suite, run_playground_turn
 from .gemini import GeminiUnavailable
-from .engine import BOT_SERVER_VERSION
+from .engine import BOT_SERVER_VERSION, CHAT_DEADLINE_SECONDS
 from .guardrails import check_emergency_sos
 from .memory import SettingsError
 from .tips import clean as clean_tip
@@ -60,6 +63,8 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         allowed, remaining = quota.take(uid)
         if not allowed:
             return fail(429, "ASSISTANT_QUOTA", "Bạn đã dùng hết lượt trò chuyện hôm nay. Pinova Bot chuyển sang chế độ cơ bản.")
+        if body.get("stream") is True:
+            return _stream_chat(uid, body, remaining)
         try:
             result = engine.chat(uid, body.get("message"), body.get("history"), body.get("context"))
         except GeminiUnavailable as error:
@@ -71,6 +76,64 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
             quota.refund(uid)
             return fail(503, "ASSISTANT_UNAVAILABLE", "Trợ lý AI tạm thời không phản hồi.", retryable=True)
         return jsonify({"success": True, "data": {**result, "remainingToday": remaining}})
+
+    def _sse(event: str, data) -> str:
+        return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    def _stream_chat(uid: str, body: dict, remaining):
+        """QA 164: the same turn as JSON chat, as server-sent events: ``delta``
+        while the model writes, ``status`` while a tool reads, ``reset`` when
+        a later round replaces the text, then ``done`` with the whole checked
+        result (the app shows that one) or ``error``. The model runs on its own
+        thread, so a closed connection never leaves a turn half done."""
+        events: queue.Queue = queue.Queue()
+
+        def emit(kind, data):
+            events.put(("event", kind, data))
+
+        def run():
+            try:
+                result = engine.chat(uid, body.get("message"), body.get("history"), body.get("context"),
+                                     on_event=emit)
+                events.put(("done", result))
+            except GeminiUnavailable as error:
+                quota.refund(uid)
+                events.put(("error", "ASSISTANT_NOT_CONFIGURED" if str(error) == "notConfigured"
+                            else "ASSISTANT_UNAVAILABLE"))
+            except Exception:
+                quota.refund(uid)
+                events.put(("error", "ASSISTANT_UNAVAILABLE"))
+
+        threading.Thread(target=run, name="assistant-stream", daemon=True).start()
+
+        def generate():
+            # A first byte at once: proxies open the stream, the app knows
+            # the turn is under way.
+            yield _sse("start", {"botVersion": BOT_SERVER_VERSION})
+            while True:
+                try:
+                    item = events.get(timeout=CHAT_DEADLINE_SECONDS + 15)
+                except queue.Empty:
+                    yield _sse("error", {"code": "ASSISTANT_UNAVAILABLE",
+                                         "message": "Trợ lý AI tạm thời không phản hồi."})
+                    return
+                if item[0] == "event":
+                    _, kind, data = item
+                    if kind == "delta":
+                        yield _sse("delta", {"text": data})
+                    elif kind == "status":
+                        yield _sse("status", {"text": data})
+                    elif kind == "reset":
+                        yield _sse("reset", {})
+                elif item[0] == "done":
+                    yield _sse("done", {**item[1], "remainingToday": remaining})
+                    return
+                else:
+                    yield _sse("error", {"code": item[1], "message": "Trợ lý AI tạm thời không phản hồi."})
+                    return
+
+        return Response(generate(), mimetype="text/event-stream",
+                        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @bp.get("/api/assistant/memory")
     def get_memory():
@@ -169,7 +232,9 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
         db.collection(tips.COLLECTION).document(tip_id).set(doc)
         tips.invalidate()
         if audit:
-            audit("assistant_tip_put", {"tipId": tip_id})
+            audit("assistant_tip_put", "assistantTips", tip_id,
+                  getattr(request, "_uid", "") or "", getattr(request, "_email", "") or "",
+                  {"category": tip["category"], "enabled": doc["enabled"]})
         return jsonify({"success": True, "data": doc})
 
     @bp.delete("/api/admin/tips/<tip_id>")
@@ -181,7 +246,9 @@ def create_assistant_blueprint(*, engine, memory, quota, knowledge, auth_resolve
             {"enabled": False, "updatedAt": datetime.now(timezone.utc).isoformat()}, merge=True)
         tips.invalidate()
         if audit:
-            audit("assistant_tip_hide", {"tipId": tip_id})
+            audit("assistant_tip_hide", "assistantTips", tip_id,
+                  getattr(request, "_uid", "") or "", getattr(request, "_email", "") or "",
+                  {"enabled": False})
         return jsonify({"success": True, "data": {"id": tip_id, "enabled": False}})
 
     # -- admin knowledge ----------------------------------------------------
