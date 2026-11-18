@@ -6,6 +6,7 @@ import '../../core/widgets/app_popup.dart';
 import '../../core/widgets/luxe_kit.dart';
 import '../../core/widgets/luxe_settings.dart';
 import '../../data/models/vehicle_model.dart';
+import '../../data/models/vehicle_showroom.dart';
 import '../../data/models/vinfast_model_spec.dart';
 import '../../data/repositories/vehicle_spec_repository.dart';
 import '../../core/widgets/vehicle_photo.dart';
@@ -34,7 +35,100 @@ class VehicleSpecDetailScreen extends StatefulWidget {
 
 class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
   /// The same photo as the overview and garage (QA 131).
-  late final String? _photo = VehicleImages.forVehicleMap(widget.vehicleData);
+  String? _colorId;
+  bool _savingColor = false;
+
+  Map<String, dynamic> get _vehicleWithColor => {
+    ...widget.vehicleData,
+    'colorId': _colorId ?? widget.vehicleData['colorId'],
+  };
+
+  String? get _photo => VehicleImages.forVehicleMap(_vehicleWithColor);
+
+  /// Colours the admin published for this model (null when there is none).
+  VehicleShowroomData? get _showroom {
+    final snapshot = widget.vehicleData['catalogSnapshot'];
+    return snapshot is Map
+        ? VehicleShowroomData.fromMedia(snapshot['media'])
+        : null;
+  }
+
+  Future<void> _pickColor(String id) async {
+    if (_savingColor || id == (_colorId ?? widget.vehicleData['colorId']))
+      return;
+    final before = _colorId;
+    setState(() {
+      _colorId = id;
+      _savingColor = true;
+    });
+    final result = await AuthService().updateVehicle(
+      vehicleId: widget.vehicleId,
+      updates: {'colorId': id},
+    );
+    if (!mounted) return;
+    setState(() {
+      _savingColor = false;
+      if (result['success'] != true) _colorId = before;
+    });
+    if (result['success'] != true) {
+      AppPopup.showError(result['error'] ?? 'Chưa đổi được màu xe');
+    }
+  }
+
+  Widget _colorPicker(VehicleShowroomData showroom) {
+    final selected = showroom.colorOrDefault(
+      _colorId ?? widget.vehicleData['colorId'] as String?,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final color in showroom.colors)
+            Semantics(
+              button: true,
+              selected: color.id == selected.id,
+              label: 'Màu ${color.name}',
+              child: GestureDetector(
+                onTap: () => _pickColor(color.id),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: color.id == selected.id
+                          ? LuxeColors.emerald
+                          : LuxeColors.hairlineStrong,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: color.swatch,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(color.name),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   bool _isEditing = false;
   bool _isSaving = false;
   VinFastModelSpec? _spec;
@@ -253,6 +347,8 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
                   ),
                 ),
               ),
+              if (_showroom != null && _showroom!.colors.length > 1)
+                _colorPicker(_showroom!),
             ],
             const SizedBox(height: 16),
             const LuxeReveal(

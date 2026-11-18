@@ -44,7 +44,7 @@ export interface ToolDefinition {
   executionSide: 'server' | 'client_action';
   riskLevel: 1 | 2 | 3;
   enabled: boolean;
-  allowedTiers: ('free' | 'pro' | 'ultra' | 'fleet')[];
+  allowedTiers: ('free' | 'pro' | 'ultra')[];
   rateLimitPerMinute: number;
   timeoutMs: number;
   requireTargetConfirmation: boolean;

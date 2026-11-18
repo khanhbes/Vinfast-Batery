@@ -12,6 +12,66 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
+## 166. Task Completion Log — Dung lượng pin: đo thay vì đoán (18/11/2026, chủ app chọn: giữ hệ số 0,90 và nới khoảng sai số xuống mức vật lý tới khi có số đo; chủ app chụp nhãn pin và bộ sạc; làm hết, chỉ bật khi chạy lại trên sổ thật tốt hơn; xe ngắt đúng lúc đồng hồ về 0% từ khi mới) — Code + test xong, chưa commit, chưa build APK 2.2.4+247, chưa deploy
+
+**Phân tích trên sổ sạc của chủ app (12 lần, 6/9–9/11):**
+- Đồng hồ lệch khoảng 0,4 điểm % ở lần ngay sau lần sạc đầy (QA 157 đo 0,5), 3,8 ở lần thứ 2–3, 6,8 từ lần thứ 4.
+- Trọng số cũ (1 / 0,35 / 0,1) cho lần kém tin nặng gấp 30–100 lần mức dữ liệu cho phép.
+- Sai số ±2,2 (sổ này) và ±6 (máy chủ) chủ yếu là sàn tự đặt (3% mỗi lần, 1,5% đọc số).
+- Phần lớn nhất là hệ thống, thêm lần sạc không giảm:
+  - hệ số 0,90 gộp hiệu suất bộ sạc (0,85–0,93), điện áp sạc so với danh định (LFP khoảng 0,96) và hiệu suất Coulomb, nên theo vật lý là 0,81–0,90;
+  - danh định "2,4 kWh" làm tròn (±2%);
+  - công tơ ±1%.
+- Điện lúc chờ ≤ 0,2%. Đoạn sạc chậm cuối bắt đầu ở khoảng 98,7%, ảnh hưởng < 0,1%.
+- Hai lần 0→100% lệch nhau 13% (6/9: 2 615 Wh, 1/11: 2 284 Wh), chưa có bản ghi công suất để biết vì sao.
+
+**Cách tính mới (`web/shelly/charge_model.py`, `battery_health`):**
+- Mỗi lần sạc nặng theo 1/σ². σ là sai số đồng hồ theo độ tin (QA 158): giá trị khởi đầu từ bảng trên (`HEALTH_DRIFT_POINTS`, tính như 4 lần sạc), xe nào cũng tự học σ của mình (`health_sigmas`, so với các lần sạc lân cận), sàn 0,5% mỗi lần.
+- Bỏ hệ số ×2 cho bài kiểm tra và độ mới nửa đời 180 ngày.
+- Lần lệch bị bỏ theo luật QA 162 (chỉ với lần không chính xác, và tối đa 25% số lần) hoặc khi cách các lần khác hơn 3σ.
+- Sai số đo = 1/√Σ(1/σ²) nhân hệ số Birge.
+- `systematic` và `totalLowPct` / `totalHighPct` tách riêng hệ số, danh định, công tơ; `totalPct` giữ cho app cũ.
+- Điện lúc bộ sạc không sạc (`tailWh`, dưới 15 W) được trừ ra.
+- Đổi bộ sạc (công suất ổn định lệch > 8% ba lần liền) hoặc thêm pin (Wh/1% gấp 1,6 lần hai lần liền) mở giai đoạn mới với mốc riêng.
+- Sổ theo tháng lên version 2 (gộp chính xác giữa các tháng). Mốc v1 được tính lại một lần từ chính các tháng của nó (`migratedFrom: 1`).
+- Mốc lập khi sai số ≤ 1,5% sau ≥ 28 ngày, hoặc ≥ 8 lần sau ≥ 90 ngày. Số "cần thêm" theo nhịp sạc của chính xe.
+- Sửa lỗi cũ: bài kiểm tra từ đúng 0% không được nhận (`startPct or 100`).
+
+**Ghi đủ dữ liệu:**
+- Phiên sạc có `start_soc_source` và `start_soc_age_min` (từ số đọc cuối của xe, `start_reading_provenance`).
+- Mẫu sạc có thêm `startSource`, `startAgeMin`, `endAfterMin`, `tailWh`, `plateauW`.
+- Sheet nhập % có công tắc "Xe vừa tự ngắt vì hết pin" khi % ≤ 5 (`cutoff`, vehicle `batteryCutoff`). Lần sạc từ đó tới khi bộ sạc báo đầy là "đo trọn", không qua số đọc nào.
+- Xe ngắt khi còn X% > 0 thì dung lượng nhân (100 − X)/100.
+- Hệ số đo được (`chargerCalibration` trên xe) và danh định theo nhãn (`nominalCapacitySource: "label"`) thay phần đoán khi có.
+
+**Kết quả trên sổ thật (`qa162_health_replay.py`, `qa166_capacity_study.py`):**
+- Số tuyệt đối 98,4% ±0,6 đo được (cách QA 162–164: 98,8% ±2,2). Tính cả hệ số 0,81–0,90 (chưa đo), danh định ±2% và công tơ ±1% thì khoảng 86,3–100,7%.
+- Mốc lập ở 12/9–23/10 (5 lần sạc), số so với mốc 99,5% ±1,1.
+- Sau khi deploy, màn Sức khỏe pin tính lại ngay khi mở (`battery_health` dựng lại sổ từ các lần sạc). Mốc được lưu ở lần sạc kế tiếp (`queue_sample`).
+- Loại-một-lần trên các lần tin cao: 0,66% (cũ 1,05%). Lần tin vừa và thấp ngang nhau.
+- Giả lập 300 xe biết trước dung lượng: không lệch (< 0,3%), ±1σ phủ đúng 60–76%, sai số bằng khoảng nửa cách gộp thường.
+
+**Công cụ:**
+- `web/scripts/qa166_capacity_study.py`: σ theo nhóm, lệch theo dải, điện chờ, các lần 0→100%, loại-một-lần.
+- `tools/read_charge_sessions.ps1` + `web/scripts/qa166_read_sessions.py`: chỉ đọc, chủ app chạy; kết quả ở `charge-sessions.local.json`, không commit.
+- `qa162_health_replay.py` in thêm σ từng lần và khoảng hệ thống.
+
+**App 2.2.4+247:**
+- Chế độ develop: bảng chi tiết có sai số đo, khoảng gồm hệ số, hệ số ổ cắm → pin (đã đo hay chưa), danh định (danh mục hay nhãn), công tơ, sai số đồng hồ từng mức, giai đoạn mới. Số trong bảng theo QA 129 (thập phân dấu chấm, nhóm nghìn).
+- Từng lần sạc ghi "đo trọn", "Lần đo chuẩn", "trước khi đổi bộ sạc".
+- Bài kiểm tra 4 bước: sạc đầy, đi xuống ≤ 30% không sạc xen, quét ngay trước khi cắm, sạc tới đầy.
+- Người dùng vẫn chỉ thấy số và một câu.
+
+**Kiểm thử:** backend toàn bộ 1027 đạt, 15 bỏ qua; `flutter analyze` các file đã đổi sạch; 11 file test Sức khỏe pin và sheet nhập % 161 đạt, 18 bỏ qua; toàn bộ Flutter 1594 đạt, 216 bỏ qua, 2 lỗi có sẵn ở phần người khác đang sửa dở (`vehicle_spec_detail_screen.dart` dùng emerald, ảnh Feliz ở `vehicle_showroom`), không thuộc QA 166. Test mới `web/tests/test_qa166_capacity.py`, `app/test/widget/qa166_health_test.dart`. Các test QA 135/146/152/162/164 cập nhật theo cách mới (khóa số 99,0% / 2 375 Wh thành 98,6% / 2 367 Wh).
+
+**Cần chủ app:**
+- Ảnh nhãn pin và nhãn bộ sạc vào `battery-labels.local/`. Có nhãn mới viết script đặt danh định và `nominalCapacitySource`; nếu nhãn đúng 2 400 Wh thì chỉ đánh dấu nguồn.
+- Chạy `tools/read_charge_ledger.ps1` và `tools/read_charge_sessions.ps1`.
+- Bật "Xe vừa tự ngắt" mỗi lần xe ngắt.
+- Deploy API và worker (sổ theo tháng v2 ghi ở cả worker).
+
+---
+
 ## 165. Task Completion Log — Chế độ develop, chữ tối giản cho người dùng, kiểm tra 2.2.1–2.2.2 trên máy (17/11/2026, chủ app chọn: nhấn 7 lần + công tắc, ai cũng mở được, lưu trên máy; rà mọi màn nhiều chữ) — Code + test xong, APK 2.2.3+246, chưa cài
 
 **Trên máy (Xiaomi, tài khoản chủ app, chỉ xem) sau deploy QA 164:** 2.2.1 báo "Chưa tải được dữ liệu pin" nhiều lần trong khi log máy chủ ghi `/api/learning/<xe>/health` 200 (khoảng 1,2 giây); mạng điện thoại lúc đó chập chờn (Firestore báo mất kết nối). 2.2.2 thêm log chẩn đoán (`[PinovaApi] … unreadable`, `[BatteryHealth] unreadable`, chỉ loại lỗi và vị trí) và tải được ngay: **99% dung lượng hãng ±6%, đang lập mốc (còn 2 lần sạc), hai lần sạc 13/11 (120%) và 15/11 (107%) bị loại vì lệch**. Chưa tái hiện lại lỗi để biết nguyên nhân. Quãng đường ở Tổng quan hiện 96 km rồi 87 km ở hai lần mở (chưa xét). Một thông báo của ứng dụng khác hiện đè trong lúc chụp: ảnh đã xóa, không thao tác lúc đó.

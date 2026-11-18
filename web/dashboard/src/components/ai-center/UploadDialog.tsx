@@ -103,31 +103,31 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
           </div>
 
           <div className="p-4 space-y-3">
-            <div className="rounded-md bg-green-50 border border-green-200 p-3">
-              <div className="break-all text-sm font-medium text-green-800">Version: {result.version}</div>
-              <div className="text-xs text-green-700 mt-1">
+            <div className="rounded-md bg-emerald-500/10 border border-emerald-500/25 p-3">
+              <div className="break-all text-sm font-medium text-emerald-300">Version: {result.version}</div>
+              <div className="text-xs text-emerald-300/80 mt-1">
                 Status: {result.activated ? 'Activated' : 'Stored (not activated)'}
               </div>
             </div>
 
             {/* Model vs Registry Features Comparison */}
             {result.modelFeatures && (
-              <div className="rounded-md bg-blue-50 border border-blue-200 p-3">
-                <div className="text-xs font-medium text-blue-800 mb-2">Feature information</div>
+              <div className="rounded-md bg-sky-500/10 border border-sky-500/25 p-3">
+                <div className="text-xs font-medium text-sky-300 mb-2">Feature information</div>
                 
                 <div className="grid grid-cols-2 gap-2 text-xs mb-2">
-                  <div className="rounded-md bg-white/60 p-2">
+                  <div className="rounded-md border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-2">
                     <div className="text-muted-foreground">Model inputs</div>
-                    <div className="font-medium text-blue-700">{result.modelFeatures.count ?? '?'} features</div>
+                    <div className="font-medium text-sky-300">{result.modelFeatures.count ?? '?'} features</div>
                   </div>
-                  <div className="rounded-md bg-white/60 p-2">
+                  <div className="rounded-md border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-2">
                     <div className="text-muted-foreground">Registry definition</div>
-                    <div className="font-medium text-blue-700">{result.registryFeatures?.count ?? '?'} features</div>
+                    <div className="font-medium text-sky-300">{result.registryFeatures?.count ?? '?'} features</div>
                   </div>
                 </div>
                 
                 {result.featureMismatch && (
-                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-2">
+                  <div className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/25 rounded-md p-2 mb-2">
                     <AlertTriangle className="w-3 h-3 inline mr-1" />
                     Input counts do not match. Review the schema and test before deployment; missing inputs are never silently set to zero.
                   </div>
@@ -138,7 +138,7 @@ export default function UploadDialog({ typeKey, typeLabel, onClose, onUploaded }
                     <div className="text-xs text-muted-foreground mb-1">Features trong model:</div>
                     <div className="flex flex-wrap gap-1">
                       {result.modelFeatures.names.map((name, i) => (
-                        <span key={i} className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                        <span key={i} className="text-[10px] bg-sky-500/15 text-sky-200 border border-sky-500/25 px-1.5 py-0.5 rounded">
                           {name}
                         </span>
                       ))}

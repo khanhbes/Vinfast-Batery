@@ -685,6 +685,7 @@ class AuthService {
         'lastBatteryPercent',
         'stateOfHealth',
         'avatarColor',
+        'colorId',
         'hasBatteryData',
         'hasSohData',
         'hasOdoData',

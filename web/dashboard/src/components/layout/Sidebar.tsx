@@ -86,9 +86,9 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
     <motion.aside
       initial={false}
       animate={{ width: collapsed ? 72 : 248 }}
-      transition={{ duration: reduceMotion ? 0 : 0.2 }}
+      transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
-        'dashboard-sidebar select-none transition-all duration-200 border-r border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)]',
+        'dashboard-sidebar select-none border-r border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-primary)]',
         collapsed && 'is-collapsed'
       )}
     >
@@ -96,18 +96,21 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
       <div className="sidebar-brand h-14 px-4 flex items-center justify-between border-b border-[var(--border-hairline)] shrink-0">
         <NavLink to="/" className="flex items-center gap-2.5 text-left focus:outline-none min-w-0">
           <PinovaMark tile className="h-7 w-7 shrink-0 rounded-lg shadow-xs" />
-          {!collapsed && (
-            <span className="font-semibold text-sm tracking-tight text-[var(--text-primary)] whitespace-nowrap truncate">
-              Pinova Drive
-            </span>
-          )}
+          <span
+            className={cn(
+              'font-semibold text-sm tracking-tight text-[var(--text-primary)] whitespace-nowrap transition-opacity duration-150',
+              collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+            )}
+          >
+            Pinova Drive
+          </span>
         </NavLink>
         <button
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-label={collapsed ? 'Mở rộng điều hướng' : 'Thu gọn điều hướng'}
           title={collapsed ? 'Mở rộng điều hướng' : 'Thu gọn điều hướng'}
-          className="hidden lg:inline-flex p-1 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+          className="hidden lg:inline-flex p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
         >
           {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </button>
@@ -118,7 +121,7 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
         {navGroups.map((group) => (
           <div key={group.id} className="space-y-0.5">
             {!collapsed && (
-              <div className="px-2.5 pb-1 text-[11px] font-semibold text-[var(--text-secondary)]/80 tracking-wider uppercase">
+              <div className="px-2.5 pb-1 text-[11px] font-semibold text-[var(--text-secondary)]/80 tracking-wider uppercase whitespace-nowrap">
                 {group.label}
               </div>
             )}
@@ -131,38 +134,51 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
                 aria-label={label}
                 className={({ isActive }) =>
                   cn(
-                    'relative w-full h-9 flex items-center rounded-lg text-[13px] font-medium transition-colors',
+                    'group relative w-full h-9 flex items-center rounded-lg text-[13px] font-medium transition-colors duration-150',
                     collapsed ? 'justify-center px-0' : 'justify-between px-2.5',
                     isActive
-                      ? 'bg-[var(--accent-tint)] text-[var(--text-primary)] font-semibold'
+                      ? 'text-[var(--text-primary)] font-semibold'
                       : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
                   )
                 }
               >
                 {({ isActive }) => (
                   <>
-                    {/* Active Left Indicator */}
+                    {/* Smooth sliding active surface + left accent bar */}
                     {isActive && (
-                      <span
+                      <motion.span
+                        layoutId={reduceMotion ? undefined : 'sidebar-active-surface'}
+                        transition={{ type: 'spring', stiffness: 460, damping: 36 }}
                         aria-hidden="true"
-                        className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-[var(--accent-primary)]"
-                      />
+                        className="absolute inset-0 rounded-lg bg-[var(--accent-tint)] border border-[var(--accent-border)]/40 pointer-events-none"
+                      >
+                        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-r bg-[var(--accent-primary)]" />
+                      </motion.span>
                     )}
 
-                    <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="relative z-10 flex items-center gap-2.5 min-w-0">
                       <Icon
                         className={cn(
-                          'w-4 h-4 shrink-0 transition-colors',
-                          isActive ? 'text-[var(--accent-primary)]' : 'text-[var(--text-muted)]'
+                          'w-4 h-4 shrink-0 transition-transform duration-150 group-hover:scale-105',
+                          isActive
+                            ? 'text-[var(--accent-primary)]'
+                            : 'text-[var(--text-muted)] group-hover:text-[var(--accent-primary)]'
                         )}
                       />
-                      {!collapsed && <span className="truncate whitespace-nowrap">{label}</span>}
+                      <span
+                        className={cn(
+                          'truncate whitespace-nowrap transition-opacity duration-150',
+                          collapsed ? 'hidden md:inline-block md:w-0 md:opacity-0 overflow-hidden' : 'opacity-100'
+                        )}
+                      >
+                        {label}
+                      </span>
                     </div>
 
                     {!collapsed && badgeCount !== undefined && badgeCount > 0 && (
                       <span
                         className={cn(
-                          'tabular-nums text-[11px] px-1.5 py-0.2 rounded-md font-medium',
+                          'relative z-10 tabular-nums text-[11px] px-1.5 py-0.2 rounded-md font-medium',
                           isActive
                             ? 'bg-[var(--accent-primary)]/20 text-[var(--accent-primary)]'
                             : 'bg-slate-500/15 text-[var(--text-secondary)]'
@@ -173,7 +189,7 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
                     )}
 
                     {collapsed && badgeCount !== undefined && badgeCount > 0 && (
-                      <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
+                      <span className="absolute top-1.5 right-2 z-10 w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)]" />
                     )}
                   </>
                 )}
@@ -188,7 +204,7 @@ export function Sidebar({ onSignOut }: { onSignOut: () => void }) {
         <Button
           variant="ghost"
           size="sm"
-          className="w-full justify-start h-8 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
+          className="hover-pill w-full justify-start h-8 text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
           aria-label="Đăng xuất"
           title="Đăng xuất tài khoản quản trị"
           onClick={onSignOut}

@@ -22,16 +22,22 @@ abstract final class VehicleImages {
     String? name,
     Object? catalogSnapshot,
     String? imageUrl,
+    String? colorId,
   }) {
-    if (isFeliz(modelId) || isFeliz(name)) return felizUrl;
+    // The photo the admin published for this model, in the owner's colour
+    // (else the catalogue's default colour). The bundled Feliz photo is
+    // only the fallback while the catalogue has no image.
     if (catalogSnapshot is Map) {
       final catalog =
           VehicleShowroomData.fromMedia(catalogSnapshot['media']) ??
           VehicleShowroomData.fromMedia({
             'heroUrl': catalogSnapshot['imageUrl'],
           });
-      if (catalog != null) return catalog.primary.mediumUrl;
+      if (catalog != null) {
+        return catalog.colorOrDefault(colorId).angles.first.mediumUrl;
+      }
     }
+    if (isFeliz(modelId) || isFeliz(name)) return felizUrl;
     final direct = imageUrl?.trim() ?? '';
     return direct.startsWith('https://') ? direct : null;
   }
@@ -42,6 +48,7 @@ abstract final class VehicleImages {
           modelId: v.vinfastModelId,
           name: '${v.modelName} ${v.vehicleName}',
           catalogSnapshot: v.catalogSnapshot,
+          colorId: v.colorId,
         );
 
   /// A raw `Vehicles` document (garage list, spec screen).
@@ -53,6 +60,7 @@ abstract final class VehicleImages {
       v['vehicleName'],
     ].whereType<String>().join(' '),
     catalogSnapshot: v['catalogSnapshot'],
+    colorId: v['colorId'] as String?,
   );
 
   static String? forSpec(VinFastModelSpec spec) => resolve(

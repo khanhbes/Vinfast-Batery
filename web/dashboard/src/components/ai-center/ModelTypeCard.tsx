@@ -2,14 +2,14 @@ import { ChevronRight, Package, Clock, Sparkles } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ResponsiveText } from '@/components/ui/ResponsiveText';
-import { LIGHT_ACCENT_CLASSES, ModelTypeMeta, formatDate } from './types';
+import { ACCENT_CLASSES, ModelTypeMeta, formatDate } from './types';
 import { getModelAvailability, getActiveVersion } from './modelAvailability';
 import { getModelIcon } from './modelIcons';
 
 const STATUS_BADGE: Record<string, { bg: string; text: string; label: string; icon: any }> = {
-  ready: { bg: 'bg-green-100', text: 'text-green-700', label: 'Deployed', icon: Sparkles },
-  in_progress: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'In progress', icon: Sparkles },
-  planned: { bg: 'bg-slate-100', text: 'text-slate-600', label: 'Planned', icon: Clock },
+  ready: { bg: 'bg-emerald-500/15 border border-emerald-500/30', text: 'text-emerald-300', label: 'Deployed', icon: Sparkles },
+  in_progress: { bg: 'bg-sky-500/15 border border-sky-500/30', text: 'text-sky-300', label: 'In progress', icon: Sparkles },
+  planned: { bg: 'bg-[var(--bg-elevated)] border border-[var(--border-hairline)]', text: 'text-[var(--text-secondary)]', label: 'Planned', icon: Clock },
 };
 
 interface Props {
@@ -20,7 +20,7 @@ interface Props {
 
 export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
   const Icon = getModelIcon(meta.icon);
-  const c = LIGHT_ACCENT_CLASSES[meta.accent] || LIGHT_ACCENT_CLASSES.slate;
+  const c = ACCENT_CLASSES[meta.accent] || ACCENT_CLASSES.slate;
   const rt = meta.runtimeStatus;
   const availability = getModelAvailability(meta);
   const StatusIcon = availability.icon;
@@ -36,13 +36,13 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
       aria-expanded={selected}
       aria-label={`Open ${meta.label} lab`}
       onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(); } }}
-      className={`cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 ${
-        selected ? `ring-2 ${c.ring} shadow-md border-primary/50` : 'ring-1 ring-transparent'
+      className={`hover-lift cursor-pointer bg-[var(--bg-surface)] ${
+        selected ? `ring-2 ${c.ring} shadow-md border-primary/50` : 'border-[var(--border-hairline)]'
       } ${meta.status === 'planned' ? 'opacity-90' : ''}`}
     >
       <div className="p-5 flex flex-col h-full">
         <div className="flex items-start justify-between gap-2">
-          <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${c.bg} ${c.text} shrink-0`}>
+          <div className={`w-11 h-11 rounded-xl border ${c.border} flex items-center justify-center ${c.bg} ${c.text} shrink-0`}>
             <Icon className="w-5 h-5" />
           </div>
           <div className="flex flex-col gap-1 items-end">
@@ -63,7 +63,7 @@ export default function ModelTypeCard({ meta, selected, onSelect }: Props) {
         <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{meta.description}</p>
 
         <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-          <div className={`rounded-md p-2 ${availability.state === 'ready' ? 'bg-emerald-50 text-emerald-700' : availability.state === 'invalid' ? 'bg-red-50 text-red-700' : availability.state === 'uploaded_only' ? 'bg-amber-50 text-amber-700' : 'bg-slate-50 text-slate-700'}`}>
+          <div className={`rounded-md border p-2 ${availability.state === 'ready' ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300' : availability.state === 'invalid' ? 'bg-rose-500/10 border-rose-500/25 text-rose-300' : availability.state === 'uploaded_only' ? 'bg-amber-500/10 border-amber-500/25 text-amber-300' : 'bg-[var(--bg-elevated)] border-[var(--border-hairline)] text-[var(--text-secondary)]'}`}>
             <div className="flex items-center gap-1 font-medium">
               <StatusIcon className="w-3 h-3" />
               {availability.label}

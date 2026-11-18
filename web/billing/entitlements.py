@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from . import features
 
 CACHE_SECONDS = 60
+COUNTS_CACHE_SECONDS = 300  # the portal count scans entitlements; keep Firestore reads low
 MAX_HISTORY = 20
 
 
@@ -58,6 +59,7 @@ class EntitlementService:
         self._local: dict[str, dict] = {}
         self._trials: set[str] = set()
         self._cache: dict[str, tuple[datetime, dict]] = {}
+        self._counts_cache = None
         self._lock = threading.Lock()
 
     # -- storage ----------------------------------------------------------
@@ -77,8 +79,22 @@ class EntitlementService:
                 self._local[uid] = dict(data)
         else:
             self._ref(uid).set(data)
+            self._mirror_profile(uid, data)
         with self._lock:
             self._cache.pop(uid, None)
+            self._counts_cache = None
+
+    def _mirror_profile(self, uid: str, data: dict) -> None:
+        """Copy the plan onto the profile the portal already reads, so the
+        account list shows plans without one extra read per account."""
+        try:
+            self.db.collection("users").document(uid).set({
+                "planTier": features.normalize_tier(data.get("tier")),
+                "planStatus": data.get("status"),
+                "planExpiresAt": data.get("expiresAt"),
+            }, merge=True)
+        except Exception:
+            pass  # a mirror must never fail a plan change
 
     def _trial_used(self, uid: str) -> bool:
         if self.db is None:
@@ -275,8 +291,12 @@ class EntitlementService:
 
     def tier_counts(self, limit: int = 2000) -> dict:
         """Accounts per active plan, for the portal (bounded read)."""
-        counts = {"pro": 0, "ultra": 0, "trial": 0, "expired": 0}
         now = self.clock()
+        with self._lock:
+            cached = self._counts_cache
+        if cached and (now - cached[0]).total_seconds() < COUNTS_CACHE_SECONDS:
+            return dict(cached[1])
+        counts = {"pro": 0, "ultra": 0, "trial": 0, "expired": 0}
         if self.db is None:
             with self._lock:
                 rows = list(self._local.values())
@@ -294,4 +314,6 @@ class EntitlementService:
                 counts["trial"] += 1
             else:
                 counts[tier] += 1
+        with self._lock:
+            self._counts_cache = (now, dict(counts))
         return counts

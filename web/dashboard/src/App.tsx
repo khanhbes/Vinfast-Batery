@@ -26,14 +26,21 @@ import { AdminDataProvider } from '@/data/AdminDataContext';
 import { DevelopModeProvider } from '@/data/DevelopModeContext';
 import { DevelopModeGate } from '@/components/DevelopModeGate';
 
+import { PinovaMark } from '@/components/layout/PinovaMark';
+
 function AppContent({ user, loading, sessionRevision }: { user: User | null; loading: boolean; sessionRevision: number }) {
   const { pathname } = useLocation();
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading secure workspace...</p>
+      <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex items-center justify-center p-6">
+        <div className="text-center space-y-4">
+          <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] shadow-[0_0_24px_rgba(99,102,241,0.18)]">
+            <PinovaMark tile className="h-12 w-12" />
+          </div>
+          <div className="flex items-center justify-center gap-2.5 text-xs text-[var(--text-secondary)]">
+            <span className="h-3.5 w-3.5 rounded-full border-2 border-[var(--accent-primary)]/30 border-t-[var(--accent-primary)] animate-spin" />
+            <span>Đang tải không gian quản trị bảo mật...</span>
+          </div>
         </div>
       </div>
     );
@@ -45,12 +52,12 @@ function AppContent({ user, loading, sessionRevision }: { user: User | null; loa
 
   return (
     <>
-      <AdminAccessGate key={`${user.uid}:${sessionRevision}`} uid={user.uid} onSignOut={() => { void signOut(auth).catch(() => toast.error('Sign out failed. Please try again.')); }}>
+      <AdminAccessGate key={`${user.uid}:${sessionRevision}`} uid={user.uid} onSignOut={() => { void signOut(auth).catch(() => toast.error('Đăng xuất thất bại. Vui lòng thử lại.')); }}>
       <DevelopModeProvider><AdminDataProvider>
       <DashboardShell
         userName={auth.currentUser?.displayName}
         userEmail={auth.currentUser?.email}
-        onSignOut={() => { void signOut(auth).catch(() => toast.error('Sign out failed. Please try again.')); }}
+        onSignOut={() => { void signOut(auth).catch(() => toast.error('Đăng xuất thất bại. Vui lòng thử lại.')); }}
       >
             <PageLoadBoundary key={`${user.uid}:${pathname}`}><Suspense fallback={<PageLoading />}>
             <Routes>
@@ -82,6 +89,10 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [sessionRevision, setSessionRevision] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    document.documentElement.classList.add('dark');
+  }, []);
 
   useEffect(() => {
     // Remount the admin tree only when the account changes. The hourly ID

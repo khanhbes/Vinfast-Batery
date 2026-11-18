@@ -68,7 +68,7 @@ VEHICLE_TYPES = {
 RESEARCH_STATUSES = {"pending", "running", "needs_review", "failed"}
 PERSONAL_VEHICLE_FIELDS = {
     "nickname", "licensePlate", "currentOdo", "currentBattery", "lastBatteryPercent",
-    "stateOfHealth", "avatarColor", "hasBatteryData", "hasSohData", "hasOdoData",
+    "stateOfHealth", "avatarColor", "hasBatteryData", "hasSohData", "hasOdoData", "colorId",
 }
 
 
@@ -530,6 +530,14 @@ def patch_personal_vehicle(db: Any, uid: str, vehicle_id: str, payload: dict[str
         updates["vehicleName"] = updates["nickname"] or _nested_map(current.get("catalogSnapshot")).get("displayName") or current.get("vehicleName")
     if "licensePlate" in updates:
         updates["licensePlate"] = _clean_text(updates["licensePlate"], 32)
+    if "colorId" in updates:
+        # The owner picks one of the colours the catalog actually published.
+        wanted = _clean_text(updates["colorId"], 40).lower()
+        showroom = _nested_map(_nested_map(_nested_map(current.get("catalogSnapshot")).get("media")).get("showroom"))
+        known = {str(item.get("id")) for item in showroom.get("colors", []) if isinstance(item, dict)}
+        if wanted and wanted not in known:
+            return {"success": False, "error": "colorId is not a published colour of this model"}, 400
+        updates["colorId"] = wanted or None
     for key in ("currentOdo", "currentBattery", "lastBatteryPercent", "stateOfHealth"):
         if key in updates and _number(updates[key]) is None:
             return {"success": False, "error": f"{key} must be numeric"}, 400

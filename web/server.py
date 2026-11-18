@@ -1838,6 +1838,22 @@ def admin_users():
     return jsonify({'success': True, 'data': users})
 
 
+def _account_plan(profile: dict) -> str:
+    """Plan mirrored onto the profile by billing (no extra read); an
+    expired or revoked plan is Free."""
+    tier = str(profile.get('planTier') or 'free').lower()
+    if tier not in ('pro', 'ultra') or profile.get('planStatus') not in ('active', 'trial'):
+        return 'free'
+    try:
+        from billing.entitlements import _utc
+        expires = _utc(profile.get('planExpiresAt'))
+    except Exception:
+        expires = None
+    if expires is None or expires <= datetime.now(timezone.utc):
+        return 'free'
+    return tier
+
+
 def _account_record(auth_user, profile: dict | None = None) -> dict:
     profile = profile or {}
     metadata = getattr(auth_user, 'user_metadata', None)
@@ -1846,6 +1862,7 @@ def _account_record(auth_user, profile: dict | None = None) -> dict:
     is_admin = bool((getattr(auth_user, 'custom_claims', None) or {}).get('admin')) or email.lower() in (ADMIN_EMAILS - {'*'})
     return {
         'uid': uid,
+        'tier': _account_plan(profile),
         'email': email,
         'displayName': getattr(auth_user, 'display_name', None) or profile.get('displayName') or profile.get('name') or '',
         'phone': getattr(auth_user, 'phone_number', None) or profile.get('phone') or '',
@@ -6809,6 +6826,7 @@ def _register_billing():
         entitlements=entitlements, promos=promos, auth_resolver=_verify_token,
         require_admin=require_admin, audit=_audit, user_lookup=_billing_user_lookup,
         payments=payments,
+        accounts_total=(lambda: len(_list_auth_users())) if _firebase_auth is not None else None,
     ))
     app.extensions['billing'] = entitlements
 
@@ -7039,6 +7057,10 @@ def _register_assistant():
         quota=DailyQuota(store, limit_for=(lambda uid: billing.limit(uid, 'assistant_daily'))
                          if billing is not None else None),
         auth_resolver=_verify_token, require_admin=require_admin, db=db, audit=_audit,
+        # QA 164: a photo to Pinova Bot uses the same AI photos as the scan.
+        image_quota=DailyQuota(store, limit=5, partition='scanAiQuota',
+                               limit_for=(lambda uid: billing.limit(uid, 'scan_ai_daily'))
+                               if billing is not None else None),
     ))
     app.extensions['assistant_engine'] = engine
 
@@ -7057,10 +7079,6 @@ def _register_scan():
     try:
         store = configured_store()
     except Exception:
-        # QA 164: a photo to Pinova Bot uses the same AI photos as the scan.
-        image_quota=DailyQuota(store, limit=5, partition='scanAiQuota',
-                               limit_for=(lambda uid: billing.limit(uid, 'scan_ai_daily'))
-                               if billing is not None else None),
         store = None
     billing = app.extensions.get('billing')
     app.register_blueprint(create_scan_blueprint(

@@ -1330,7 +1330,7 @@ export default function VehicleCatalog() {
             return (
               <div
                 key={entry.catalogId}
-                className="group rounded-2xl border border-border/60 bg-surface/50 overflow-hidden flex flex-col justify-between transition-all duration-200 hover:border-border-strong hover:shadow-lg"
+                className="group hover-lift rounded-2xl border border-border/60 bg-surface/50 overflow-hidden flex flex-col justify-between"
               >
                 {/* Top Studio Vehicle Image Canvas */}
                 <div className="relative aspect-[16/9] w-full bg-gradient-to-b from-[#131720] to-[#0A0D13] p-4 flex items-center justify-center overflow-hidden">
@@ -1561,7 +1561,9 @@ export default function VehicleCatalog() {
 
             {Boolean(selected.media?.heroUrl) && (
               <motion.img
-                layoutId={`vehicle-${selected.catalogId}`}
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.22 }}
                 className="mt-6 aspect-[16/7] w-full rounded-2xl object-cover"
                 src={String(selected.media?.heroUrl)}
                 alt={displayName(selected)}

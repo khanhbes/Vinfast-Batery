@@ -71,7 +71,7 @@
           "locked": false,
           "requiresTwoPersonApproval": false,
           "tokenBudget": 1000,
-          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free (Starter): an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (Plus - 29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (Pro Concierge - 49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
+          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free: an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
           "variables": [
             "{{knowledge_snippets}}"
           ]
@@ -192,8 +192,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 6000,
@@ -209,8 +208,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 5000,
@@ -226,8 +224,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -243,8 +240,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -260,8 +256,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 40,
           "timeoutMs": 3000,
@@ -277,8 +272,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 4000,
@@ -293,8 +287,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 8000,
@@ -310,8 +303,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 3000,
@@ -326,8 +318,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -341,8 +332,7 @@
           "riskLevel": 1,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -358,8 +348,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 2000,
@@ -375,8 +364,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -391,8 +379,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -408,8 +395,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -425,8 +411,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -442,8 +427,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -459,8 +443,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -476,8 +459,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -493,8 +475,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -510,8 +491,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -527,8 +507,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -544,8 +523,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -561,8 +539,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -578,8 +555,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 5000,
@@ -595,8 +571,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 5000,
@@ -611,8 +586,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 5000,
@@ -628,8 +602,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -644,8 +617,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -659,8 +631,7 @@
           "riskLevel": 3,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -676,8 +647,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -708,8 +678,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 4000,
@@ -768,7 +737,7 @@
           "locked": false,
           "requiresTwoPersonApproval": false,
           "tokenBudget": 1000,
-          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free (Starter): an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (Plus - 29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (Pro Concierge - 49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
+          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free: an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
           "variables": [
             "{{knowledge_snippets}}"
           ]
@@ -889,8 +858,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 6000,
@@ -906,8 +874,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 5000,
@@ -923,8 +890,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -940,8 +906,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -957,8 +922,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 40,
           "timeoutMs": 3000,
@@ -974,8 +938,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 4000,
@@ -990,8 +953,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 8000,
@@ -1007,8 +969,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 3000,
@@ -1023,8 +984,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -1038,8 +998,7 @@
           "riskLevel": 1,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -1055,8 +1014,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 2000,
@@ -1072,8 +1030,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -1088,8 +1045,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -1105,8 +1061,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -1122,8 +1077,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -1139,8 +1093,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -1156,8 +1109,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -1173,8 +1125,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1190,8 +1141,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1207,8 +1157,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1224,8 +1173,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1241,8 +1189,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1258,8 +1205,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1275,8 +1221,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 5000,
@@ -1292,8 +1237,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 5000,
@@ -1308,8 +1252,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 5000,
@@ -1325,8 +1268,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1341,8 +1283,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -1356,8 +1297,7 @@
           "riskLevel": 3,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -1373,8 +1313,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1405,8 +1344,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 4000,
@@ -1465,7 +1403,7 @@
           "locked": false,
           "requiresTwoPersonApproval": false,
           "tokenBudget": 1000,
-          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free (Starter): an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (Plus - 29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (Pro Concierge - 49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
+          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free: an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
           "variables": [
             "{{knowledge_snippets}}"
           ]
@@ -1586,8 +1524,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 6000,
@@ -1603,8 +1540,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 5000,
@@ -1620,8 +1556,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -1637,8 +1572,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -1654,8 +1588,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 40,
           "timeoutMs": 3000,
@@ -1671,8 +1604,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 4000,
@@ -1687,8 +1619,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 8000,
@@ -1704,8 +1635,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 3000,
@@ -1720,8 +1650,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -1735,8 +1664,7 @@
           "riskLevel": 1,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -1752,8 +1680,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 2000,
@@ -1769,8 +1696,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -1785,8 +1711,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -1802,8 +1727,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -1819,8 +1743,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -1836,8 +1759,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -1853,8 +1775,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -1870,8 +1791,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1887,8 +1807,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1904,8 +1823,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1921,8 +1839,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1938,8 +1855,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1955,8 +1871,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -1972,8 +1887,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 5000,
@@ -1989,8 +1903,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 5000,
@@ -2005,8 +1918,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 5000,
@@ -2022,8 +1934,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2038,8 +1949,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -2053,8 +1963,7 @@
           "riskLevel": 3,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -2070,8 +1979,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2102,8 +2010,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 4000,
@@ -2162,7 +2069,7 @@
           "locked": false,
           "requiresTwoPersonApproval": false,
           "tokenBudget": 1000,
-          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free (Starter): an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (Plus - 29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (Pro Concierge - 49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
+          "templateText": "Chính sách gói Pinova Premium hiện hành:\n- Gói Free: an toàn Shelly, sạc hẹn giờ, quét đồng hồ, trợ giúp, 1 xe, lịch sử 30 ngày, 10 tin/ngày.\n- Gói Pro (29.000đ/tháng hoặc 249.000đ/năm): sạc đến % tự ngắt, đổi mục tiêu khi đang sạc, ước tính lộ trình, % pin chai, 2 xe, 30 tin/ngày.\n- Gói Ultra (49.000đ/tháng hoặc 449.000đ/năm): thêm sạc đêm an toàn, huấn luyện AI cá nhân, giao diện Aurora, tối đa 10 xe, 100 tin/ngày.\nTài liệu hướng dẫn liên quan câu hỏi:\n{{knowledge_snippets}}",
           "variables": [
             "{{knowledge_snippets}}"
           ]
@@ -2283,8 +2190,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 6000,
@@ -2300,8 +2206,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 5000,
@@ -2317,8 +2222,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -2334,8 +2238,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 5000,
@@ -2351,8 +2254,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 40,
           "timeoutMs": 3000,
@@ -2368,8 +2270,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 4000,
@@ -2384,8 +2285,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 8000,
@@ -2401,8 +2301,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 3000,
@@ -2417,8 +2316,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -2432,8 +2330,7 @@
           "riskLevel": 1,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 4000,
@@ -2449,8 +2346,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 30,
           "timeoutMs": 2000,
@@ -2466,8 +2362,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -2482,8 +2377,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 20,
           "timeoutMs": 2000,
@@ -2499,8 +2393,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -2516,8 +2409,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 4000,
@@ -2533,8 +2425,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -2550,8 +2441,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 15,
           "timeoutMs": 3000,
@@ -2567,8 +2457,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2584,8 +2473,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2601,8 +2489,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2618,8 +2505,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2635,8 +2521,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2652,8 +2537,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2669,8 +2553,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 5000,
@@ -2686,8 +2569,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 5000,
@@ -2702,8 +2584,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 5000,
@@ -2719,8 +2600,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2735,8 +2615,7 @@
           "enabled": true,
           "allowedTiers": [
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -2750,8 +2629,7 @@
           "riskLevel": 3,
           "enabled": true,
           "allowedTiers": [
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 6,
           "timeoutMs": 4000,
@@ -2767,8 +2645,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 10,
           "timeoutMs": 3000,
@@ -2799,8 +2676,7 @@
           "allowedTiers": [
             "free",
             "pro",
-            "ultra",
-            "fleet"
+            "ultra"
           ],
           "rateLimitPerMinute": 5,
           "timeoutMs": 4000,

@@ -2,9 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Bell,
   ChevronDown,
-  Moon,
   Search,
-  Sun,
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -26,6 +24,7 @@ const titles: Record<string, string> = {
   '/catalog': 'Danh mục xe',
   '/shelly': 'Thiết bị Shelly',
   '/assistant': 'Pinova',
+  '/assistant/tips': 'Mẹo nhỏ',
   '/premium': 'Gói & Khuyến mại',
   '/support': 'Hỗ trợ',
   '/develop': 'Công cụ kỹ thuật',
@@ -54,20 +53,18 @@ export function Topbar({
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Dark / Light Mode state
-  const [isDark, setIsDark] = useState(() => {
-    return document.documentElement.classList.contains('dark');
-  });
-
-  const toggleTheme = () => {
-    const nextDark = !isDark;
-    setIsDark(nextDark);
-    if (nextDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
+  // Global Cmd/Ctrl + K shortcut to open/toggle Command Palette
+  useEffect(() => {
+    const handleShortcut = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setNotifOpen(false);
+        setCmdOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -126,7 +123,7 @@ export function Topbar({
             type="button"
             onClick={() => setCmdOpen(true)}
             aria-label="Mở tìm kiếm nhanh"
-            className="w-full h-8 flex items-center justify-between gap-2 px-3 text-xs text-[var(--text-muted)] bg-[var(--bg-canvas)] border border-[var(--border-hairline)] hover:border-[var(--border-strong)] rounded-lg transition-colors"
+            className="hover-pill w-full h-8 flex items-center justify-between gap-2 px-3 text-xs text-[var(--text-muted)] bg-[var(--bg-canvas)] border border-[var(--border-hairline)] hover:text-[var(--text-primary)] rounded-lg"
           >
             <span className="flex items-center gap-2 truncate">
               <Search className="w-3.5 h-3.5 shrink-0" />
@@ -147,7 +144,7 @@ export function Topbar({
               onClick={() => setNotifOpen((prev) => !prev)}
               aria-label="Việc cần xử lý ngay"
               title="Cần xử lý ngay"
-              className="relative p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
+              className="hover-pill relative p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]"
             >
               <Bell className="w-4 h-4" />
               {totalAlerts > 0 && (
@@ -182,7 +179,7 @@ export function Topbar({
                         navigate('/support');
                         setNotifOpen(false);
                       }}
-                      className="w-full p-2 rounded-lg hover:bg-slate-500/10 text-left flex items-center justify-between gap-2"
+                      className="group hover-row w-full p-2 rounded-lg text-left flex items-center justify-between gap-2"
                     >
                       <div>
                         <div className="font-medium text-[var(--text-primary)]">
@@ -192,7 +189,7 @@ export function Topbar({
                           Khách hàng cần phản hồi kỹ thuật
                         </div>
                       </div>
-                      <span className="text-[11px] text-[var(--accent-primary)] font-medium">
+                      <span className="hover-arrow inline-block text-[11px] text-[var(--accent-primary)] font-medium">
                         Xử lý →
                       </span>
                     </button>
@@ -205,7 +202,7 @@ export function Topbar({
                         navigate('/shelly');
                         setNotifOpen(false);
                       }}
-                      className="w-full p-2 rounded-lg hover:bg-slate-500/10 text-left flex items-center justify-between gap-2"
+                      className="group hover-row w-full p-2 rounded-lg text-left flex items-center justify-between gap-2"
                     >
                       <div>
                         <div className="font-medium text-[var(--text-primary)]">
@@ -215,7 +212,7 @@ export function Topbar({
                           Mất kết nối heartbeat với cloud
                         </div>
                       </div>
-                      <span className="text-[11px] text-[var(--accent-primary)] font-medium">
+                      <span className="hover-arrow inline-block text-[11px] text-[var(--accent-primary)] font-medium">
                         Kiểm tra →
                       </span>
                     </button>
@@ -228,7 +225,7 @@ export function Topbar({
                         navigate('/catalog');
                         setNotifOpen(false);
                       }}
-                      className="w-full p-2 rounded-lg hover:bg-slate-500/10 text-left flex items-center justify-between gap-2"
+                      className="group hover-row w-full p-2 rounded-lg text-left flex items-center justify-between gap-2"
                     >
                       <div>
                         <div className="font-medium text-[var(--text-primary)]">
@@ -238,7 +235,7 @@ export function Topbar({
                           Cần sạc pin để bảo vệ cell
                         </div>
                       </div>
-                      <span className="text-[11px] text-[var(--accent-primary)] font-medium">
+                      <span className="hover-arrow inline-block text-[11px] text-[var(--accent-primary)] font-medium">
                         Xem xe →
                       </span>
                     </button>
@@ -253,17 +250,6 @@ export function Topbar({
               </div>
             )}
           </div>
-
-          {/* Theme Toggle (Dark / Light) */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={isDark ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'}
-            title={isDark ? 'Chế độ Sáng' : 'Chế độ Tối'}
-            className="p-2 rounded-lg text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)] transition-colors"
-          >
-            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-          </button>
 
           {/* User Profile Dropdown */}
           <DropdownMenu>

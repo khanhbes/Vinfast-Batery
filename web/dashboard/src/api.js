@@ -255,3 +255,10 @@ export const adminSupportTicket = (id) =>
   apiFetch('/api/admin/support/' + encodeURIComponent(id), { silent: true })
 export const adminSupportReply = (id, data) =>
   apiFetch('/api/admin/support/' + encodeURIComponent(id) + '/reply', { method: 'POST', body: JSON.stringify(data) })
+
+// Mẹo nhỏ (QA 163) — đồng bộ danh sách mẹo với app mobile & Pinova Bot
+export const adminTips = () => apiFetch('/api/admin/tips', { silent: true })
+export const adminSaveTip = (id, data) =>
+  apiFetch('/api/admin/tips/' + encodeURIComponent(id), { method: 'PUT', body: JSON.stringify(data) })
+export const adminHideTip = (id) =>
+  apiFetch('/api/admin/tips/' + encodeURIComponent(id), { method: 'DELETE' })

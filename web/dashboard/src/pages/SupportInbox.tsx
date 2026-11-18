@@ -194,7 +194,7 @@ export default function SupportInbox() {
                 key={t.id}
                 type="button"
                 onClick={() => void open(t)}
-                className={`w-full rounded-xl border p-3.5 text-left transition-all duration-150 ${
+                className={`hover-lift w-full rounded-xl border p-3.5 text-left ${
                   isSelected
                     ? 'border-[var(--accent-primary)] bg-[var(--accent-tint)]/30 shadow-xs'
                     : 'border-[var(--border-hairline)] bg-[var(--bg-surface)] hover:bg-[var(--bg-hover)]'
@@ -295,7 +295,7 @@ export default function SupportInbox() {
                   <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)]">
                     <span className="text-[11px] text-[var(--text-muted)] block">Hạng dịch vụ</span>
                     <span className="font-semibold text-[var(--accent-primary)]">
-                      {selected.tier || 'Pinova Plus'}
+                      {{ free: 'Miễn phí', pro: 'Pinova Pro', ultra: 'Pinova Ultra' }[String(selected.tier || 'free').toLowerCase()] || 'Miễn phí'}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-hairline)]">

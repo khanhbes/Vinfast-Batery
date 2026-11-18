@@ -35,7 +35,7 @@ gói. Hết gói không ngắt phiên sạc đang chạy.</li>
 
 
 def create_billing_blueprint(*, entitlements, promos, auth_resolver, require_admin, audit=None,
-                             user_lookup=None, payments=None):
+                             user_lookup=None, payments=None, accounts_total=None):
     bp = Blueprint("billing", __name__)
 
     def fail(status, code, message):
@@ -202,7 +202,18 @@ color:#050506;text-decoration:none;font-weight:600}}</style></head><body><main>
     @bp.get("/api/admin/billing/stats")
     @require_admin
     def stats():
-        return run(lambda: {"counts": entitlements.tier_counts(), "enforced": entitlements.enforced})
+        def action():
+            counts = entitlements.tier_counts()
+            if accounts_total is not None:
+                try:
+                    total = int(accounts_total())
+                    # Expired plans are Free again; trials count as paid-level.
+                    counts = {**counts, "free": max(0, total - counts["pro"] - counts["ultra"] - counts["trial"]),
+                              "total": total}
+                except Exception:
+                    pass  # leave Free unknown rather than guess
+            return {"counts": counts, "enforced": entitlements.enforced}
+        return run(action)
 
     @bp.get("/api/admin/billing/user")
     @require_admin

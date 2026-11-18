@@ -12,9 +12,9 @@ import ModelTypeCard from './ModelTypeCard';
 import UniversalModelLab from './lab/UniversalModelLab';
 
 const GROUP_META: Record<ModelGroup, { icon: any; gradient: string; text: string }> = {
-  survival: { icon: Shield, gradient: 'from-emerald-50 to-emerald-100/40', text: 'text-emerald-800' },
-  assistant: { icon: Bot, gradient: 'from-violet-50 to-violet-100/40', text: 'text-violet-800' },
-  health: { icon: HeartPulse, gradient: 'from-rose-50 to-rose-100/40', text: 'text-rose-800' },
+  survival: { icon: Shield, gradient: 'from-emerald-500/12 to-emerald-500/5 border-emerald-500/20', text: 'text-emerald-300' },
+  assistant: { icon: Bot, gradient: 'from-violet-500/12 to-violet-500/5 border-violet-500/20', text: 'text-violet-300' },
+  health: { icon: HeartPulse, gradient: 'from-rose-500/12 to-rose-500/5 border-rose-500/20', text: 'text-rose-300' },
 };
 
 export default function ModelCatalog() {
@@ -131,13 +131,13 @@ export default function ModelCatalog() {
               <div className={`rounded-lg border bg-gradient-to-r ${gm.gradient} px-4 py-3`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 rounded-lg bg-white flex items-center justify-center ${gm.text}`}>
+                    <div className={`w-9 h-9 rounded-lg border border-[var(--border-hairline)] bg-[var(--bg-surface)] flex items-center justify-center ${gm.text}`}>
                       <GIcon className="w-5 h-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className={`font-semibold ${gm.text}`}>{g.label}</h3>
-                        <span className="text-[10px] font-mono bg-white/70 rounded px-1.5 py-0.5 text-foreground/70">
+                        <span className="text-[10px] font-mono bg-[var(--bg-surface)] border border-[var(--border-hairline)] rounded px-1.5 py-0.5 text-[var(--text-secondary)]">
                           {g.phase}
                         </span>
                       </div>

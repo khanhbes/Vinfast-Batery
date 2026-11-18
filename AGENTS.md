@@ -257,7 +257,7 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - `_robust_wh` là trung vị trọng số theo % đã nạp × độ mới; không kẹp min theo mẫu 100 %. Sai số hiện cho user qua `honest_mae`.
   - Tag theo dữ liệu sạc, không theo tuổi xe: `Đang học` tới khi đủ 5 lần sạc và tổng ≥ 100 %; đủ dữ liệu mà công tắc tự huấn luyện đang tắt thì `bấm Huấn luyện` hoặc `bật Tự huấn luyện`. Nút Huấn luyện vẫn chỉ Ultra; Wh/1% tự học ở mọi gói (QA 148).
   - Đồng hồ xe có lúc hụt rồi bù ở lần sau; bù lệch (`gauge_offset_pct`, `charge.shadow`) chỉ vào điểm ngắt qua lớp ở QA 147.
-  - `battery_health` (Dung lượng pin còn lại) tách khỏi mô hình: đổi cách huấn luyện không được làm số này đổi (test khóa số; từ QA 162 là 99,0 % / 2375 Wh). Đừng đổi nhãn/`censored` của mẫu nếu chưa xét ảnh hưởng tới nó.
+  - `battery_health` (Dung lượng pin còn lại) tách khỏi mô hình: đổi cách huấn luyện không được làm số này đổi (test khóa số; từ QA 166 là 98,6 % / 2367 Wh). Đừng đổi nhãn/`censored` của mẫu nếu chưa xét ảnh hưởng tới nó.
   - Dung lượng danh định chỉ dùng để hiển thị, tính sức khỏe pin và làm điểm xuất phát của xe chưa học; xe đã học giữ Wh/%. App đọc qua `VehicleModel.capacityWhFrom`.
 
 - **QA 147 (04/11/2026, chủ app chọn) — dự đoán % sạc nhiều lớp (`shelly/charge_ai.py`):**
@@ -372,6 +372,11 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Mặc định chỉ hiện số, nhãn, một câu và thao tác; giải thích cách tính, nguồn số, sai số, tham số mô hình chỉ khi `DevViewScope.on(context)` (hoặc `ref.watch(devViewProvider).on`, `DevOnly`). Câu có hai mức dùng `DevViewScope.pick(context, ngắn, đầy đủ)`.
   - Không bao giờ ẩn sau develop: lỗi, thao tác, xác nhận, cảnh báo an toàn, quyền riêng tư, thanh toán. Bản ngắn của câu quyền riêng tư vẫn phải nói đúng (ví dụ ảnh có thể lên máy chủ).
   - Test kiểm phần đầy đủ phải bật `DevView.instance.debugSet(unlocked: true, on: true)` và tắt lại ở tearDown.
+- **QA 166 (18/11/2026, chủ app chọn) — dung lượng pin đo thay vì đoán:**
+  - Lần sạc nặng theo 1/σ² (`health_sigmas`, `HEALTH_DRIFT_POINTS` chỉ là giá trị khởi đầu), thay trọng số độ tin × độ mới và hệ số ×2 bài kiểm tra của QA 162. Đừng thêm hệ số trọng số tự đặt; số nào đoán phải nằm trong `systematic` và khoảng `totalLowPct`/`totalHighPct`, không lẫn vào sai số đo.
+  - Hệ số ổ cắm → pin vẫn 0,90 tới khi có số đo DC (`chargerCalibration`). Danh định theo nhãn thì `nominalCapacitySource: "label"`. Đổi một trong hai phải chạy lại `qa162_health_replay.py` và `qa166_capacity_study.py` trên sổ thật.
+  - Mẫu sạc mang `startSource`/`startAgeMin`/`endAfterMin`/`tailWh`/`plateauW`; số đọc "xe vừa tự ngắt" (`cutoff`, ≤ 5%) là mốc 0% vật lý. Sổ theo tháng version 2 theo giai đoạn (`epochs`, `references`); mốc mỗi giai đoạn lập một lần.
+  - Đừng viết `float(x or 100)` cho %: 0% là giá trị thật.
 
 ### 3.7. BatteryBot (trợ lý AI)
 

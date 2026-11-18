@@ -58,7 +58,7 @@ const tools = [
   {
     path: '/plans',
     label: 'Gói cước & Mã ưu đãi',
-    description: 'Cấu hình gói Ultra/Fleet, phát hành voucher và tra cứu doanh thu.',
+    description: 'Cấu hình gói Pro/Ultra, phát hành voucher và tra cứu doanh thu.',
     icon: CreditCard,
     tag: 'Thương mại',
     tone: 'success' as const,

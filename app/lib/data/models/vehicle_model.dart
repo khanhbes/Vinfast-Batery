@@ -19,6 +19,9 @@ class VehicleModel {
   final String? batteryType;
   final String? nickname;
   final String? catalogId;
+
+  /// Paint colour the owner chose among the catalogue's published colours.
+  final String? colorId;
   final int? catalogRevisionAtSelection;
   final Map<String, dynamic>? catalogSnapshot;
   // ── VinFast Model Link fields ──
@@ -61,6 +64,7 @@ class VehicleModel {
     this.batteryType,
     this.nickname,
     this.catalogId,
+    this.colorId,
     this.catalogRevisionAtSelection,
     this.catalogSnapshot,
     this.vinfastModelId,
@@ -219,6 +223,7 @@ class VehicleModel {
           data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
       nickname: data['nickname'] as String?,
       catalogId: data['catalogId'] as String?,
+      colorId: data['colorId'] as String?,
       catalogRevisionAtSelection: data['catalogRevisionAtSelection'] == null
           ? null
           : _asInt(data['catalogRevisionAtSelection']),
@@ -278,6 +283,7 @@ class VehicleModel {
           data['batteryType'] as String? ?? data['batteryChemistry'] as String?,
       nickname: data['nickname'] as String?,
       catalogId: data['catalogId'] as String?,
+      colorId: data['colorId'] as String?,
       catalogRevisionAtSelection: data['catalogRevisionAtSelection'] == null
           ? null
           : _asInt(data['catalogRevisionAtSelection']),
@@ -324,6 +330,7 @@ class VehicleModel {
         'batteryType': batteryType,
       if (nickname != null) 'nickname': nickname,
       if (catalogId != null) 'catalogId': catalogId,
+      if (colorId != null) 'colorId': colorId,
       if (catalogRevisionAtSelection != null)
         'catalogRevisionAtSelection': catalogRevisionAtSelection,
       if (catalogSnapshot != null) 'catalogSnapshot': catalogSnapshot,
@@ -356,6 +363,7 @@ class VehicleModel {
     String? batteryType,
     String? nickname,
     String? catalogId,
+    String? colorId,
     int? catalogRevisionAtSelection,
     Map<String, dynamic>? catalogSnapshot,
     String? vinfastModelId,
@@ -388,6 +396,7 @@ class VehicleModel {
       batteryType: batteryType ?? this.batteryType,
       nickname: nickname ?? this.nickname,
       catalogId: catalogId ?? this.catalogId,
+      colorId: colorId ?? this.colorId,
       catalogRevisionAtSelection:
           catalogRevisionAtSelection ?? this.catalogRevisionAtSelection,
       catalogSnapshot: catalogSnapshot ?? this.catalogSnapshot,

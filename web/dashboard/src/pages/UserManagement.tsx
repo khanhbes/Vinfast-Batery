@@ -102,7 +102,10 @@ function UserDetailDrawer({
     setLoading(true);
     try {
       const response = await adminAccount(uid);
-      setAccount((response.data?.account || response.data) as Account);
+      setAccount({
+        ...((response.data?.account || response.data) as Account),
+        vehicleCount: Number(response.data?.summary?.vehicles ?? NaN) >= 0 ? Number(response.data.summary.vehicles) : undefined,
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Không tải được hồ sơ tài khoản');
     } finally {
@@ -274,8 +277,20 @@ function UserDetailDrawer({
       }
     >
       {loading || !account ? (
-        <div className="grid min-h-60 place-items-center">
-          <div className="w-8 h-8 rounded-full border-2 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] animate-spin" />
+        <div className="space-y-5 animate-fadeIn">
+          <div className="grid grid-cols-2 gap-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] space-y-2">
+                <div className="skeleton-shimmer h-3 w-20 rounded" />
+                <div className="skeleton-shimmer h-5 w-28 rounded" />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2.5">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="h-14 rounded-xl border border-[var(--border-hairline)] skeleton-shimmer" />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="space-y-5">
@@ -287,12 +302,12 @@ function UserDetailDrawer({
             </div>
             <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
               <div className="text-[11px] text-[var(--text-muted)] mb-1">Gói dịch vụ</div>
-              <PlanBadge planIdOrName={String(account.tier || (account.isAdmin ? 'Pinova Plus' : 'free'))} />
+              <PlanBadge planIdOrName={String(account.tier || 'free')} />
             </div>
             <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
-              <div className="text-[11px] text-[var(--text-muted)] mb-1">Phương tiện & Thiết bị</div>
+              <div className="text-[11px] text-[var(--text-muted)] mb-1">Phương tiện</div>
               <div className="text-sm font-semibold tabular-nums text-[var(--text-primary)] whitespace-nowrap">
-                {Number(account.vehicleCount ?? 1)} xe · {account.isAdmin ? '1 thiết bị' : '0 thiết bị'}
+                {account.vehicleCount == null ? '—' : `${Number(account.vehicleCount)} xe`}
               </div>
             </div>
             <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)]">
@@ -357,8 +372,8 @@ function UserDetailDrawer({
               <div className="flex items-center gap-1 overflow-x-auto thin-scrollbar">
                 {[
                   { id: 'vehicles', label: 'Xe liên kết' },
-                  { id: 'charges', label: 'Lịch sử sạc' },
-                  { id: 'trips', label: 'Chuyến đi' },
+                  { id: 'chargeLogs', label: 'Lịch sử sạc' },
+                  { id: 'tripLogs', label: 'Chuyến đi' },
                   { id: 'ai', label: 'Mô hình AI' },
                   { id: 'notifications', label: 'Thông báo' },
                 ].map((tab) => (
@@ -366,7 +381,7 @@ function UserDetailDrawer({
                     key={tab.id}
                     type="button"
                     onClick={() => selectDataset(tab.id)}
-                    className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                    className={`hover-pill px-3 py-1 rounded-md text-xs font-medium whitespace-nowrap ${
                       dataset === tab.id
                         ? 'bg-[var(--accent-tint)] text-[var(--accent-primary)] font-semibold'
                         : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)]'
@@ -404,7 +419,7 @@ function UserDetailDrawer({
                     ) : (
                       <div
                         key={String(record.id || index)}
-                        className="p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] flex items-center justify-between gap-3 text-xs"
+                        className="hover-card p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-hairline)] flex items-center justify-between gap-3 text-xs"
                       >
                         <div className="min-w-0">
                           <div className="font-semibold text-[var(--text-primary)] truncate">
@@ -542,7 +557,7 @@ export default function UserManagement() {
       header: 'Gói',
       width: '15%',
       render: (acc) => (
-        <PlanBadge planIdOrName={String(acc.tier || (acc.isAdmin ? 'Pinova Plus' : 'free'))} />
+        <PlanBadge planIdOrName={String(acc.tier || 'free')} />
       ),
     },
     {
@@ -570,13 +585,13 @@ export default function UserManagement() {
     },
     {
       key: 'vehicles',
-      header: 'Xe & Thiết bị',
+      header: 'Xe',
       width: '18%',
       render: (acc) => (
         <span className="inline-flex items-center gap-1.5 tabular-nums whitespace-nowrap text-xs text-[var(--text-secondary)]">
           <Car className="h-3.5 w-3.5 text-[var(--accent-primary)] shrink-0" />
           <span>
-            {Number(acc.vehicleCount ?? 0)} xe · {acc.isAdmin ? '1 thiết bị' : '0 thiết bị'}
+            {acc.vehicleCount == null ? '—' : `${Number(acc.vehicleCount)} xe`}
           </span>
         </span>
       ),

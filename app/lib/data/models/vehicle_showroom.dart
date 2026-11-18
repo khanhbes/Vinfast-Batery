@@ -133,6 +133,13 @@ class VehicleShowroomData {
 
   ShowroomImage get primary => defaultColor.angles.first;
 
+  /// The owner's colour when the catalogue still publishes it, else the
+  /// default colour.
+  ShowroomColor colorOrDefault(String? colorId) => colors.firstWhere(
+    (c) => c.id == colorId,
+    orElse: () => defaultColor,
+  );
+
   bool get anyCanSpin => colors.any((c) => c.canSpin);
 
   /// Parses `media` from a catalog document or a vehicle catalog snapshot.

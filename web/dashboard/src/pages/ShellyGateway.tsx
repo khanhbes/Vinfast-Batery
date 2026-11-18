@@ -15,7 +15,6 @@ import {
   Search,
   MoreHorizontal,
   AlertTriangle,
-  ChevronDown,
   ShieldCheck,
   Power,
   X,
@@ -125,15 +124,28 @@ export default function ShellyGateway() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!relayConfirmModal && !showCodesModal && !showAddModal && !selectedDeviceId) return;
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (relayConfirmModal) setRelayConfirmModal(null);
+      else if (showCodesModal) setShowCodesModal(false);
+      else if (showAddModal) setShowAddModal(false);
+      else if (selectedDeviceId) setSelectedDeviceId(null);
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [relayConfirmModal, showCodesModal, showAddModal, selectedDeviceId]);
+
   // Map real backend devices with display-ready fields
   const displayDevices = useMemo(() => {
     return devices.map((d) => ({
       ...d,
-      ownerName: d.ownerName || 'Phan Nam Khánh',
-      vehiclePlate: d.vehiclePlate && d.vehiclePlate !== '—' ? d.vehiclePlate : 'VinFast Feliz 2025',
+      ownerName: d.ownerName || 'Chưa gán người dùng',
+      vehiclePlate: d.vehiclePlate && d.vehiclePlate !== '—' ? d.vehiclePlate : 'Chưa gắn xe',
       online: d.online ?? (d.hasUsableCode !== false),
       powerKw: d.powerKw ?? 0,
-      firmware: d.firmware || '1.4.2',
+      firmware: d.firmware || '—',
       hasUpdate: d.hasUpdate ?? false,
       relayOn: localRelayStates[d.deviceId] ?? d.relayOn ?? false,
     }));
@@ -440,22 +452,10 @@ export default function ShellyGateway() {
             <span>▲ Có bản mới</span>
             <span className="text-[10px] opacity-80">{counts.update}</span>
           </button>
-
-          <div className="h-4 w-px bg-[var(--border-hairline)] mx-1" />
-
-          {/* View Mode Dropdown */}
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            <span>Chế độ xem</span>
-            <span className="font-semibold text-foreground">1</span>
-            <ChevronDown className="h-3 w-3" />
-          </button>
         </div>
       </div>
 
-      {/* Main Shelly Devices Table matching Image 2 */}
+      {/* Main Shelly Devices Table */}
       {loadError && (
         <div role="alert" className="space-y-2 rounded-xl border border-destructive/30 p-4 text-sm">
           <p>Không thể tải danh sách. Dữ liệu đang hiển thị có thể chưa cập nhật.</p>
@@ -463,7 +463,7 @@ export default function ShellyGateway() {
             type="button"
             disabled={loading}
             onClick={() => void refresh()}
-            className="min-h-12 rounded-lg border px-4 font-medium disabled:opacity-50"
+            className="hover-pill h-9 max-md:min-h-12 rounded-lg border px-4 font-medium disabled:opacity-50"
           >
             Thử lại
           </button>
@@ -471,9 +471,16 @@ export default function ShellyGateway() {
       )}
 
       {loading ? (
-        <div className="rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-12 text-center text-muted-foreground">
-          <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin text-primary" />
-          <p className="text-xs">Đang tải danh sách thiết bị Shelly...</p>
+        <div className="overflow-hidden rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 space-y-3 animate-fadeIn">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="grid grid-cols-5 items-center gap-4 rounded-xl border border-[var(--border-hairline)]/60 p-3">
+              <div className="skeleton-shimmer h-4 w-3/4 rounded" />
+              <div className="skeleton-shimmer h-4 w-2/3 rounded" />
+              <div className="skeleton-shimmer h-5 w-20 rounded-full" />
+              <div className="skeleton-shimmer h-4 w-1/2 rounded" />
+              <div className="skeleton-shimmer h-7 w-14 rounded-lg ml-auto" />
+            </div>
+          ))}
         </div>
       ) : devices.length === 0 && loadError ? null : (
         <div className="overflow-hidden rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] shadow-sm">
@@ -684,8 +691,16 @@ export default function ShellyGateway() {
 
       {/* MODAL 1: SAFETY CONFIRMATION FOR RELAY TOGGLE */}
       {relayConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 shadow-2xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setRelayConfirmModal(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px] p-4 animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 shadow-2xl animate-modal-enter"
+          >
             <div className="flex items-center gap-3 text-amber-400 mb-3">
               <div className="rounded-xl bg-amber-500/10 p-2.5">
                 <AlertTriangle className="h-6 w-6" />
@@ -741,8 +756,16 @@ export default function ShellyGateway() {
 
       {/* MODAL 2: CONNECTION CODES LIST */}
       {showCodesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-2xl rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowCodesModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px] p-4 animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4 animate-modal-enter"
+          >
             <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-xl bg-primary/10 p-2 text-primary">
@@ -814,8 +837,16 @@ export default function ShellyGateway() {
 
       {/* MODAL 3: ADD NEW SHELLY & AUTO GENERATE CODE */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-4 animate-in fade-in">
-          <div className="w-full max-w-2xl rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowAddModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-[2px] p-4 animate-fadeIn"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-2xl rounded-2xl border border-[var(--border-strong)] bg-[var(--bg-surface)] p-6 shadow-2xl space-y-4 animate-modal-enter"
+          >
             <div className="flex items-center justify-between border-b border-[var(--border-hairline)] pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="rounded-xl bg-primary/10 p-2 text-primary">
@@ -980,11 +1011,13 @@ export default function ShellyGateway() {
       {/* DRAWER: SHELLY DEVICE DETAIL & CONNECTION CODE (Matches uploaded screenshot) */}
       {selectedDevice && (
         <div
-          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-xs animate-in fade-in"
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-[2px] animate-fadeIn"
           onClick={() => setSelectedDeviceId(null)}
         >
           <aside
-            className="h-full w-full max-w-[540px] border-l border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 shadow-2xl overflow-y-auto flex flex-col justify-between"
+            className="h-full w-full max-w-[540px] border-l border-[var(--border-hairline)] bg-[var(--bg-surface)] p-6 shadow-2xl overflow-y-auto flex flex-col justify-between animate-drawer-enter"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="space-y-6">

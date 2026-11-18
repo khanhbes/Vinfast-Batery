@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -27,6 +27,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { adminBillingStats } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -63,7 +64,7 @@ function timestamp(record: DataRecord): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-type ChartMetricKey = 'users' | 'revenue' | 'pinova';
+type ChartMetricKey = 'users' | 'charges';
 type TimeRangeKey = '7d' | '30d' | '90d';
 
 export default function Dashboard() {
@@ -129,46 +130,59 @@ export default function Dashboard() {
     };
   }, [vehicles, chargeLogs, maintenance, shellyDevices, supportTickets]);
 
-  // Combine real Firestore counts with time-series trends for the single-unit chart
+  // Only real records: new accounts and charge sessions per day (or per week for 90 days).
   const chartData = useMemo(() => {
-    const activeUsersCount = Math.max(1, accounts.length || 1);
-    const chargeCount = Math.max(13, chargeLogs.length || 13);
-    const basePoints =
-      timeRange === '7d'
-        ? [
-            { period: '22/10', users: 1, revenue: 149000, pinova: Math.max(4, Math.round(chargeCount * 0.6)) },
-            { period: '23/10', users: 1, revenue: 149000, pinova: Math.max(6, Math.round(chargeCount * 0.7)) },
-            { period: '24/10', users: 1, revenue: 199000, pinova: Math.max(8, Math.round(chargeCount * 0.8)) },
-            { period: '25/10', users: 1, revenue: 199000, pinova: Math.max(9, Math.round(chargeCount * 0.85)) },
-            { period: '26/10', users: 1, revenue: 249000, pinova: Math.max(11, Math.round(chargeCount * 0.9)) },
-            { period: '27/10', users: activeUsersCount, revenue: 249000, pinova: Math.max(12, chargeCount - 1) },
-            { period: 'Hôm nay', users: activeUsersCount, revenue: 249000, pinova: chargeCount + predictions.length },
-          ]
-        : timeRange === '30d'
-        ? [
-            { period: 'Tuần 1', users: 1, revenue: 149000, pinova: 6 },
-            { period: 'Tuần 2', users: 1, revenue: 199000, pinova: 9 },
-            { period: 'Tuần 3', users: activeUsersCount, revenue: 249000, pinova: 12 },
-            { period: 'Hiện tại', users: activeUsersCount, revenue: 249000, pinova: chargeCount + predictions.length },
-          ]
-        : [
-            { period: 'Tháng 6', users: 1, revenue: 99000, pinova: 4 },
-            { period: 'Tháng 7', users: 1, revenue: 149000, pinova: 7 },
-            { period: 'Tháng 8', users: 1, revenue: 199000, pinova: 10 },
-            { period: 'Tháng 9', users: activeUsersCount, revenue: 249000, pinova: 12 },
-            { period: 'Tháng 10', users: activeUsersCount, revenue: 249000, pinova: chargeCount + predictions.length },
-          ];
-    return basePoints;
-  }, [accounts.length, chargeLogs.length, predictions.length, timeRange]);
+    const days = timeRange === '7d' ? 7 : timeRange === '30d' ? 30 : 90;
+    const bucketDays = days === 90 ? 7 : 1;
+    const buckets = Math.ceil(days / bucketDays);
+    const dayMs = 86_400_000;
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = end.getTime() - buckets * bucketDays * dayMs;
+    const points = Array.from({ length: buckets }, (_, index) => ({
+      period: new Date(start + (index * bucketDays + 1) * dayMs).toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+      }),
+      users: 0,
+      charges: 0,
+    }));
+    const place = (time: number, key: 'users' | 'charges') => {
+      if (!time || time < start || time > end.getTime()) return;
+      const index = Math.min(buckets - 1, Math.floor((time - start) / (bucketDays * dayMs)));
+      points[index][key] += 1;
+    };
+    for (const account of accounts) {
+      const raw = account.createdAt ?? account.creationTime;
+      const time = typeof raw === 'number' ? raw : Date.parse(String(raw ?? ''));
+      place(Number.isFinite(time) ? time : 0, 'users');
+    }
+    for (const log of chargeLogs) place(timestamp(log), 'charges');
+    return points;
+  }, [accounts, chargeLogs, timeRange]);
+
+  const [paidPlans, setPaidPlans] = useState<{ pro: number; ultra: number; trial: number } | null>(null);
+  useEffect(() => {
+    let alive = true;
+    adminBillingStats()
+      .then((res: { data?: { counts?: Record<string, number> } }) => {
+        const c = res?.data?.counts;
+        if (alive && c) setPaidPlans({ pro: c.pro ?? 0, ultra: c.ultra ?? 0, trial: c.trial ?? 0 });
+      })
+      .catch(() => {
+        if (alive) setPaidPlans(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const vehicleDistribution = useMemo(() => {
-    if (vehicles.length === 0) {
-      return [{ model: 'VinFast Feliz 2025', count: 1, pct: 100 }];
-    }
+    if (vehicles.length === 0) return [];
     const map = new Map<string, number>();
     for (const v of vehicles) {
       const label =
-        firstText(v, ['vinfastModelName', 'vehicleName', 'model', 'catalogId']) || 'VinFast Feliz 2025';
+        firstText(v, ['vinfastModelName', 'vehicleName', 'model', 'catalogId']) || 'Chưa đặt tên';
       map.set(label, (map.get(label) || 0) + 1);
     }
     const total = vehicles.length;
@@ -223,17 +237,41 @@ export default function Dashboard() {
 
   if (loading && !snapshot) {
     return (
-      <div className="grid min-h-[60vh] place-items-center">
-        <div className="text-center">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)]" />
-          <p className="mt-4 text-sm font-medium text-[var(--text-muted)]">Đang tải dữ liệu ứng dụng...</p>
+      <div className="space-y-6 animate-fadeIn">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-2">
+            <div className="skeleton-shimmer h-7 w-36 rounded-lg" />
+            <div className="skeleton-shimmer h-3.5 w-64 rounded-md" />
+          </div>
+          <div className="flex gap-2">
+            <div className="skeleton-shimmer h-8 w-44 rounded-lg" />
+            <div className="skeleton-shimmer h-8 w-24 rounded-lg" />
+          </div>
+        </div>
+        <div className="skeleton-shimmer h-12 w-full rounded-xl" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 space-y-3">
+              <div className="skeleton-shimmer h-3.5 w-28 rounded-md" />
+              <div className="skeleton-shimmer h-8 w-20 rounded-lg" />
+              <div className="skeleton-shimmer h-3 w-36 rounded-md" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 space-y-4">
+          <div className="flex justify-between">
+            <div className="skeleton-shimmer h-5 w-40 rounded-md" />
+            <div className="skeleton-shimmer h-7 w-36 rounded-lg" />
+          </div>
+          <div className="skeleton-shimmer h-64 w-full rounded-xl" />
         </div>
       </div>
     );
   }
 
-  const totalShellyCount = Math.max(1, shellyDevices.length || 1);
-  const onlineShellyCount = shellyDevices.length > 0 ? summary.onlineShelly.length : 1;
+  const shellyKnown = datasetLoaded('shelly');
+  const totalShellyCount = shellyDevices.length;
+  const onlineShellyCount = summary.onlineShelly.length;
 
   return (
     <div className="space-y-6">
@@ -317,7 +355,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={() => navigate('/shelly')}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-hairline)] text-[var(--text-primary)] transition-colors"
+            className="hover-pill inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-hairline)] text-[var(--text-primary)]"
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
@@ -327,7 +365,9 @@ export default function Dashboard() {
             <span>
               {summary.offlineShelly.length > 0
                 ? `${summary.offlineShelly.length} thiết bị Shelly mất kết nối`
-                : `${onlineShellyCount}/${totalShellyCount} trạm Shelly đang kết nối`}
+                : shellyKnown
+                ? `${onlineShellyCount}/${totalShellyCount} trạm Shelly đang kết nối`
+                : 'Thiết bị Shelly'}
             </span>
             <span className="text-[var(--accent-primary)] font-medium">Kiểm tra →</span>
           </button>
@@ -335,23 +375,23 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={() => navigate('/catalog')}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-hairline)] text-[var(--text-primary)] transition-colors"
+            className="hover-pill inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-hairline)] text-[var(--text-primary)]"
           >
             <Car className="w-3.5 h-3.5 text-[var(--accent-primary)]" />
-            <span>Danh mục xe ({vehicles.length || 1} xe đang hoạt động)</span>
+            <span>Danh mục xe</span>
             <span className="text-[var(--accent-primary)] font-medium">Mở Studio →</span>
           </button>
 
           <button
             type="button"
             onClick={() => navigate('/support')}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:border-[var(--border-strong)] border border-[var(--border-hairline)] text-[var(--text-primary)] transition-colors"
+            className="hover-pill inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--bg-elevated)] hover:bg-[var(--bg-hover)] border border-[var(--border-hairline)] text-[var(--text-primary)]"
           >
             <LifeBuoy className="w-3.5 h-3.5 text-amber-400" />
             <span>
               {summary.pendingTickets.length > 0
                 ? `${summary.pendingTickets.length} phiếu hỗ trợ đang chờ`
-                : '0 phiếu hỗ trợ trễ hạn'}
+                : 'Hộp thư hỗ trợ'}
             </span>
             <span className="text-[var(--accent-primary)] font-medium">Hộp thư →</span>
           </button>
@@ -362,59 +402,61 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div
           onClick={() => navigate('/users')}
-          className="cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 hover:border-[var(--border-strong)] transition-all"
+          className="group hover-lift cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5"
         >
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
             <span className="font-medium">Tài khoản hoạt động</span>
-            <Users className="w-4 h-4 text-[var(--text-muted)]" />
+            <Users className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors" />
           </div>
           <div className="mt-3 flex items-baseline justify-between gap-2">
             <span className="text-[28px] font-semibold tabular-nums tracking-tight text-[var(--text-primary)]">
-              {accounts.length || 1}
+              {datasetLoaded('accounts') ? accounts.length : '—'}
             </span>
-            <StatusBadge label="100% xác thực" tone="success" dot={false} />
           </div>
           <p className="mt-2 text-xs text-[var(--text-muted)] flex items-center justify-between">
-            <span>Phan Nam Khánh (Quản trị viên)</span>
-            <ArrowUpRight className="w-3.5 h-3.5" />
+            <span>Xem danh sách tài khoản</span>
+            <ArrowUpRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-[var(--accent-primary)]" />
           </p>
         </div>
 
         <div
           onClick={() => navigate('/premium')}
-          className="cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 hover:border-[var(--border-strong)] transition-all"
+          className="group hover-lift cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5"
         >
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
-            <span className="font-medium">Doanh thu định kỳ (MRR)</span>
-            <CreditCard className="w-4 h-4 text-[var(--text-muted)]" />
+            <span className="font-medium">Gói trả phí đang dùng</span>
+            <CreditCard className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors" />
           </div>
           <div className="mt-3 flex items-baseline justify-between gap-2">
             <span className="text-[28px] font-semibold tabular-nums tracking-tight text-[var(--text-primary)] whitespace-nowrap">
-              249.000đ
+              {paidPlans ? paidPlans.pro + paidPlans.ultra : '—'}
             </span>
-            <StatusBadge label="+25% kỳ này" tone="primary" dot={false} />
           </div>
-          <p className="mt-2 text-xs text-[var(--text-muted)]">
-            Chu kỳ tháng · Không có gói bất thường
+          <p className="mt-2 text-xs text-[var(--text-muted)] tabular-nums">
+            {paidPlans
+              ? `Pro ${paidPlans.pro} · Ultra ${paidPlans.ultra}${paidPlans.trial ? ` · Dùng thử ${paidPlans.trial}` : ''}`
+              : 'Chưa có dữ liệu gói'}
           </p>
         </div>
 
         <div
           onClick={() => navigate('/shelly')}
-          className="cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 hover:border-[var(--border-strong)] transition-all"
+          className="group hover-lift cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5"
         >
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
             <span className="font-medium">Thiết bị Shelly trực tuyến</span>
-            <Cpu className="w-4 h-4 text-[var(--text-muted)]" />
+            <Cpu className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors" />
           </div>
           <div className="mt-3 flex items-baseline justify-between gap-2">
             <span className="text-[28px] font-semibold tabular-nums tracking-tight text-[var(--text-primary)] whitespace-nowrap">
-              {onlineShellyCount} / {totalShellyCount}
+              {shellyKnown ? `${onlineShellyCount} / ${totalShellyCount}` : '—'}
             </span>
-            <StatusBadge
-              label={summary.offlineShelly.length === 0 ? 'Đang kết nối' : `${summary.offlineShelly.length} mất kết nối`}
-              tone={summary.offlineShelly.length === 0 ? 'success' : 'danger'}
-            />
+            {shellyKnown && (
+              <StatusBadge
+                label={summary.offlineShelly.length === 0 ? 'Đang kết nối' : `${summary.offlineShelly.length} mất kết nối`}
+                tone={summary.offlineShelly.length === 0 ? 'success' : 'danger'}
+              />
+            )}
           </div>
           <p className="mt-2 text-xs text-[var(--text-muted)] tabular-nums">
             Tổng điện năng nạp:{' '}
@@ -426,24 +468,22 @@ export default function Dashboard() {
 
         <div
           onClick={() => navigate('/support')}
-          className="cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 hover:border-[var(--border-strong)] transition-all"
+          className="group hover-lift cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5"
         >
           <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
             <span className="font-medium">Phiếu hỗ trợ đang mở</span>
-            <LifeBuoy className="w-4 h-4 text-[var(--text-muted)]" />
+            <LifeBuoy className="w-4 h-4 text-[var(--text-muted)] group-hover:text-[var(--accent-primary)] transition-colors" />
           </div>
           <div className="mt-3 flex items-baseline justify-between gap-2">
             <span className="text-[28px] font-semibold tabular-nums tracking-tight text-[var(--text-primary)]">
-              {summary.pendingTickets.length}
+              {datasetLoaded('support') ? summary.pendingTickets.length : '—'}
             </span>
-            <StatusBadge
-              label={summary.pendingTickets.length === 0 ? '100% đúng SLA' : 'Cần phản hồi'}
-              tone={summary.pendingTickets.length === 0 ? 'success' : 'warning'}
-              dot={false}
-            />
+            {summary.pendingTickets.length > 0 && (
+              <StatusBadge label="Cần phản hồi" tone="warning" dot={false} />
+            )}
           </div>
           <p className="mt-2 text-xs text-[var(--text-muted)] tabular-nums">
-            Sức khỏe pin TB (SoH): {summary.avgSoh == null ? '99.0%' : `${summary.avgSoh.toFixed(1)}%`}
+            Sức khỏe pin TB (SoH): {summary.avgSoh == null ? '—' : `${summary.avgSoh.toFixed(1)}%`}
           </p>
         </div>
       </div>
@@ -453,14 +493,16 @@ export default function Dashboard() {
         <CardHeader className="pb-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <CardTitle className="text-[15px] font-semibold text-[var(--text-primary)]">
             Xu hướng hệ thống
+            <span className="ml-2 text-[11px] font-normal text-[var(--text-muted)]">
+              theo bản ghi đã tải
+            </span>
           </CardTitle>
 
           <div className="inline-flex items-center p-0.5 rounded-lg bg-[var(--bg-canvas)] border border-[var(--border-hairline)] self-start">
             {(
               [
-                ['users', 'Người dùng'],
-                ['revenue', 'Doanh thu'],
-                ['pinova', 'Lượt Pinova & Sạc'],
+                ['users', 'Tài khoản mới'],
+                ['charges', 'Phiên sạc'],
               ] as const
             ).map(([key, label]) => (
               <button
@@ -501,26 +543,14 @@ export default function Dashboard() {
                   axisLine={false}
                   tickLine={false}
                   width={56}
-                  tickFormatter={(val: number) =>
-                    chartMetric === 'revenue'
-                      ? `${Math.round(val / 1000)}k`
-                      : String(val)
-                  }
+                  allowDecimals={false}
                 />
                 <Tooltip
                   formatter={(val: unknown) => {
                     const num = Number(val ?? 0);
                     return [
-                      chartMetric === 'revenue'
-                        ? `${num.toLocaleString('vi-VN')}đ`
-                        : chartMetric === 'users'
-                        ? `${num} tài khoản`
-                        : `${num} lượt`,
-                      chartMetric === 'revenue'
-                        ? 'Doanh thu'
-                        : chartMetric === 'users'
-                        ? 'Tài khoản'
-                        : 'Lượt hoạt động',
+                      chartMetric === 'users' ? `${num} tài khoản` : `${num} phiên`,
+                      chartMetric === 'users' ? 'Tài khoản mới' : 'Phiên sạc',
                     ];
                   }}
                 />
@@ -574,6 +604,9 @@ export default function Dashboard() {
           <CardContent className="space-y-4">
             {/* Horizontal Bars for Vehicles */}
             <div className="space-y-3">
+              {vehicleDistribution.length === 0 && (
+                <p className="py-4 text-center text-xs text-[var(--text-muted)]">Chưa có xe nào được liên kết.</p>
+              )}
               {vehicleDistribution.map((item) => (
                 <div key={item.model} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
@@ -650,7 +683,7 @@ export default function Dashboard() {
                   <div
                     key={`${activity.kind}:${activity.at}:${index}`}
                     onClick={() => setSelectedActivity(activity)}
-                    className="table-row-hover cursor-pointer flex min-h-11 w-full items-center gap-3 py-2 text-left hover:bg-[var(--bg-hover)] rounded-lg px-2 -mx-2 transition-colors"
+                    className="group hover-row cursor-pointer flex min-h-11 w-full items-center gap-3 py-2 text-left rounded-lg px-2 -mx-2"
                   >
                     <span
                       className={`h-2 w-2 shrink-0 rounded-full ${
@@ -675,7 +708,7 @@ export default function Dashboard() {
                           className="block font-mono text-[11px] text-[var(--text-muted)]"
                           alwaysTooltip
                         >
-                          {activity.label || 'VinFast Feliz 2025'}
+                          {activity.label || '—'}
                         </ResponsiveText>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
@@ -687,7 +720,7 @@ export default function Dashboard() {
                               })
                             : 'Vừa xong'}
                         </span>
-                        <span className="text-[11px] text-[var(--accent-primary)] font-medium">
+                        <span className="hover-arrow inline-block text-[11px] text-[var(--accent-primary)] font-medium">
                           Chi tiết →
                         </span>
                       </div>
@@ -726,7 +759,7 @@ export default function Dashboard() {
             ? 'Chi tiết hành trình di chuyển'
             : 'Chi tiết dự đoán AI'
         }
-        subtitle={selectedActivity?.label || 'VinFast Feliz 2025'}
+        subtitle={selectedActivity?.label || '—'}
         badge={
           <StatusBadge
             label={selectedActivity?.kind === 'Charge' ? 'Đã ghi nhận' : 'Đồng bộ'}

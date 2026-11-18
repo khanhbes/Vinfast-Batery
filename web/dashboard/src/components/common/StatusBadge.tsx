@@ -57,17 +57,11 @@ export const PlanBadge: React.FC<{
   planName?: string;
 }> = ({ planIdOrName, planId, planName }) => {
   const key = (planIdOrName || planName || planId || '').toLowerCase();
-  if (key.includes('enterprise') || key.includes('fleet') || key.includes('doanh nghiệp')) {
-    return <StatusBadge label="Doanh nghiệp" tone="primary" dot={false} />;
-  }
   if (key.includes('ultra')) {
     return <StatusBadge label="Pinova Ultra" tone="primary" dot={false} />;
   }
   if (key.includes('pro')) {
     return <StatusBadge label="Pinova Pro" tone="info" dot={false} />;
-  }
-  if (key.includes('plus')) {
-    return <StatusBadge label="Pinova Plus" tone="success" dot={false} />;
   }
   return <StatusBadge label="Miễn phí" tone="neutral" dot={false} />;
 };

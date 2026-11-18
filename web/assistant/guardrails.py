@@ -489,7 +489,7 @@ def filter_and_gate_actions(
             )
             continue
 
-        if t_cfg and user_tier not in (t_cfg.get("allowedTiers") or ["free", "pro", "ultra", "fleet"]):
+        if t_cfg and user_tier not in (t_cfg.get("allowedTiers") or ["free", "pro", "ultra"]):
             req_tier = "Ultra" if "ultra" in (t_cfg.get("allowedTiers") or []) and "pro" not in (t_cfg.get("allowedTiers") or []) else "Pro"
             gate_decisions.append({
                 "tool": name,

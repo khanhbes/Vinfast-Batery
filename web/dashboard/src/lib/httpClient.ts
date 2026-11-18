@@ -16,6 +16,7 @@ export interface PortalRequestOptions extends RequestInit {
 function statusMessage(status: number): string {
   if (status === 401) return 'Your session is invalid. Sign in again.';
   if (status === 403) return 'This account is not allowed to perform that action.';
+  if (status === 404) return 'Không tìm thấy endpoint hoặc dữ liệu trên máy chủ.';
   if (status === 409) return 'The data changed or this version already exists. Refresh before trying again.';
   if (status === 429) return 'Too many requests. Wait a moment and try again.';
   if (status === 413) return 'The uploaded file or payload exceeds the allowed size.';

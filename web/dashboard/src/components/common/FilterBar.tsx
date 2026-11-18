@@ -74,7 +74,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
                   key={tab.id}
                   type="button"
                   onClick={() => onStatusChange(tab.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  className={`hover-pill px-2.5 py-1 rounded-md text-xs font-medium ${
                     active
                       ? 'bg-[var(--bg-surface)] text-[var(--accent-primary)] shadow-xs font-semibold'
                       : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'

@@ -135,7 +135,7 @@ export default function PremiumPlans() {
         key: 'free',
         name: 'Miễn phí',
         price: '0đ/tháng',
-        subscribers: counts?.free ?? 0,
+        subscribers: counts?.free ?? null,
         description: '1 xe liên kết · 10 lượt Pinova Bot/ngày · Giám sát cơ bản',
         tone: 'text-slate-400',
         isSystem: true,
@@ -144,7 +144,7 @@ export default function PremiumPlans() {
         key: 'pro',
         name: 'Pinova Pro',
         price: '29.000đ/tháng · 249.000đ/năm',
-        subscribers: counts?.pro ?? 0,
+        subscribers: counts?.pro ?? null,
         description: '2 xe · 30 lượt Bot/ngày · Sạc đến % tự ngắt · Lộ trình · Sức khỏe pin đầy đủ',
         tone: 'text-sky-400',
         isSystem: false,
@@ -153,7 +153,7 @@ export default function PremiumPlans() {
         key: 'ultra',
         name: 'Pinova Ultra',
         price: '49.000đ/tháng · 449.000đ/năm',
-        subscribers: counts?.ultra ?? 0,
+        subscribers: counts?.ultra ?? null,
         description: 'Tối đa 10 xe · 100 lượt Bot/ngày · Sạc đêm · AI cá nhân · Giao diện Aurora',
         tone: 'text-[var(--accent-primary)]',
         isSystem: false,
@@ -394,7 +394,7 @@ export default function PremiumPlans() {
               return (
                 <div
                   key={plan.key}
-                  className="relative rounded-2xl border p-4 flex flex-col justify-between transition-all border-[var(--border-hairline)] bg-[var(--bg-canvas)] hover:border-[var(--accent-primary)]/40"
+                  className="hover-lift relative rounded-2xl border p-4 flex flex-col justify-between border-[var(--border-hairline)] bg-[var(--bg-canvas)] hover:border-[var(--accent-primary)]/40"
                 >
                   <div className="space-y-3">
                     {/* Top Row: Plan name & Status */}
@@ -413,7 +413,7 @@ export default function PremiumPlans() {
                         Đang dùng
                       </div>
                       <div className="text-xl font-bold tabular-nums text-[var(--text-primary)] mt-0.5 flex items-baseline gap-1.5">
-                        <span>{plan.subscribers.toLocaleString('vi-VN')}</span>
+                        <span>{plan.subscribers == null ? '—' : plan.subscribers.toLocaleString('vi-VN')}</span>
                         <span className="text-[11px] font-normal text-[var(--text-muted)]">tài khoản</span>
                       </div>
                     </div>
@@ -543,7 +543,7 @@ export default function PremiumPlans() {
                   onClick={() => void grant()}
                   disabled={busy}
                   size="sm"
-                  className="h-8 text-xs bg-[var(--accent-primary)] text-slate-950 font-semibold hover:bg-[var(--accent-hover)]"
+                  className="hover-pill h-8 text-xs bg-[var(--accent-primary)] text-white font-semibold hover:bg-[var(--accent-hover)]"
                 >
                   <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                   Cấp / Gia hạn gói
@@ -869,7 +869,7 @@ export default function PremiumPlans() {
                   size="sm"
                   onClick={() => void savePromo()}
                   disabled={busy}
-                  className="h-8 text-xs bg-[var(--accent-primary)] text-slate-950 font-semibold hover:bg-[var(--accent-hover)]"
+                  className="hover-pill h-8 text-xs bg-[var(--accent-primary)] text-white font-semibold hover:bg-[var(--accent-hover)]"
                 >
                   Lưu & Kích hoạt mã
                 </Button>

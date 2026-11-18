@@ -138,7 +138,7 @@ export function DataTableSurface<T>({
                   <tr
                     key={keyExtractor(item, idx)}
                     onClick={() => onRowClick && onRowClick(item)}
-                    className={`${rowHeightClass} group transition-colors hover:bg-[var(--bg-hover)] ${
+                    className={`${rowHeightClass} hover-row group ${
                       onRowClick ? 'cursor-pointer' : ''
                     }`}
                   >

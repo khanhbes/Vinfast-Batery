@@ -1,0 +1,27 @@
+{
+  "command": [
+    "pwsh",
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    "deploy/azure/07-build-admin.ps1",
+    "-ConfigPath",
+    "deploy/azure/staging.json",
+    "-ApiUrl",
+    "https://vinfast-api.nicestone-4d213368.eastasia.azurecontainerapps.io",
+    "-FirebaseConfigPath",
+    "web/dashboard/.env.local",
+    "-DashboardPath",
+    "C:/Users/khanh/AppData/Local/Temp/claude/7875c1c260ab5c29/e0dfbb4d-dd1e-4598-872e-f41a548f2693/scratchpad/wt167/web/dashboard",
+    "-Deploy"
+  ],
+  "cwd": ".",
+  "log": "C:\\Users\\khanh\\OneDrive\\Desktop\\Vinfast Batery\\docs\\qa_evidence\\app-review-2026-10-05\\qa164-admin-20261117.log",
+  "processId": 38696,
+  "timeoutSeconds": 2400,
+  "timedOut": false,
+  "exitCode": 0,
+  "cleanupError": null,
+  "elapsedSeconds": 199.47
+}

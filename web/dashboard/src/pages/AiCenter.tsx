@@ -23,7 +23,7 @@ export default function AiCenter() {
 
       {/* KPI Stats */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Card className="border-border/60 bg-surface/50">
+        <Card className="hover-lift border-border/60 bg-surface/50">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Hồ sơ AI cá nhân</p>
@@ -36,7 +36,7 @@ export default function AiCenter() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-surface/50">
+        <Card className="hover-lift border-border/60 bg-surface/50">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Thông số xe (Insights)</p>
@@ -49,7 +49,7 @@ export default function AiCenter() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-surface/50">
+        <Card className="hover-lift border-border/60 bg-surface/50">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Tổng số lần dự đoán</p>
@@ -62,7 +62,7 @@ export default function AiCenter() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-surface/50">
+        <Card className="hover-lift border-border/60 bg-surface/50">
           <CardContent className="p-4 flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground font-medium">Mẫu dữ liệu huấn luyện</p>
