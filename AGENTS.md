@@ -374,8 +374,10 @@ Mọi điểm dữ liệu đo đạc tuân thủ cấu trúc:
   - Test kiểm phần đầy đủ phải bật `DevView.instance.debugSet(unlocked: true, on: true)` và tắt lại ở tearDown.
 - **QA 166 (18/11/2026, chủ app chọn) — dung lượng pin đo thay vì đoán:**
   - Lần sạc nặng theo 1/σ² (`health_sigmas`, `HEALTH_DRIFT_POINTS` chỉ là giá trị khởi đầu), thay trọng số độ tin × độ mới và hệ số ×2 bài kiểm tra của QA 162. Đừng thêm hệ số trọng số tự đặt; số nào đoán phải nằm trong `systematic` và khoảng `totalLowPct`/`totalHighPct`, không lẫn vào sai số đo.
-  - Hệ số ổ cắm → pin vẫn 0,90 tới khi có số đo DC (`chargerCalibration`). Danh định theo nhãn thì `nominalCapacitySource: "label"`. Đổi một trong hai phải chạy lại `qa162_health_replay.py` và `qa166_capacity_study.py` trên sổ thật.
-  - Mẫu sạc mang `startSource`/`startAgeMin`/`endAfterMin`/`tailWh`/`plateauW`; số đọc "xe vừa tự ngắt" (`cutoff`, ≤ 5%) là mốc 0% vật lý. Sổ theo tháng version 2 theo giai đoạn (`epochs`, `references`); mốc mỗi giai đoạn lập một lần.
+  - Đồng hồ xe trôi xuống giữa hai lần sạc đầy (14 điểm sau 5 lần trên xe chủ app, `driftLog`): lần dừng giữa chừng triệt tiêu độ trôi, lần tới đầy (`taper_full`) thì không, nên chỉ tính khi tin cao (khác: `reason: "drift"`). Xe tự ngắt ở 0% theo đồng hồ, không phải lúc pin cạn. Đừng coi lần tới đầy hay lúc xe ngắt là số đo không sai số.
+  - Hệ số ổ cắm → pin: số đo DC (`chargerCalibration`), rồi giới hạn từ bộ sạc định mức (`chargerRatedW` trên xe hoặc `charging.maxDcPowerW` của danh mục, chia `learned.power_w`), rồi 0,90. Danh định theo nhãn thì `nominalCapacitySource: "label"`. Đổi một trong các số này phải chạy lại `qa162_health_replay.py` (phần "Máy chủ sẽ tính", dùng sổ tháng đang lưu) và `qa166_capacity_study.py` trên sổ thật.
+  - Mẫu sạc mang `startSource`/`startAgeMin`/`endAfterMin`/`tailWh`/`plateauW`; nhập ≥ 99% sau `battery_full` vẫn là `taper_full`. Sổ theo tháng version 2 theo giai đoạn (`epochs`, `references`); mốc mỗi giai đoạn lập một lần; mốc QA 164 không tính lại được thì lập lại một lần (mốc cũ trong `replaced`).
+  - Danh mục xe chỉ ghi số hãng công bố: số không công bố để 0 hoặc trống, app hiện "Chưa công bố" (`catalogSpecRows`). Đổi danh mục production bằng script mặc định chạy thử (`qa166_feliz_specs.py`), chỉ đổi số cũ.
   - Đừng viết `float(x or 100)` cho %: 0% là giá trị thật.
 
 ### 3.7. BatteryBot (trợ lý AI)

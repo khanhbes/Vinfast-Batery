@@ -12,63 +12,106 @@
 
 > **Task108 (11/10/2026) — Điều khiển Shelly qua Azure đã nghiệm thu trên OnePlus (APK 1.1.9+144), không tải, có giám sát.** Redeem mã web → `server_cloud`, safety test thật Pass; Start/Stop trong app và BatteryBot bật/tắt (luôn xác nhận) đều có readback; timer phần cứng tự tắt; trạng thái đồng bộ Cài đặt/Sạc pin/BatteryBot, mở lại app vẫn “Đã kết nối”. Còn mở: xem 108.4.
 
-## 166. Task Completion Log — Dung lượng pin: đo thay vì đoán (18/11/2026, chủ app chọn: giữ hệ số 0,90 và nới khoảng sai số xuống mức vật lý tới khi có số đo; chủ app chụp nhãn pin và bộ sạc; làm hết, chỉ bật khi chạy lại trên sổ thật tốt hơn; xe ngắt đúng lúc đồng hồ về 0% từ khi mới) — Code + test xong, chưa commit, chưa build APK 2.2.4+247, chưa deploy
+## 166. Task Completion Log — Dung lượng pin: đo thay vì đoán (18/11/2026, chủ app chọn) — Code + test xong, APK 2.2.4+247, **đã deploy 18/11/2026** (API, worker)
 
-**Phân tích trên sổ sạc của chủ app (12 lần, 6/9–9/11):**
-- Đồng hồ lệch khoảng 0,4 điểm % ở lần ngay sau lần sạc đầy (QA 157 đo 0,5), 3,8 ở lần thứ 2–3, 6,8 từ lần thứ 4.
-- Trọng số cũ (1 / 0,35 / 0,1) cho lần kém tin nặng gấp 30–100 lần mức dữ liệu cho phép.
-- Sai số ±2,2 (sổ này) và ±6 (máy chủ) chủ yếu là sàn tự đặt (3% mỗi lần, 1,5% đọc số).
-- Phần lớn nhất là hệ thống, thêm lần sạc không giảm:
-  - hệ số 0,90 gộp hiệu suất bộ sạc (0,85–0,93), điện áp sạc so với danh định (LFP khoảng 0,96) và hiệu suất Coulomb, nên theo vật lý là 0,81–0,90;
-  - danh định "2,4 kWh" làm tròn (±2%);
-  - công tơ ±1%.
-- Điện lúc chờ ≤ 0,2%. Đoạn sạc chậm cuối bắt đầu ở khoảng 98,7%, ảnh hưởng < 0,1%.
-- Hai lần 0→100% lệch nhau 13% (6/9: 2 615 Wh, 1/11: 2 284 Wh), chưa có bản ghi công suất để biết vì sao.
+**Chủ app chọn:**
+- Phần 1: giữ hệ số 0,90 và nới khoảng sai số xuống mức vật lý tới khi có số đo; làm hết, chỉ bật khi chạy lại trên sổ thật tốt hơn.
+- Phần 2, sau khi chủ app xuất sổ sạc và 30 phiên (17 phiên có đường công suất): lập lại mốc một lần; hệ số giới hạn bởi bộ sạc 400 W; thông tin xe chỉ ghi số VinFast công bố (chủ app không chụp được nhãn pin).
 
-**Cách tính mới (`web/shelly/charge_model.py`, `battery_health`):**
-- Mỗi lần sạc nặng theo 1/σ². σ là sai số đồng hồ theo độ tin (QA 158): giá trị khởi đầu từ bảng trên (`HEALTH_DRIFT_POINTS`, tính như 4 lần sạc), xe nào cũng tự học σ của mình (`health_sigmas`, so với các lần sạc lân cận), sàn 0,5% mỗi lần.
-- Bỏ hệ số ×2 cho bài kiểm tra và độ mới nửa đời 180 ngày.
-- Lần lệch bị bỏ theo luật QA 162 (chỉ với lần không chính xác, và tối đa 25% số lần) hoặc khi cách các lần khác hơn 3σ.
-- Sai số đo = 1/√Σ(1/σ²) nhân hệ số Birge.
-- `systematic` và `totalLowPct` / `totalHighPct` tách riêng hệ số, danh định, công tơ; `totalPct` giữ cho app cũ.
-- Điện lúc bộ sạc không sạc (`tailWh`, dưới 15 W) được trừ ra.
-- Đổi bộ sạc (công suất ổn định lệch > 8% ba lần liền) hoặc thêm pin (Wh/1% gấp 1,6 lần hai lần liền) mở giai đoạn mới với mốc riêng.
-- Sổ theo tháng lên version 2 (gộp chính xác giữa các tháng). Mốc v1 được tính lại một lần từ chính các tháng của nó (`migratedFrom: 1`).
-- Mốc lập khi sai số ≤ 1,5% sau ≥ 28 ngày, hoặc ≥ 8 lần sau ≥ 90 ngày. Số "cần thêm" theo nhịp sạc của chính xe.
-- Sửa lỗi cũ: bài kiểm tra từ đúng 0% không được nhận (`startPct or 100`).
+**Phân tích trên dữ liệu của chủ app:**
+- Trọng số cũ (1 / 0,35 / 0,1) cho lần kém tin nặng gấp 30–100 lần mức dữ liệu cho phép. Sai số cũ ±2,2 / ±6 chủ yếu là sàn tự đặt (3% mỗi lần, 1,5% đọc số).
+- Phần lớn sai số là hệ thống: hệ số ổ cắm → pin, danh định ("2,4 kWh" làm tròn), công tơ ±1%.
+- **Đồng hồ trôi xuống giữa hai lần sạc đầy:**
+  - `driftLog` ghi 14,19% sau 5 phiên (2,77 lần sạc đầy).
+  - Lấy 26,43 Wh/1% thì mọi lần dừng giữa chừng khớp: hai lần tin cao lệch +0,6 / −1,1 điểm.
+  - Hai lần sạc tới đầy (1/11, 17/11) bắt đầu khi pin thật cao hơn đồng hồ 13,6 / 14,0 điểm.
+  - Giả thuyết 1/11 là 0→100% thật (22,84 Wh/1%) bắt mọi lần dừng giữa chừng lệch −9 tới −21 điểm, kể cả lần tin cao, nên bị loại.
+  - Kết luận: lần dừng giữa chừng triệt tiêu độ trôi, lần tới đầy thì không. Xe ngắt ở "0%" là theo đồng hồ, không phải lúc pin cạn thật.
+- **Mốc sai:** bản QA 164 đang chạy đã cố định mốc ngày 17/11 ở 23,70 Wh/1% (88,9%), vì lần 17/11 (đồng hồ trôi 14 điểm) được tính như bài kiểm tra ×2.
+  - Bản đang chạy hiện báo: 91,0% ±5,5; so với mốc 102,4% ±9,0; bài kiểm tra 80,1%.
+  - Phần 1 nếu deploy sẽ báo "so với mốc 111,5%": lần 12/9 rơi khỏi `samples` (giữ 12) trước khi có `ledger` (từ 8/11), nên không tính lại được tháng 9.
+- **Nhãn bị ghi đè:** lần 1/11 dừng vì `battery_full`, nhưng 100% chủ app xác nhận ghi đè nhãn `taper_full`, thành `censored`.
+- **Đường công suất không đọc được điện áp:** cột công suất là bản Cloud cache (đứng 444,4 W suốt 2 giờ), công suất tính từ bộ đếm dao động ±25 W mỗi 10 phút. Điện lúc chờ ≤ 0,07%; công suất ổn định 431–453 W.
+- **TSKT chính thức của VinFast** (Evo Grand 07/2025, cùng pin 2,4 kWh): LFP 2,4 kWh, 18 kg, bộ sạc 400 W, 0–100% khoảng 6 giờ 30 phút; IP67 là chuẩn của động cơ.
+  - Không công bố V/Ah/số cell.
+  - 48 V / 50 Ah / "Sạc tối đa 600 W" trong danh mục không có nguồn; 60 V / 40 Ah / 19S trên mạng cũng không.
+- **Giới hạn hệ số:** bộ sạc 400 W, ổ cắm đo 444 W, nên hiệu suất ≤ 0,90 và hệ số ≤ 0,90 × 0,97 (điện áp LFP) × 0,999 = 0,873.
+
+**Cách tính (`web/shelly/charge_model.py`, `battery_health`):**
+- **Trọng số:** mỗi lần sạc nặng theo 1/σ²; σ theo độ tin, mỗi xe tự học (`health_sigmas`, `HEALTH_DRIFT_POINTS` là giá trị khởi đầu). Sai số đo = 1/√Σ(1/σ²) × Birge. Bỏ hệ số ×2 bài kiểm tra và độ mới.
+- **Lần tới đầy (`taper_full`):** chỉ tính khi tin cao, khác thì `reason: "drift"`.
+  - σ = k × (100 − % đầu)/100, với k là độ trôi mỗi lần xả đầy lấy từ `driftLog` của xe (mặc định `HEALTH_FULL_DRIFT_PRIOR` 5,0).
+  - Lúc xe ngắt (`cutoff`) là một số đọc như mọi số đọc.
+  - Bài kiểm tra chỉ nhận khi tin cao.
+- **Hệ số, theo thứ tự ưu tiên:**
+  1. `chargerCalibration` đo được;
+  2. giới hạn từ bộ sạc (`charger_rated_w` ÷ `learned.power_w` × 0,97 × 0,999, chỉ khi tỉ số 0,75–1): khoảng 0,81–giới hạn, lấy giữa, `systematic.factorSource = "rated"`;
+  3. 0,90 trong 0,81–0,90.
+- **Hiển thị sai số:** `systematic` và `totalLowPct` / `totalHighPct` tách riêng hệ số, danh định, công tơ; `totalPct` giữ cho app cũ. `gaugeDrift` báo độ trôi đo được.
+- **Điện lúc chờ:** `tailWh` (dưới 15 W) được trừ ra.
+- **Giai đoạn:** đổi bộ sạc hoặc thêm pin mở giai đoạn mới, mỗi giai đoạn có mốc riêng.
+- **Sổ theo tháng v2:**
+  - Mốc lập khi sai số ≤ 1,5% sau ≥ 28 ngày, hoặc ≥ 8 lần sau ≥ 90 ngày.
+  - Mốc QA 164 được tính lại một lần từ chính các tháng của nó.
+  - Thiếu tháng thì lập lại một lần theo luật thường; mốc cũ lưu trong `healthLog.replaced`.
+- **Sửa lỗi cũ:** bài kiểm tra từ đúng 0% trước đây không được nhận.
 
 **Ghi đủ dữ liệu:**
-- Phiên sạc có `start_soc_source` và `start_soc_age_min` (từ số đọc cuối của xe, `start_reading_provenance`).
-- Mẫu sạc có thêm `startSource`, `startAgeMin`, `endAfterMin`, `tailWh`, `plateauW`.
-- Sheet nhập % có công tắc "Xe vừa tự ngắt vì hết pin" khi % ≤ 5 (`cutoff`, vehicle `batteryCutoff`). Lần sạc từ đó tới khi bộ sạc báo đầy là "đo trọn", không qua số đọc nào.
-- Xe ngắt khi còn X% > 0 thì dung lượng nhân (100 − X)/100.
-- Hệ số đo được (`chargerCalibration` trên xe) và danh định theo nhãn (`nominalCapacitySource: "label"`) thay phần đoán khi có.
+- Phiên sạc có `start_soc_source` / `start_soc_age_min`.
+- Mẫu sạc có `startSource`, `startAgeMin`, `endAfterMin`, `tailWh`, `plateauW`.
+- Sheet nhập % có công tắc "Xe vừa tự ngắt vì hết pin" khi % ≤ 5 (`cutoff`).
+- Nhập ≥ 99% sau `battery_full` vẫn giữ `taper_full` (`queue_charge_label`).
+- `driftLog` chỉ một dòng cho mỗi lần sạc.
 
-**Kết quả trên sổ thật (`qa162_health_replay.py`, `qa166_capacity_study.py`):**
-- Số tuyệt đối 98,4% ±0,6 đo được (cách QA 162–164: 98,8% ±2,2). Tính cả hệ số 0,81–0,90 (chưa đo), danh định ±2% và công tơ ±1% thì khoảng 86,3–100,7%.
-- Mốc lập ở 12/9–23/10 (5 lần sạc), số so với mốc 99,5% ±1,1.
-- Sau khi deploy, màn Sức khỏe pin tính lại ngay khi mở (`battery_health` dựng lại sổ từ các lần sạc). Mốc được lưu ở lần sạc kế tiếp (`queue_sample`).
-- Loại-một-lần trên các lần tin cao: 0,66% (cũ 1,05%). Lần tin vừa và thấp ngang nhau.
-- Giả lập 300 xe biết trước dung lượng: không lệch (< 0,3%), ±1σ phủ đúng 60–76%, sai số bằng khoảng nửa cách gộp thường.
+**Thông số xe:**
+- **Script** `web/scripts/qa166_feliz_specs.py` + `tools/update_feliz_specs.ps1` (mặc định chạy thử, `-Apply` mới ghi). Chỉ đổi số cũ không có nguồn. **Chưa chạy production.**
+  - `VehicleCatalog/feliz_2025` (+ revision): `charging.maxDcPowerW` 400, `charging.chargeTimeMinutes` 390, `appDefaults.maxSafeChargePowerW` 600 → 450; bỏ `battery.voltageV` / `capacityAh`.
+  - `VinFastModelSpecs/feliz_2025` đổi theo.
+  - Xe Feliz 2025 (theo mã) và xe chủ app (theo tên + 2 400 Wh): `chargerRatedW` 400.
+- **Máy chủ:** đọc công suất bộ sạc từ xe, hoặc từ danh mục qua `repositories.catalog_charging` (cache 10 phút).
+- **Danh mục đóng gói** (app + web) đổi cùng số.
+- **App** (`catalogSpecRows`, garage):
+  - V/Ah ghi "Chưa công bố";
+  - thêm "Bộ sạc theo xe 400 W" và "Sạc đầy (0–100%) khoảng 6 giờ 30 phút";
+  - bỏ dòng "Sạc tối đa (W)" (số nội bộ cho ước tính).
+
+**Kết quả trên sổ 18/11** (đường của máy chủ, `qa162_health_replay.py --rated 400`):
+- **Tuyệt đối:** 92,8% ±1,2. Khoảng 86,9–98,7% gồm hệ số 0,81–0,873, danh định và công tơ. Với hệ số 0,90 là 99,3% ±1,3.
+- **So với mốc:** 100,0% ±1,8 (mốc 17/10–14/11, 10 lần sạc). Mốc cũ 23,70 Wh/1% nằm trong `replaced`.
+- **Lần không tính:** 17/11 (`drift`), 1/11 (`censored`, ghi trước bản sửa nhãn).
+- **Dự đoán từng lần từ các lần còn lại** (lần tin cao): QA 166 2,8%, QA 162 10,7%.
+- **Giả lập:**
+  - không lệch (< 0,3%), ±1σ phủ 60–76%;
+  - khi đồng hồ trôi giữa hai lần sạc đầy: cách mới không lệch, gộp thường lệch thấp hơn 1%.
 
 **Công cụ:**
-- `web/scripts/qa166_capacity_study.py`: σ theo nhóm, lệch theo dải, điện chờ, các lần 0→100%, loại-một-lần.
-- `tools/read_charge_sessions.ps1` + `web/scripts/qa166_read_sessions.py`: chỉ đọc, chủ app chạy; kết quả ở `charge-sessions.local.json`, không commit.
-- `qa162_health_replay.py` in thêm σ từng lần và khoảng hệ thống.
+- `qa166_capacity_study.py` (mục 6: đồng hồ trôi).
+- `qa162_health_replay.py` (phần "Máy chủ sẽ tính", `--rated`).
+- `tools/read_charge_ledger.ps1`, `tools/read_charge_sessions.ps1` (chỉ đọc; `charge-sessions.local.json` không commit).
 
-**App 2.2.4+247:**
-- Chế độ develop: bảng chi tiết có sai số đo, khoảng gồm hệ số, hệ số ổ cắm → pin (đã đo hay chưa), danh định (danh mục hay nhãn), công tơ, sai số đồng hồ từng mức, giai đoạn mới. Số trong bảng theo QA 129 (thập phân dấu chấm, nhóm nghìn).
-- Từng lần sạc ghi "đo trọn", "Lần đo chuẩn", "trước khi đổi bộ sạc".
-- Bài kiểm tra 4 bước: sạc đầy, đi xuống ≤ 30% không sạc xen, quét ngay trước khi cắm, sạc tới đầy.
-- Người dùng vẫn chỉ thấy số và một câu.
+**App 2.2.4+247, chế độ develop:**
+- bảng sai số (đo, hệ số "0.84 · từ bộ sạc 400 W (0.81–0.87)", danh định, công tơ, sai số đồng hồ, "Đồng hồ trôi khi sạc đầy 14.2% sau 5 lần sạc (17/11)", giai đoạn);
+- ghi chú `drift`; bỏ chữ "đo trọn" / "mốc thật";
+- bài kiểm tra 4 bước.
 
-**Kiểm thử:** backend toàn bộ 1027 đạt, 15 bỏ qua; `flutter analyze` các file đã đổi sạch; 11 file test Sức khỏe pin và sheet nhập % 161 đạt, 18 bỏ qua; toàn bộ Flutter 1594 đạt, 216 bỏ qua, 2 lỗi có sẵn ở phần người khác đang sửa dở (`vehicle_spec_detail_screen.dart` dùng emerald, ảnh Feliz ở `vehicle_showroom`), không thuộc QA 166. Test mới `web/tests/test_qa166_capacity.py`, `app/test/widget/qa166_health_test.dart`. Các test QA 135/146/152/162/164 cập nhật theo cách mới (khóa số 99,0% / 2 375 Wh thành 98,6% / 2 367 Wh).
+Người dùng vẫn chỉ thấy số và một câu.
+
+**Kiểm thử:** backend toàn bộ 1039 đạt, 15 bỏ qua (gate Linux 1028 đạt, 21 bỏ qua); `flutter analyze` các file đã đổi sạch (còn 1 info ở phần chọn màu đang sửa dở, không thuộc QA 166); test QA 166 của app 12 đạt; toàn bộ Flutter 1599 đạt, 216 bỏ qua, 2 lỗi ở phần người khác đang sửa dở (`vehicle_spec_detail_screen.dart` dùng emerald, ảnh Feliz ở `vehicle_showroom`). Trên worktree sạch của commit, hai test đó đạt.
+- Test mới: `web/tests/test_qa166_capacity.py`, `web/tests/test_qa166_feliz_specs.py`, `app/test/widget/qa166_health_test.dart`, `app/test/unit/qa166_catalog_specs_test.dart`.
+- Test QA 135/146/152/162/164 cập nhật theo cách mới.
+
+**Deploy (18/11/2026, trong kế hoạch chủ app duyệt):**
+- Gate từ worktree sạch commit `46a6719`: image API đúng 94 file; test Linux 1028 đạt, 21 bỏ qua; khởi động cô lập 33 giây; smoke worker đạt. Bằng chứng `docs/qa_evidence/app-review-2026-10-05/qa166-*-20261118`.
+- API `vinfast-api@sha256:fd22facc…` → revision `vinfast-api--api106-1118095612` (verified, không rollback; `/api/health`, `/api/ready` 200, Firebase sẵn sàng).
+- Worker `vinfast-worker@sha256:bac21109…` → `vinfast-worker-control--0000033` (sổ theo tháng v2 ghi ở cả worker).
+- Phần sửa dở chưa commit của luồng khác (chọn màu xe, ảnh xe, dashboard, billing…) không lên production.
+
+**APK 2.2.4+247:** profile, build từ worktree sạch `46a6719` (Gradle 704 giây), 174 827 085 byte, SHA-256 `23db36201eb01a4a3ea0b44d062d02fec2bba9fffe18b0f313080e0733bca48b`, aapt đọc lại `versionName=2.2.4`, `versionCode=247`. **Chưa cài, chưa xem trên máy:** lúc build xong `adb` không thấy thiết bị nào.
 
 **Cần chủ app:**
-- Ảnh nhãn pin và nhãn bộ sạc vào `battery-labels.local/`. Có nhãn mới viết script đặt danh định và `nominalCapacitySource`; nếu nhãn đúng 2 400 Wh thì chỉ đánh dấu nguồn.
-- Chạy `tools/read_charge_ledger.ps1` và `tools/read_charge_sessions.ps1`.
+- Chạy `tools/update_feliz_specs.ps1` (chạy thử, rồi `-Apply`).
 - Bật "Xe vừa tự ngắt" mỗi lần xe ngắt.
-- Deploy API và worker (sổ theo tháng v2 ghi ở cả worker).
+- Sạc đầy một lần sau vài lần sạc dở, để đồng hồ đúng lại.
 
 ---
 
