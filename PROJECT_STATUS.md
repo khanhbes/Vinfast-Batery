@@ -64,10 +64,13 @@
 - `driftLog` chỉ một dòng cho mỗi lần sạc.
 
 **Thông số xe:**
-- **Script** `web/scripts/qa166_feliz_specs.py` + `tools/update_feliz_specs.ps1` (mặc định chạy thử, `-Apply` mới ghi). Chỉ đổi số cũ không có nguồn. **Chưa chạy production.**
+- **Script** `web/scripts/qa166_feliz_specs.py` + `tools/update_feliz_specs.ps1` (mặc định chạy thử, `-Apply` mới ghi). Chỉ đổi số cũ không có nguồn.
   - `VehicleCatalog/feliz_2025` (+ revision): `charging.maxDcPowerW` 400, `charging.chargeTimeMinutes` 390, `appDefaults.maxSafeChargePowerW` 600 → 450; bỏ `battery.voltageV` / `capacityAh`.
   - `VinFastModelSpecs/feliz_2025` đổi theo.
   - Xe Feliz 2025 (theo mã) và xe chủ app (theo tên + 2 400 Wh): `chargerRatedW` 400.
+  - **Chủ app đã chạy:** chạy thử 18/11, rồi `-Apply` 19/11 (00:27). Một batch, 5 lần ghi: danh mục + revision, bản cũ, 2 xe Feliz 2025 theo mã danh mục (có xe chủ app).
+  - 450 W chỉ là công suất dự phòng cho ước tính thời gian sạc (`ChargeEstimator.pickPower`, sau số đo trực tiếp và lịch sử). Không phải ngưỡng an toàn: máy chủ và worker không đọc số này.
+  - App 2.2.3 trở về trước hiện V/Ah là 0 tới khi cài 2.2.4+247 ("Chưa công bố"). Không phép tính nào dùng V/Ah của pin.
 - **Máy chủ:** đọc công suất bộ sạc từ xe, hoặc từ danh mục qua `repositories.catalog_charging` (cache 10 phút).
 - **Danh mục đóng gói** (app + web) đổi cùng số.
 - **App** (`catalogSpecRows`, garage):
@@ -109,7 +112,7 @@ Người dùng vẫn chỉ thấy số và một câu.
 **APK 2.2.4+247:** profile, build từ worktree sạch `46a6719` (Gradle 704 giây), 174 827 085 byte, SHA-256 `23db36201eb01a4a3ea0b44d062d02fec2bba9fffe18b0f313080e0733bca48b`, aapt đọc lại `versionName=2.2.4`, `versionCode=247`. **Chưa cài, chưa xem trên máy:** lúc build xong `adb` không thấy thiết bị nào.
 
 **Cần chủ app:**
-- Chạy `tools/update_feliz_specs.ps1` (chạy thử, rồi `-Apply`).
+- Cài APK 2.2.4+247.
 - Bật "Xe vừa tự ngắt" mỗi lần xe ngắt.
 - Sạc đầy một lần sau vài lần sạc dở, để đồng hồ đúng lại.
 
