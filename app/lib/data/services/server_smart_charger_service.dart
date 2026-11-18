@@ -975,6 +975,7 @@ class ServerSmartChargerService {
     required String source,
     String? sessionId,
     int? batteryTempC,
+    bool cutoff = false,
   }) async => BatteryReadingResult.fromJson(
     await _request(
       'POST',
@@ -985,6 +986,8 @@ class ServerSmartChargerService {
         'source': source,
         'sessionId': ?sessionId,
         'batteryTempC': ?batteryTempC,
+        // QA 166: the scooter just shut off (the server keeps it at ≤ 5 %).
+        if (cutoff) 'cutoff': true,
       },
     ),
   );

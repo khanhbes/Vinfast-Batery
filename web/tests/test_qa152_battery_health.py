@@ -25,7 +25,9 @@ def test_spread_tells_tight_readings_from_scattered_ones():
     loose = charge_model.battery_health(
         [_charge(i, wh, -i) for i, wh in enumerate([22.7, 26.6, 26.7, 24.0, 26.7, 26.5, 23.8, 26.6])], 2400)
     # QA 162: never surer than the whole-% reading and a few charges allow.
-    assert tight["spread"]["perChargePct"] < 1 and tight["spread"]["uncertaintyPct"] < 2
+    # QA 166: eight charges never after a full one start from the owner's
+    # measured gauge error (6.8 points), counted as four charges.
+    assert tight["spread"]["perChargePct"] < 1 and tight["spread"]["uncertaintyPct"] < 3.5
     assert loose["spread"]["perChargePct"] > tight["spread"]["perChargePct"]
     assert loose["spread"]["uncertaintyPct"] > tight["spread"]["uncertaintyPct"]
     assert loose["spread"]["lowPct"] < loose["estimate"]["sohPct"] < loose["spread"]["highPct"]

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/luxe_theme.dart';
 import '../../../core/widgets/luxe_kit.dart';
+import '../../../core/widgets/luxe_settings.dart';
 import '../../../core/widgets/luxe_submit_button.dart';
 import '../../../data/services/dashboard_reader.dart';
 import '../dashboard_scan_screen.dart';
@@ -11,11 +12,13 @@ import '../../../core/utils/number_text.dart';
 
 /// What the owner confirmed: battery % and/or ODO, and where it came from.
 /// QA 142: [tempC] is the battery temperature the scan read (°C).
+/// QA 166: [cutoff] = the scooter just shut off (a physical 0 %).
 typedef BatteryReadingInput = ({
   double? soc,
   double? odoKm,
   String source,
   int? tempC,
+  bool cutoff,
 });
 
 /// Reads the dashboard (live scan or photo); injectable for tests.
@@ -82,6 +85,16 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
   String? _readError;
   String? _socError;
   String? _odoError;
+
+  /// QA 166: the scooter shut off when its gauge reached this % (asked only
+  /// at a low %): a charge from here to full measures the whole battery.
+  bool _cutoff = false;
+  static const cutoffMaxPct = 5.0;
+
+  bool get _low {
+    final value = _number(_soc.text);
+    return value != null && value >= 0 && value <= cutoffMaxPct;
+  }
 
   @override
   void initState() {
@@ -193,6 +206,7 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
       odoKm: odo,
       source: fromPhoto ? 'photo' : 'manual',
       tempC: read?.tempC,
+      cutoff: _cutoff && soc != null && soc <= cutoffMaxPct,
     );
     final save = widget.onSave;
     if (save == null) {
@@ -336,7 +350,8 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
             ],
             textInputAction: TextInputAction.next,
             onChanged: (_) {
-              if (_socError != null) setState(() => _socError = null);
+              // The shut-off question shows only at a low %.
+              setState(() => _socError = null);
             },
             decoration: InputDecoration(
               labelText: widget.requireSoc
@@ -347,6 +362,30 @@ class _BatteryReadingSheetState extends State<BatteryReadingSheet> {
               errorMaxLines: 3,
             ),
           ),
+          if (_low) ...[
+            const SizedBox(height: 8),
+            LuxeSettingsGroup(
+              children: [
+                LuxeSettingsRow(
+                  key: const ValueKey('reading-cutoff'),
+                  icon: Icons.power_settings_new_rounded,
+                  title: 'Xe vừa tự ngắt vì hết pin',
+                  // QA 166 (2): the shut-off follows the gauge, which drifts
+                  // between full charges (14 points on the owner's).
+                  subtitle: DevViewScope.on(context)
+                      ? 'Ghi lại xe ngắt ở mấy %. Đồng hồ trôi giữa hai lần sạc '
+                            'đầy, nên 0% lúc xe ngắt chưa chắc là pin đã cạn thật.'
+                      : null,
+                  onTap: () => setState(() => _cutoff = !_cutoff),
+                  trailing: LuxeSwitch(
+                    value: _cutoff,
+                    semanticLabel: 'Xe vừa tự ngắt vì hết pin',
+                    onChanged: (value) => setState(() => _cutoff = value),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(
             key: const ValueKey('reading-odo'),

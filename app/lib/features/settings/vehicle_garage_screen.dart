@@ -23,6 +23,13 @@ import '../premium/premium_gate.dart';
 import '../../core/theme/plan_style.dart';
 import '../../data/services/vehicle_model_link_service.dart';
 import '../../core/utils/number_text.dart';
+import '../../data/services/charge_estimator.dart' show formatChargeDuration;
+
+/// "2 400 Wh • 48 V", or "2 400 Wh" when the maker publishes no voltage (QA 166).
+String _batteryLine(VinFastModelSpec spec) => [
+  '${groupThousands(spec.nominalCapacityWh)} Wh',
+  if (spec.nominalVoltageV > 0) '${groupThousands(spec.nominalVoltageV)} V',
+].join(' • ');
 
 /// Vehicle Garage Screen — LUXE (Task 119)
 /// - List user vehicles (active / archived)
@@ -990,8 +997,7 @@ class _SpecCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 3),
                         Text(
-                          spec.tagline ??
-                              'Pin: ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
+                          spec.tagline ?? 'Pin: ${_batteryLine(spec)}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: LuxeText.caption.copyWith(fontSize: 12.5),
@@ -1006,9 +1012,7 @@ class _SpecCard extends StatelessWidget {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  LuxeTag(
-                    'Pin ${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalVoltageV.toInt()}V',
-                  ),
+                  LuxeTag('Pin ${_batteryLine(spec)}'),
                   LuxeTag(
                     'Motor ${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',
                   ),
@@ -1256,12 +1260,29 @@ class _SpecPreviewDialog extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // QA 166: only what the maker publishes (no voltage or Ah for
+              // the Feliz 2025); the wall power estimates use is not shown.
               _row(
                 'Pin',
-                '${spec.nominalCapacityWh.toInt()} Wh • ${spec.nominalCapacityAh.toInt()} Ah',
+                [
+                  '${groupThousands(spec.nominalCapacityWh)} Wh',
+                  if (spec.nominalCapacityAh > 0)
+                    '${groupThousands(spec.nominalCapacityAh)} Ah',
+                ].join(' • '),
               ),
-              _row('Điện áp', '${spec.nominalVoltageV.toInt()} V'),
-              _row('Sạc tối đa', '${spec.maxChargePowerW.toInt()} W'),
+              _row(
+                'Điện áp',
+                spec.nominalVoltageV > 0
+                    ? '${groupThousands(spec.nominalVoltageV)} V'
+                    : VinFastModelSpec.unpublished,
+              ),
+              if (spec.maxDcChargePowerW case final charger? when charger > 0)
+                _row('Bộ sạc theo xe', '${groupThousands(charger)} W'),
+              if (spec.chargeTimeMinutes case final minutes? when minutes > 0)
+                _row(
+                  'Sạc đầy (0–100%)',
+                  'khoảng ${formatChargeDuration(Duration(minutes: minutes.round()))}',
+                ),
               _row(
                 'Motor (định mức)',
                 '${(spec.ratedMotorPowerW / 1000).toStringAsFixed(1)} kW',

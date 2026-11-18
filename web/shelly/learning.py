@@ -45,6 +45,11 @@ trip_model = _LazyTripModel()
 _TRIP_ID_TIME = re.compile(r"(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})(\d{2})")
 
 READING_SOURCES = {"manual", "chat", "photo", "charge_end", "trip_start", "trip_end"}
+# QA 166 (owner, 18/11/2026): the scooter shuts off when its gauge reaches 0 %.
+# A reading saved as "the scooter just shut off" is a physical 0 %, so a charge
+# from it to the charger's full signal measures the capacity with no gauge
+# reading at either end. Only offered at a low %.
+CUTOFF_MAX_PCT = 5.0
 MAX_IMPORT_ROWS = 500
 # A reading pair this far apart is still one ride segment if no charge ran.
 MAX_SEGMENT_DAYS = 14
@@ -132,6 +137,13 @@ class VehicleLearningMixin:
             profile = self.personal_profile(uid, session.vehicle_id)
             profile.consent_enabled = True
             profile.consent_source = "default"
+        typed = label_source == "user"
+        # QA 166 (2): a full % typed after the charger's own full signal
+        # confirms it; it must not turn the measured end into a censored one
+        # (1/11/2026: 0 -> 100 % stopped by battery_full, then left out).
+        if (typed and float(session.actual_end_soc or 0) >= charge_model.GAUGE_RESET_END_PCT
+                and (session.full_detected_at is not None or session.stop_reason == "battery_full")):
+            label_source = "taper_full"
         end_pct = 100.0 if label_source == "taper_full" else float(session.actual_end_soc or 0)
         base = self._charge_base(vehicle, session)
         learned = charge_model.LearnedProfile.from_dict(profile.learned)
@@ -165,6 +177,13 @@ class VehicleLearningMixin:
             "shadowWhPerPct": wh_in_use if carried is not None else None,
             "batteryTempC": temperature,
             "trust": trust_level,
+            # QA 166: what battery health needs to weigh this charge, measured
+            # rather than assumed.
+            "startSource": session.start_soc_source,
+            "startAgeMin": session.start_soc_age_min,
+            "endAfterMin": charge_end_read_after(session, now) if typed else None,
+            "tailWh": charge_model.idle_energy_wh(session.telemetry_samples, session.energy_used_wh),
+            "plateauW": charge_model.plateau_power_w(session.telemetry_samples),
         }, base_wh_per_pct=base, now=now)
         if decision != "queued":
             return decision
@@ -300,6 +319,10 @@ class VehicleLearningMixin:
         }
         if temp is not None:
             reading["batteryTempC"] = round(temp)
+        # QA 166: "the scooter just shut off" marks a physical 0 % (low % only).
+        cutoff = body.get("cutoff") is True and soc is not None and soc <= CUTOFF_MAX_PCT
+        if cutoff:
+            reading["cutoff"] = True
         saved = self.repository.add_battery_reading(uid, vehicle_id, reading)
         fields = {"lastReadingAt": _iso(at)}
         if soc is not None:
@@ -307,7 +330,8 @@ class VehicleLearningMixin:
             # ended earlier but was finalized later overwrote this reading.
             fields.update({"currentBattery": int(round(soc)), "lastBatteryPercent": int(round(soc)),
                            "hasBatteryData": True, "batteryDataUpdatedAt": at,
-                           "batteryDataSource": f"reading_{source}"})
+                           "batteryDataSource": f"reading_{source}",
+                           "batteryCutoff": cutoff})
         if odo is not None:
             fields.update({"currentOdo": int(round(odo)), "hasOdoData": True})
         if temp is not None:
@@ -439,9 +463,22 @@ class VehicleLearningMixin:
         profile = self.repository.get_personal_profile(uid, vehicle_id)
         learned = charge_model.LearnedProfile.from_dict(profile.learned if profile else None)
         nominal = _float(vehicle.get("nominalCapacityWh"), 1, 1e6)
-        result = charge_model.battery_health([*learned.samples, *learned.pending], nominal,
-                                             history=learned.ledger, now=self.clock(),
-                                             log=learned.health_log)
+        # QA 166: measured inputs when there are some. The gauge % at which the
+        # scooter shut off (0 on the owner's), a charger measured with DC
+        # readings, a rating read off the battery's own label.
+        calibration = vehicle.get("chargerCalibration")
+        # QA 166 (2): the charger's rated output against the wall power this
+        # vehicle charges at caps the wall-to-battery factor; the gauge's
+        # drift between full charges sets the error of a charge to full.
+        result = charge_model.battery_health(
+            [*learned.samples, *learned.pending], nominal,
+            history=learned.ledger, now=self.clock(), log=learned.health_log,
+            cutoff_pct=self._cutoff_pct(uid, vehicle_id),
+            factor=calibration if isinstance(calibration, dict) else None,
+            nominal_source="label" if vehicle.get("nominalCapacitySource") == "label" else None,
+            charger_rated_w=self._charger_rated_w(vehicle),
+            wall_power_w=learned.power_w,
+            drift_log=learned.drift_log)
         result.update({
             "vehicleId": vehicle_id,
             "vehicleSohPct": _float(vehicle.get("stateOfHealth"), 1, 120),
@@ -458,6 +495,36 @@ class VehicleLearningMixin:
             if isinstance(result.get("tracking"), dict):
                 result["tracking"] = {**result["tracking"], "monthly": []}
         return result
+
+    def _charger_rated_w(self, vehicle: dict) -> float | None:
+        """QA 166 (2): the rated output of the charger this vehicle came with:
+        set on the vehicle (``chargerRatedW``), else its catalog's
+        ``charging.maxDcPowerW``; ``None`` when neither says."""
+        own = _float(vehicle.get("chargerRatedW"), 50, 5000)
+        if own is not None:
+            return own
+        lookup = getattr(self.repository, "catalog_charging", None)
+        if lookup is None:
+            return None
+        try:
+            charging = lookup(vehicle) or {}
+        except Exception:
+            return None
+        return _float(charging.get("maxDcPowerW"), 50, 5000)
+
+    def _cutoff_pct(self, uid: str, vehicle_id: str) -> float | None:
+        """QA 166: the median % of the latest readings saved as "the scooter
+        just shut off"; ``None`` when there is none (or they cannot be read)."""
+        try:
+            readings = self.repository.battery_readings(uid, vehicle_id, limit=30)
+        except Exception:
+            return None
+        values = [float(item["soc"]) for item in readings
+                  if item.get("cutoff") is True and item.get("soc") is not None][:3]
+        if not values:
+            return None
+        values.sort()
+        return values[len(values) // 2]
 
     def charge_assessment(self, uid: str, vehicle_id: str) -> dict:
         """Đánh giá tổng quát (QA 140): charging habits of the last 60 days,
@@ -555,6 +622,34 @@ def _gauge_shadow(learned, session, end_pct: float, at: str,
                    else learned.gauge_offset_pct)
     return carried, charge_model.gauge_offset_after(
         session.start_soc, session.energy_used_wh, wh_per_pct, end_pct)
+
+
+def start_reading_provenance(vehicle: dict | None, start_soc: float,
+                             now: datetime) -> tuple[str | None, float | None]:
+    """QA 166: where a charge's start % came from and how long before the
+    charge it was read, from the vehicle's last saved reading. ``(None, None)``
+    when the % sent is not that reading (typed only on the charge screen).
+    ``cutoff`` = the scooter had just shut off (a physical 0 %)."""
+    vehicle = vehicle or {}
+    saved = _float(vehicle.get("currentBattery"), 0, 100)
+    if saved is None or abs(saved - float(start_soc)) > 0.5:
+        return None, None
+    source = str(vehicle.get("batteryDataSource") or "") or None
+    read_at = _parse(vehicle.get("batteryDataUpdatedAt"))
+    age = None
+    if read_at is not None:
+        age = round(max(0.0, (now - read_at).total_seconds() / 60), 1)
+    if vehicle.get("batteryCutoff") is True and float(start_soc) <= CUTOFF_MAX_PCT:
+        source = "cutoff"
+    return source, age
+
+
+def charge_end_read_after(session, now: datetime) -> float | None:
+    """QA 166: minutes between the end of a charge and the % typed for it."""
+    ended = _parse(getattr(session, "stopped_at", None))
+    if ended is None:
+        return None
+    return round(max(0.0, (now - ended).total_seconds() / 60), 1)
 
 
 def _recent_battery_temp(vehicle: dict, session) -> float | None:

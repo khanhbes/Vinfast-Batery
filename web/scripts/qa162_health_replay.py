@@ -5,13 +5,19 @@ weighted by % gained, gauge trust and age, outliers out).
 Read-only: it reads the file `tools/read_charge_ledger.ps1` wrote
 (`charge-ledger.local.json`, never committed) and prints numbers.
 
-    python web/scripts/qa162_health_replay.py [charge-ledger.local.json]
+    python web/scripts/qa162_health_replay.py [charge-ledger.local.json] [--rated 400]
+
+QA 166 (2): it ends with exactly what the server computes from that file (the
+stored monthly log, samples + pending, the ledger, the learned wall power and
+drift log; ``--rated`` = the charger's rated output), i.e. what the app will
+show. Replaying the charges alone hid a "111.5 %" on 18/11/2026.
 """
 from __future__ import annotations
 
 import json
 import statistics
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -71,11 +77,13 @@ def main() -> None:
             new_steps.append(abs(new - last_new))
         last_old, last_new = old if old is not None else last_old, new if new is not None else last_new
 
-    print("\nTừng lần sạc (cách mới):")
+    print("\nTừng lần sạc (cách mới; ± là sai số của riêng lần đó, QA 166):")
     for row in charge_model.battery_health(charges, nominal)["charges"]:
+        sigma = f"±{row['sigmaPct']}" if row.get("sigmaPct") is not None else ""
+        kind = f" [{row['kind']}]" if row.get("kind") else ""
         print(f"  {str(row['at'])[:10]}  {row['startPct']:.0f}→{row['endPct']:.0f}%  "
-              f"{row['sohPct'] if row['sohPct'] is not None else '—':>6}  "
-              f"tin {row['trust']:<6} {'dùng' if row['used'] else 'bỏ: ' + str(row['reason'])}")
+              f"{row['sohPct'] if row['sohPct'] is not None else '—':>6} {sigma:>6}  "
+              f"tin {row['trust']:<6} {'dùng' if row['used'] else 'bỏ: ' + str(row['reason'])}{kind}")
 
     half = len(charges) // 2
     print("\nTóm tắt:")
@@ -104,8 +112,56 @@ def main() -> None:
     else:
         print(f"  Đang lập mốc: cần thêm {tracking['needCharges']} lần sạc, {tracking['needDays']} ngày")
     if spread:
-        print(f"  Dung lượng tuyệt đối: ±{spread['uncertaintyPct']} đo được, "
-              f"±{spread.get('totalPct')} khi tính cả hiệu suất bộ sạc 87–93%")
+        # QA 166: what more charges cannot reduce, apart.
+        systematic = full["systematic"] or {}
+        print(f"  Dung lượng tuyệt đối: ±{spread['uncertaintyPct']} đo được; "
+              f"{spread.get('totalLowPct')}–{spread.get('totalHighPct')}% khi tính cả hệ số "
+              f"{systematic.get('factorLow')}–{systematic.get('factorHigh')} "
+              f"({'đã đo' if systematic.get('factorMeasured') else 'chưa đo'}), danh định "
+              f"±{systematic.get('nominalPct')}%, công tơ ±{systematic.get('meterPct')}%")
+        sigmas = full.get("sigmas") or {}
+        points = sigmas.get("points") or {}
+        counts = sigmas.get("charges") or {}
+        print("  Sai số đồng hồ của xe này (điểm %): "
+              + ", ".join(f"{key} {points[key]} ({counts.get(key, 0)} lần)" for key in points))
+    _server_view(path, nominal, _rated(sys.argv))
+
+
+def _rated(argv: list[str]) -> float | None:
+    if "--rated" in argv and argv.index("--rated") + 1 < len(argv):
+        return float(argv[argv.index("--rated") + 1])
+    return None
+
+
+def _server_view(path: Path, nominal: float, rated: float | None) -> None:
+    """QA 166 (2): what the server computes from the stored profile, i.e. what
+    the app shows: the stored monthly log (and its reference) included."""
+    learned = json.loads(path.read_text(encoding="utf-8")).get("learned") or {}
+    result = charge_model.battery_health(
+        [*(learned.get("samples") or []), *(learned.get("pending") or [])], nominal,
+        history=learned.get("ledger") or [], now=datetime.now(timezone.utc),
+        log=learned.get("healthLog"), charger_rated_w=rated,
+        wall_power_w=learned.get("powerW"), drift_log=learned.get("driftLog"))
+    estimate, spread = result["estimate"] or {}, result["spread"] or {}
+    systematic, tracking = result["systematic"] or {}, result["tracking"] or {}
+    print()
+    print("Máy chủ sẽ tính (sổ tháng đang lưu, QA 166 (2)):")
+    print(f"  Tuyệt đối {estimate.get('sohPct')}% ±{spread.get('uncertaintyPct')} "
+          f"({spread.get('totalLowPct')}–{spread.get('totalHighPct')}%), hệ số {systematic.get('factor')} "
+          f"({systematic.get('factorLow')}–{systematic.get('factorHigh')}, "
+          f"{systematic.get('factorSource') or 'chưa đo'})")
+    if tracking.get("status") == "ready":
+        print(f"  So với mốc {tracking.get('relativePct')}% ±{tracking.get('uncertaintyPct')} "
+              f"(mốc {str(tracking.get('since'))[:10]} → {str(tracking.get('until'))[:10]})")
+    else:
+        print(f"  Đang lập mốc: cần thêm {tracking.get('needCharges')} lần sạc, {tracking.get('needDays')} ngày")
+    if result.get("gaugeDrift"):
+        drift = result["gaugeDrift"]
+        print(f"  Đồng hồ trôi khi sạc đầy: {drift['lastPct']}% sau {drift.get('sessions')} lần sạc; "
+              f"{drift['perFullPct']} điểm mỗi lần xả đầy")
+    left = [f"{str(row.get('at'))[:10]} {row.get('reason')}" for row in result["charges"] if not row.get("used")]
+    if left:
+        print("  Không tính: " + ", ".join(left))
 
 
 if __name__ == "__main__":

@@ -13,6 +13,7 @@ import '../../core/theme/plan_style.dart';
 import '../home/widgets/luxe_vehicle_hero.dart' show LuxeScooterArt;
 import '../../core/utils/number_text.dart';
 import '../../core/constants/app_constants.dart' show maxOdoKm;
+import 'catalog_spec_rows.dart';
 
 /// Vehicle Spec Detail Screen — PLAN #5
 /// Shows detailed spec sheet and allows editing
@@ -505,23 +506,9 @@ class _VehicleSpecDetailScreenState extends State<VehicleSpecDetailScreen> {
     final spec = _spec;
     if (spec == null) return const SizedBox();
     // QA 143: grouped thousands, the published range and top speed, and no
-    // raw source id ("vinfast_official") on screen.
-    String n(num value) => groupThousands(value.round());
-    final rows = <(String, String)>[
-      ('Tên model', spec.modelName),
-      ('Dung lượng (Wh)', n(spec.nominalCapacityWh)),
-      ('Dung lượng (Ah)', n(spec.nominalCapacityAh)),
-      ('Điện áp (V)', n(spec.nominalVoltageV)),
-      if (spec.batteryChemistry case final chemistry?) ('Loại pin', chemistry),
-      if (spec.rangeKm case final range?)
-        ('Quãng đường công bố', '${n(range)} km'),
-      if (spec.topSpeedKmh case final speed?)
-        ('Tốc độ tối đa', '${n(speed)} km/h'),
-      ('Sạc tối đa (W)', n(spec.maxChargePowerW)),
-      ('Công suất định mức (W)', n(spec.ratedMotorPowerW)),
-      ('Công suất tối đa (W)', n(spec.peakMotorPowerW)),
-      ('Nguồn dữ liệu', 'Số liệu VinFast công bố'),
-    ];
+    // raw source id ("vinfast_official") on screen. QA 166: only what the
+    // maker publishes (catalog_spec_rows.dart).
+    final rows = catalogSpecRows(spec);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

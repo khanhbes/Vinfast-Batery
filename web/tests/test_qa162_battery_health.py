@@ -55,20 +55,18 @@ def test_a_gauge_that_falls_behind_and_catches_up_does_not_move_the_result():
     assert reasons[9] == "outlier" and reasons[8] == "outlier"
 
 
-def test_the_guided_test_is_merged_and_counts_more_while_recent():
+def test_the_guided_test_is_merged_by_its_own_error():
+    """QA 166 dropped the double weight and the recency; QA 166 (2): a test
+    counts only right after a full charge (later the gauge has drifted and it
+    reads low), then by its own error like any charge."""
     others = [_c(i, 20, 70, FULL, -3 + i * 0.1) for i in range(4)]
-    as_test = _health([*others, _c(9, 20, 100, FULL * 0.95, 0, label="taper_full")])
+    test = _c(9, 20, 100, FULL * 0.95, 0, label="taper_full", trust="high")
+    as_test = _health([*others, test])
     as_charge = _health([*others, _c(9, 20, 80, FULL * 0.95, 0)])
     assert as_test["test"] is not None
     assert as_test["estimate"]["sohPct"] < as_charge["estimate"]["sohPct"] < 100
-    # 100 days later (the others charged since): no more double weight.
-    later = NOW + timedelta(days=100)
-    recent = [_c(10 + i, 20, 70, FULL, 99 + i * 0.1) for i in range(4)]
-    old_test = charge_model.battery_health(
-        [_c(9, 20, 100, FULL * 0.95, 0, label="taper_full"), *recent], 2400, now=later)
-    fresh_test = charge_model.battery_health(
-        [*recent, _c(9, 20, 100, FULL * 0.95, 99.5, label="taper_full")], 2400, now=later)
-    assert old_test["estimate"]["sohPct"] > fresh_test["estimate"]["sohPct"]
+    drifted = _health([*others, {**test, "trust": "low"}])
+    assert drifted["test"] is None and drifted["charges"][-1]["reason"] == "drift"
 
 
 def test_the_error_says_how_sure_it_is():
@@ -78,8 +76,8 @@ def test_the_error_says_how_sure_it_is():
     many = _health([_c(i, 20, 80, FULL, -i) for i in range(8)])
     assert many["estimate"]["confidence"] == "high"
     assert many["spread"]["uncertaintyPct"] < one["spread"]["uncertaintyPct"]
-    # Never surer than the whole-% reading.
-    assert many["spread"]["uncertaintyPct"] >= charge_model.HEALTH_READING_FLOOR_PCT
+    # Never surer than the least error of one charge allows (QA 166).
+    assert many["spread"]["uncertaintyPct"] >= 100 * charge_model.HEALTH_CHARGE_FLOOR / 8 ** 0.5
     # Charges that disagree a lot (a third left out) widen it.
     torn = _health([*[_c(i, 20, 80, FULL, -i) for i in range(5)],
                     *[_c(10 + i, 20, 80, FULL * 0.86, -i - 0.5) for i in range(3)]])

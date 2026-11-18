@@ -39,11 +39,12 @@ def test_reference_waits_for_enough_charges_and_days():
     few = _charges(6)
     tracking = _health(few)["tracking"]
     assert tracking["status"] == "building"
-    assert tracking["needCharges"] == 2
+    # QA 166: until the reference is sure to 1.5 % (or 8 charges over 90 days).
+    assert tracking["needCharges"] >= 1 and tracking["needDays"] == 13
     quick = _charges(10, every_days=1)  # 10 charges in 9 days: not long enough
     assert _health(quick)["tracking"]["status"] == "building"
     assert _health(quick)["tracking"]["needDays"] > 0
-    ready = _charges(12)
+    ready = _charges(20)
     tracking = _health(ready)["tracking"]
     assert tracking["status"] == "ready"
     assert abs(tracking["relativePct"] - 100.0) < 0.2
@@ -103,7 +104,7 @@ def test_outliers_are_judged_against_nearby_charges():
 
 
 def test_months_without_charges_give_a_stale_figure_not_nothing():
-    charges = _charges(12)
+    charges = _charges(20)
     much_later = cm._parse_at(charges[-1]["at"]) + timedelta(days=200)
     result = _health(charges, now=much_later)
     assert result["estimate"]["stale"] is True
@@ -115,7 +116,11 @@ def test_absolute_error_includes_the_charger_efficiency():
     result = _health(_charges(20))
     spread = result["spread"]
     assert spread["totalPct"] > spread["uncertaintyPct"]
-    assert spread["totalPct"] >= result["estimate"]["sohPct"] * cm.HEALTH_EFFICIENCY_SPREAD
+    # QA 166: the assumed 0.90 may be as low as 0.81, never higher.
+    soh = result["estimate"]["sohPct"]
+    assert spread["totalLowPct"] <= soh * cm.HEALTH_FACTOR_LOW / cm.DEFAULT_EFFICIENCY
+    assert spread["totalHighPct"] >= soh
+    assert result["systematic"]["factorMeasured"] is False
 
 
 def test_a_stored_log_with_a_partial_oldest_month_is_kept():

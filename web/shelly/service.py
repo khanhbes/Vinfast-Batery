@@ -26,7 +26,7 @@ from . import charge_ai, charge_model
 from .charging_fusion import fuse_charging_eta
 from .personalization import evaluate_training, update_profile
 from .personal_model_registry import PersonalModelRegistry
-from .learning import VehicleLearningMixin
+from .learning import VehicleLearningMixin, start_reading_provenance
 from .night import NIGHT_STRATEGY, NightChargingMixin, night_violation
 
 
@@ -1143,6 +1143,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
         )
         if target_mode:
             session.average_power_w = preview.charge_power_w
+        # QA 166: where the start % came from and how old it was.
+        session.start_soc_source, session.start_soc_age_min = start_reading_provenance(
+            vehicle, session.start_soc, now)
         if not self.repository.claim_device_session(uid, session.device_id, session.session_id):
             raise SmartChargeError("activeSessionConflict", "Shelly đang được dùng bởi một phiên khác", 409)
         self.repository.save_session(uid, session)
@@ -2316,6 +2319,9 @@ class SmartChargeService(VehicleLearningMixin, NightChargingMixin):
             model_wh_per_pct=_timed_wh_per_pct(checks["learned"], vehicle),
             carried_offset_pct=_carried_offset(checks["learned"]),
         )
+        # QA 166: where the start % came from and how old it was.
+        session.start_soc_source, session.start_soc_age_min = start_reading_provenance(
+            vehicle, session.start_soc, now)
         # Device lock + new session row in one transaction (was two).
         if not self.repository.claim_device_and_create_session(uid, session):
             raise SmartChargeError("activeSessionConflict", "Shelly đang được dùng bởi một phiên khác", 409)

@@ -18,7 +18,9 @@ def test_estimate_is_the_recent_median_with_confidence():
     health = charge_model.battery_health(samples, 2340)
     assert health["estimate"]["sohPct"] == pytest.approx(90.0)
     assert health["estimate"]["capacityWh"] == 2106
-    assert health["estimate"]["confidence"] == "medium"
+    # QA 166: three charges that never followed a full one (gauge ±6.8 points
+    # each on the owner's ledger) are not "medium" any more.
+    assert health["estimate"]["confidence"] == "low"
     assert [p["sohPct"] for p in health["trend"]] == [100.0, 90.0, 90.0, 90.0]
     assert health["test"] is None
     few = charge_model.battery_health(samples[:1], 2340)
@@ -33,15 +35,18 @@ def test_censored_charges_and_missing_capacity_are_not_guessed():
     assert charge_model.battery_health([_sample(1, 26.0)], None)["estimate"] is None
 
 
-def test_guided_test_needs_a_low_start_and_the_full_battery_signal():
+def test_guided_test_needs_a_low_start_the_full_battery_signal_and_a_right_gauge():
     # 20 % -> full: 1872 Wh at the wall x 0.9 / 80 % = 2106 Wh -> 90 %.
-    test = _sample(5, 23.4, start=20, energy=1872, label="taper_full")
-    high_start = _sample(6, 23.4, start=50, energy=1170, label="taper_full")
+    # QA 166 (2): only right after a full charge (the gauge drifts between).
+    test = {**_sample(5, 23.4, start=20, energy=1872, label="taper_full"), "trust": "high"}
+    high_start = {**_sample(6, 23.4, start=50, energy=1170, label="taper_full"), "trust": "high"}
     user_read = _sample(7, 23.4, start=20, energy=1872, label="user")
     health = charge_model.battery_health([test, high_start, user_read], 2340)
     assert health["test"]["sohPct"] == pytest.approx(90.0)
     assert health["test"]["startPct"] == 20 and health["test"]["sessionId"] == "s5"
     assert charge_model.battery_health([high_start, user_read], 2340)["test"] is None
+    drifted = {**test, "trust": "low"}
+    assert charge_model.battery_health([drifted, user_read], 2340)["test"] is None
 
 
 def test_service_uses_the_owners_confirmed_charges_and_free_gets_the_basics():

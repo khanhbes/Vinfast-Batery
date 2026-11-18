@@ -137,6 +137,7 @@ abstract final class BatteryReadingFlow {
               odoKm: input.odoKm,
               source: input.source,
               batteryTempC: input.tempC,
+              cutoff: input.cutoff,
             );
             return null;
           } catch (error) {

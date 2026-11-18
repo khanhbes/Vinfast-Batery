@@ -426,6 +426,11 @@ class ChargingSession:
     # QA 158: the gauge's trust when this charge began, and the odometer.
     gauge_trust_level: str | None = None
     start_odo_km: float | None = None
+    # QA 166: where the start % came from (the vehicle's last reading:
+    # reading_manual, reading_photo, ..., or cutoff when the scooter had just
+    # shut off) and how many minutes before the charge it was read.
+    start_soc_source: str | None = None
+    start_soc_age_min: float | None = None
     # Task 126 ride-through: Shelly unreachable while a verified charge runs.
     link_lost_since: datetime | None = None
     link_gap_count: int = 0
@@ -531,6 +536,8 @@ class ChargingSession:
             "end_odo_km": self.end_odo_km,
             "gauge_trust_level": self.gauge_trust_level,
             "start_odo_km": self.start_odo_km,
+            "start_soc_source": self.start_soc_source,
+            "start_soc_age_min": self.start_soc_age_min,
             "link_lost_since": iso(self.link_lost_since),
             "link_gap_count": self.link_gap_count,
             "link_gap_seconds": round(self.link_gap_seconds, 1),

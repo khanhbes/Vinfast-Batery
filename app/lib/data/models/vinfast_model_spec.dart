@@ -10,6 +10,10 @@ import 'vehicle_showroom.dart';
 /// - [rangeKm]: tầm hoạt động đầy pin (km).
 /// - [imageAsset]: đường dẫn asset ảnh (rỗng = dùng icon mặc định).
 class VinFastModelSpec {
+  /// QA 166: what a catalog row says for a figure the maker does not publish
+  /// (0 in the catalog), instead of a number nobody published.
+  static const unpublished = 'Chưa công bố';
+
   final String modelId;
   final String modelName;
   final String brandId;
@@ -43,7 +47,13 @@ class VinFastModelSpec {
   final String? connector;
   final String? rangeTestCycle;
   final double? usableCapacityWh;
+
+  /// The charger the model comes with, its rated output (QA 166: VinFast
+  /// publishes 400 W for the Feliz 2025).
   final double? maxDcChargePowerW;
+
+  /// Published time from 0 to 100 % on that charger (QA 166: 390 minutes).
+  final double? chargeTimeMinutes;
   final List<Map<String, dynamic>> sources;
 
   /// Approved catalog photos per colour (2.5D stage / 360° spin).
@@ -82,6 +92,7 @@ class VinFastModelSpec {
     this.rangeTestCycle,
     this.usableCapacityWh,
     this.maxDcChargePowerW,
+    this.chargeTimeMinutes,
     this.sources = const [],
     this.showroom,
   });
@@ -222,7 +233,15 @@ class VinFastModelSpec {
       connector: charging['connector'] as String?,
       rangeTestCycle: performance['rangeTestCycle'] as String?,
       usableCapacityWh: optDouble(battery['usableCapacityWh']),
-      maxDcChargePowerW: optDouble(charging['maxDcPowerW']),
+      // QA 166: also the flat keys of the cache and the legacy projection.
+      maxDcChargePowerW: optDouble(
+        charging['maxDcPowerW'] ??
+            data['maxDcChargePowerW'] ??
+            data['chargerOutputW'],
+      ),
+      chargeTimeMinutes: optDouble(
+        charging['chargeTimeMinutes'] ?? data['chargeTimeMinutes'],
+      ),
       sources: data['sources'] is List
           ? (data['sources'] as List)
                 .whereType<Map>()
@@ -267,6 +286,7 @@ class VinFastModelSpec {
       if (rangeTestCycle != null) 'rangeTestCycle': rangeTestCycle,
       if (usableCapacityWh != null) 'usableCapacityWh': usableCapacityWh,
       if (maxDcChargePowerW != null) 'maxDcChargePowerW': maxDcChargePowerW,
+      if (chargeTimeMinutes != null) 'chargeTimeMinutes': chargeTimeMinutes,
       'sources': sources,
       if (showroom != null) 'media': {'showroom': showroom!.toMap()},
     };

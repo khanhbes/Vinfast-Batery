@@ -46,6 +46,10 @@ class SmartChargeRepository:
         self._telemetry: dict[tuple[str, str], list[dict]] = {}
         self._vehicle_owners: dict[str, str] = {}
         self._test_vehicle_capacities: dict[str, float] = {}
+        # QA 166 (2): a catalog's ``charging`` group by catalog id (tests),
+        # and the Firestore reads of it, kept for CATALOG_CHARGING_TTL_S.
+        self._test_catalog_charging: dict[str, dict] = {}
+        self._catalog_charging_cache: dict[str, tuple[float, dict | None]] = {}
         self._archived_vehicles: set[tuple[str, str]] = set()
         # Include vehicle identity in the in-memory idempotency marker.  A
         # privacy erase for one vehicle must never reset/erase markers for a
@@ -342,6 +346,32 @@ class SmartChargeRepository:
                 self._archived_vehicles.add(key)
             else:
                 self._archived_vehicles.discard(key)
+
+    CATALOG_CHARGING_TTL_S = 600.0
+
+    def catalog_charging(self, vehicle: dict) -> dict | None:
+        """QA 166 (2): the ``charging`` group of the vehicle's catalog entry
+        (``catalogId``, else ``vinfastModelId``): the charger the model comes
+        with. Read like ``vehicle_for_owner`` reads the capacity, at most once
+        per catalog entry every CATALOG_CHARGING_TTL_S."""
+        catalog_id = str(vehicle.get("catalogId") or vehicle.get("vinfastModelId") or "").strip()
+        if not catalog_id:
+            return None
+        if not self.db:
+            with self._lock:
+                found = self._test_catalog_charging.get(catalog_id)
+                return dict(found) if found else None
+        now = time.monotonic()
+        with self._lock:
+            cached = self._catalog_charging_cache.get(catalog_id)
+        if cached and cached[0] > now:
+            return cached[1]
+        snapshot = self.db.collection("VehicleCatalog").document(catalog_id).get()
+        data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+        charging = dict(data["charging"]) if isinstance(data.get("charging"), dict) else None
+        with self._lock:
+            self._catalog_charging_cache[catalog_id] = (now + self.CATALOG_CHARGING_TTL_S, charging)
+        return charging
 
     def vehicle_for_owner(self, uid: str, vehicle_id: str) -> dict | None:
         if not vehicle_id or vehicle_id == "manual":
@@ -1676,6 +1706,8 @@ class SmartChargeRepository:
             "endOdoKm": session.end_odo_km,
             "gaugeTrustLevel": session.gauge_trust_level,
             "startOdoKm": session.start_odo_km,
+            "startSocSource": session.start_soc_source,
+            "startSocAgeMin": session.start_soc_age_min,
             "linkGapCount": session.link_gap_count,
             "linkGapSeconds": round(session.link_gap_seconds, 1),
             "isDeleted": False,
@@ -1706,6 +1738,8 @@ class SmartChargeRepository:
                             "batteryDataSource": "user_confirmed" if session.actual_end_soc is not None else "smart_charge_estimated",
                             "batteryDataSessionId": session.session_id,
                             "batteryDataUpdatedAt": observed_at,
+                            # QA 166: a charge's end is never a scooter that shut off.
+                            "batteryCutoff": False,
                             "updatedAt": datetime.now(timezone.utc),
                         }
                         # The ODO typed with the confirmed % only ever moves
@@ -2613,6 +2647,8 @@ def _session(data: dict) -> ChargingSession:
         end_odo_km=_opt_float(data.get("end_odo_km")),
         gauge_trust_level=data.get("gauge_trust_level") or None,
         start_odo_km=_opt_float(data.get("start_odo_km")),
+        start_soc_source=data.get("start_soc_source") or None,
+        start_soc_age_min=_opt_float(data.get("start_soc_age_min")),
         link_lost_since=_date(data.get("link_lost_since")),
         link_gap_count=int(data.get("link_gap_count") or 0),
         link_gap_seconds=float(data.get("link_gap_seconds") or 0),
@@ -2722,6 +2758,8 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
         normalized.setdefault("end_odo_km", data.get("endOdoKm"))
         normalized.setdefault("gauge_trust_level", data.get("gaugeTrustLevel"))
         normalized.setdefault("start_odo_km", data.get("startOdoKm"))
+        normalized.setdefault("start_soc_source", data.get("startSocSource"))
+        normalized.setdefault("start_soc_age_min", data.get("startSocAgeMin"))
         # Older embedded sessions carry naive local times and, after a later
         # rewrite, 0 Wh while the summary kept the measured energy.
         start_time, end_time = _date(data.get("startTime")), _date(data.get("endTime"))
@@ -2803,6 +2841,8 @@ def _session_from_charge_log(data: dict, document_id: str, uid: str) -> Charging
         end_odo_km=_opt_float(data.get("endOdoKm")),
         gauge_trust_level=data.get("gaugeTrustLevel") or None,
         start_odo_km=_opt_float(data.get("startOdoKm")),
+        start_soc_source=data.get("startSocSource") or None,
+        start_soc_age_min=_opt_float(data.get("startSocAgeMin")),
         training_eligible=bool(data.get("trainingEligible")),
         telemetry_coverage=float(data.get("telemetryCoverage") or 0),
         owner_uid=uid,

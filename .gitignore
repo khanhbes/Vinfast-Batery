@@ -117,3 +117,7 @@ app/qa-evidence/
 
 # QA 157: the owner's charge profile read from production (tools/read_charge_ledger.ps1)
 charge-ledger.local.json
+# QA 166: sessions with power curves (tools/read_charge_sessions.ps1) and
+# photos of the battery and charger labels
+charge-sessions.local.json
+battery-labels.local/
